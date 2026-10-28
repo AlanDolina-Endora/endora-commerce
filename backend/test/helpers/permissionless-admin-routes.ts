@@ -109,6 +109,22 @@ export const PERMISSIONLESS_ADMIN_ROUTES: Readonly<Record<string, Permissionless
     guard: 'session',
     reason: "The caller's own Admin UI language, written to the caller's own row.",
   },
+  'GET /api/v1/admin/me/preferences': {
+    guard: 'session',
+    reason: "The caller's own Admin UI preferences, read from the caller's own rows.",
+  },
+  'PATCH /api/v1/admin/me/preferences': {
+    guard: 'session',
+    reason:
+      "The caller's own Admin UI preferences — pins, folded groups, rail mode, page sizes. The " +
+      "subject is the session's admin; no request names another.",
+  },
+  'POST /api/v1/admin/me/preferences/legacy-import': {
+    guard: 'session',
+    reason:
+      "The caller's own page sizes carried over once from the browser; it never overwrites a " +
+      'stored value.',
+  },
   'GET /api/v1/admin/account/mfa/status': {
     guard: 'session',
     reason:

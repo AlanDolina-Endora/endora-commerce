@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AdminMe } from '@endora-commerce/admin-kit/lib';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { StrictMode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { ADMIN_PRODUCT_SELECTION_MAX } from '@endora-commerce/contracts';
+import { ADMIN_PREFERENCES_DEFAULTS, ADMIN_PRODUCT_SELECTION_MAX } from '@endora-commerce/contracts';
 import type { Bundle } from '../../../../packages/admin-shell/src/i18n/types';
 import { renderWithI18n } from '../../helpers/render-with-i18n';
 import { adminSession, modulePresence, withSession } from '../../helpers/render-with-session';
@@ -175,7 +176,20 @@ function servePreview(body: PreviewBody): unknown {
 // ---------------------------------------------------------------- rig
 
 const SESSION = adminSession({ permissions: ['*'] });
-const PAGE_SIZE_KEY = `b2b-admin.page-size.catalog-products.${SESSION.adminUser.id}`;
+/**
+ * The page size the Product list and this picker share (`catalog-products`),
+ * seeded on the session as the server would send it (feature 164 moved it off
+ * `localStorage`).
+ */
+let catalogPageSize = 10;
+const sessionWithPageSize = (): AdminMe => ({
+  ...SESSION,
+  preferences: { ...ADMIN_PREFERENCES_DEFAULTS, listPageSizes: { 'catalog-products': catalogPageSize } },
+});
+/** The kit's own client, which the preferences store writes through. */
+const kitClient = (
+  await vi.importActual<typeof import('@endora-commerce/admin-kit/lib')>('@endora-commerce/admin-kit/lib')
+).apiClient;
 const CUSTOMER = { id: 'cust-1', email: 'jan@acme.test', firstName: 'Jan', lastName: 'Kowalski', organizationName: 'Acme' };
 const ORG_ADDRESS = {
   id: 'addr-1',
@@ -195,8 +209,8 @@ beforeEach(() => {
   navigateSpy.mockReset();
   unavailableCodes = {};
   catalog = CATALOG;
-  window.localStorage.clear();
-  window.localStorage.setItem(PAGE_SIZE_KEY, '10');
+  catalogPageSize = 10;
+  vi.spyOn(kitClient, 'patch').mockResolvedValue({ data: ADMIN_PREFERENCES_DEFAULTS });
   getSpy.mockImplementation((path: string) => {
     if (path.includes('/addresses')) {
       return Promise.resolve({ data: { personal: [], organization: [ORG_ADDRESS] } });
@@ -235,7 +249,7 @@ function renderPage(): void {
         <MemoryRouter initialEntries={['/orders/new?customerAccountId=cust-1&salesChannelId=chan-1']}>
           <OrderCreatePage />
         </MemoryRouter>,
-        { session: SESSION, presence: modulePresence({ present: ['orders', 'quick_order'] }) },
+        { session: sessionWithPageSize(), presence: modulePresence({ present: ['orders', 'quick_order'] }) },
       )}
     </StrictMode>,
     BUNDLE,
@@ -442,7 +456,7 @@ describe('OrderCreatePage — Browse products and the quick search (US1)', () =>
     catalog = Array.from({ length: ADMIN_PRODUCT_SELECTION_MAX + 5 }, (_, i) =>
       product(`b${String(i).padStart(3, '0')}`, `Bulk ${String(i).padStart(3, '0')}`),
     );
-    window.localStorage.setItem(PAGE_SIZE_KEY, '500');
+    catalogPageSize = 500;
     const user = userEvent.setup();
     renderPage();
     const dialog = await openPicker(user);
