@@ -272,7 +272,7 @@ export const manifest = defineModuleManifest({
       icon: 'Settings',
       targetRoute: '/tasks/settings/workflow',
       requiredPermission: 'tasks:configure',
-      keywords: ['task statuses', 'workflow', 'transitions', 'statusy zadań', 'przejścia', 'przebieg'],
+      keywords: ['task statuses', 'workflow', 'transitions', 'statusy', 'przejścia', 'przebieg'],
       weight: 333,
     },
   ],

@@ -7134,6 +7134,31 @@
         }
       }
     },
+    "/api/v1/admin/tasks/statuses": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tasks/statuses/{code}": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "patch": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/tasks/tags": {
       "get": {
         "responses": {
@@ -7143,6 +7168,15 @@
         }
       },
       "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tasks/transitions": {
+      "put": {
         "responses": {
           "200": {
             "description": "OK"
