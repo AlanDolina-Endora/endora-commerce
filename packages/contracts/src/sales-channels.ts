@@ -49,9 +49,17 @@ export const SalesChannelSummarySchema = z.object({
   /**
    * May an anonymous visitor use this channel (`specs/154-sales-channel-access/`)?
    * When false, only signed-in customers whose Organization is assigned to the
-   * channel are answered. Independent of the anonymous price-visibility flag.
+   * channel are answered. Independent of `isPublic`.
    */
   anonymousAccess: z.boolean(),
+  /**
+   * Does this channel show prices in the storefront (issue #467)? When false,
+   * the catalogue, search, comparison and related-product reads answer
+   * `price: null` on this channel — for every viewer, signed in or not — so
+   * the storefront offers no "Add to cart". Admin-only: the public channel
+   * identity does not carry it.
+   */
+  isPublic: z.boolean(),
   systemDefault: z.boolean(),
   defaultLanguage: z.string(),
   defaultCurrency: z.string(),
@@ -133,6 +141,11 @@ export const SalesChannelCreateBodySchema = z
     active: z.boolean().optional().default(true),
     /** Open to anonymous visitors unless the operator turns it off (feature 154, FR-003). */
     anonymousAccess: z.boolean().optional().default(true),
+    /**
+     * Show prices in the storefront (issue #467). Off unless the operator turns
+     * it on — what every channel got before the field was accepted.
+     */
+    isPublic: z.boolean().optional().default(false),
   })
   .superRefine((v, ctx) => {
     if (!v.languages.includes(v.defaultLanguage)) {
@@ -153,7 +166,8 @@ export const SalesChannelCreateBodySchema = z
 export type SalesChannelCreateBody = z.infer<typeof SalesChannelCreateBodySchema>;
 /**
  * What a client sends to create a channel: the body **before** defaults apply,
- * so `active` and `anonymousAccess` may be left out (both default to `true`).
+ * so `active` and `anonymousAccess` may be left out (both default to `true`), and
+ * so may `isPublic` (defaults to `false`).
  */
 export type SalesChannelCreateRequest = z.input<typeof SalesChannelCreateBodySchema>;
 
@@ -184,6 +198,7 @@ export const SalesChannelUpdateBodySchema = z
     defaultCurrency: z.string().optional(),
     active: z.boolean().optional(),
     anonymousAccess: z.boolean().optional(),
+    isPublic: z.boolean().optional(),
   })
   .superRefine((v, ctx) => {
     if (v.defaultLanguage !== undefined && v.languages && !v.languages.includes(v.defaultLanguage)) {

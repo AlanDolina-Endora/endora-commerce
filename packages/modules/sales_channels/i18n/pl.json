@@ -86,6 +86,8 @@
   "auditLog.sales_channel.membership_changed": "Zmieniono przypisanie do kanału sprzedaży",
   "auditLog.sales_channel.set_default": "Przeniesiono domyślny systemowo kanał sprzedaży",
   "identity.anonymousAccess.label": "Otwarty dla niezalogowanych odwiedzających",
-  "identity.anonymousAccess.hint": "Gdy wyłączone, odwiedzający muszą się zalogować, a ze sklepu mogą korzystać tylko klienci, których organizacja jest przypisana do tego kanału. Pokazywanie cen niezalogowanym to osobne ustawienie. Przy automatycznej moderacji dostęp otrzymuje każdy, kto zarejestruje tu firmę.",
+  "identity.anonymousAccess.hint": "Gdy wyłączone, odwiedzający muszą się zalogować, a ze sklepu mogą korzystać tylko klienci, których organizacja jest przypisana do tego kanału. Pokazywanie cen to osobne ustawienie, poniżej. Przy automatycznej moderacji dostęp otrzymuje każdy, kto zarejestruje tu firmę.",
+  "identity.isPublic.label": "Pokazuj ceny",
+  "identity.isPublic.hint": "Gdy wyłączone, w tym kanale nikt nie widzi cen — ani odwiedzający, ani zalogowani klienci — a sklep nie pokazuje przycisku „Dodaj do koszyka”. Kupujący nadal mogą poprosić o wycenę, jeśli zapytania ofertowe są włączone.",
   "list.badge.signInRequired": "Wymaga logowania"
 }

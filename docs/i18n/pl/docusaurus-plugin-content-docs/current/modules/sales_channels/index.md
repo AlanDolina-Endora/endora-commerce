@@ -34,8 +34,14 @@ zabezpieczenia cyklu życia chroniące platformę przed danymi bez kanału.
 
 - **Otwarty dla niezalogowanych odwiedzających** — flaga kanału (`anonymousAccess`, domyślnie
   włączona). Gdy jest wyłączona, sklep obsługuje wyłącznie zalogowanych klientów. Jest niezależna od
-  `isPublic`, które decyduje, czy niezalogowani odwiedzający widzą ceny, i ma znaczenie tylko w
-  sklepie dla nich otwartym.
+  ustawienia **Pokazuj ceny**.
+
+- **Pokazuj ceny** — flaga kanału (`isPublic`, domyślnie wyłączona). Gdy jest wyłączona, odczyty
+  katalogu, wyszukiwarki, porównywarki produktów i produktów powiązanych zwracają w tym kanale
+  `price: null` każdemu, także zalogowanym klientom, więc storefront nie pokazuje cen ani przycisku
+  „Dodaj do koszyka”. Ustawia się ją w formularzu kanału w panelu administracyjnym oraz przez API
+  administracyjne (`isPublic` w `POST` i `PATCH /api/v1/admin/sales-channels`); zmiana obowiązuje od
+  następnego żądania.
 
 - **Dostęp klientów** — organizacje obsługiwane przez kanał (przypisanie `organization`) to kanały,
   w których członkowie danej organizacji mogą się logować i kupować. Brak przypisania oznacza brak
@@ -185,7 +191,8 @@ Każda zmiana danych kanału, zmiana w cyklu życia i zmiana przypisań zapisuje
 samej transakcji, jeden wiersz w `audit_log_entries`. Kody akcji są w `@endora-commerce/contracts`
 jako `SALES_CHANNEL_AUDIT_ACTIONS`:
 
-- `sales_channel.identity.changed` — utworzenie i aktualizacja.
+- `sales_channel.identity.changed` — utworzenie i aktualizacja, ze stanem kanału przed zmianą i po
+  niej (w tym `anonymousAccess` i `isPublic`).
 - `sales_channel.lifecycle.changed` — dezaktywacja / aktywacja / usunięcie / ustawienie jako domyślny
   kanał systemowy.
 - `sales_channel.membership.changed` — dodanie / usunięcie (zapisy, które niczego nie zmieniają, nie są

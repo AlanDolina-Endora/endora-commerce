@@ -90,6 +90,12 @@ export interface ChannelIdentityFormValue {
    * customers whose Organization is assigned to the channel get in.
    */
   anonymousAccess: boolean;
+  /**
+   * Issue #467 — whether the storefront shows prices on this channel. Off
+   * withholds them from every viewer, signed in or not, so there is no
+   * "Add to cart" either.
+   */
+  isPublic: boolean;
 }
 
 export interface ChannelIdentityFormProps {
@@ -131,6 +137,8 @@ export function ChannelIdentityForm({
   );
   const [active, setActive] = useState(initial?.active ?? true);
   const [anonymousAccess, setAnonymousAccess] = useState(initial?.anonymousAccess ?? true);
+  // Off for a new channel: what every channel got before the field existed.
+  const [isPublic, setIsPublic] = useState(initial?.isPublic ?? false);
   const [dictionaryLanguages, setDictionaryLanguages] = useState<DictionaryLanguage[]>([]);
   const [dictionaryCurrencies, setDictionaryCurrencies] = useState<DictionaryCurrency[]>([]);
   const [dictionaryStatus, setDictionaryStatus] = useState<DictionaryStatus>('loading');
@@ -148,6 +156,7 @@ export function ChannelIdentityForm({
     setDefaultCurrency(initial.defaultCurrency);
     setActive(initial.active);
     setAnonymousAccess(initial.anonymousAccess);
+    setIsPublic(initial.isPublic);
   }, [initial]);
 
   useEffect(() => {
@@ -226,6 +235,7 @@ export function ChannelIdentityForm({
         defaultCurrency: defaultCurrency.trim(),
         active,
         anonymousAccess,
+        isPublic,
       });
     },
     [
@@ -240,6 +250,7 @@ export function ChannelIdentityForm({
       defaultCurrency,
       active,
       anonymousAccess,
+      isPublic,
     ],
   );
 
@@ -481,6 +492,35 @@ export function ChannelIdentityForm({
             </div>
             <p id="sc-anonymous-access-hint" className="text-xs text-muted-foreground">
               {t('identity.anonymousAccess.hint')}
+            </p>
+          </div>
+
+          {/*
+            Issue #467 — whether the channel shows prices, which had no control
+            anywhere. Beside *Open to anonymous visitors* because an operator
+            setting up a store decides the two together, and the same checkbox
+            shape for the same reason that one gives.
+
+            Not disabled when the store is closed to anonymous visitors: the
+            catalogue, search and comparison reads withhold prices on a channel
+            with this off for **every** viewer, signed-in customers included, so
+            it decides something on a members-only store as well. The hint says
+            so, and names the visible consequence — no *Add to cart*.
+          */}
+          <div className="grid gap-1">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="sc-is-public"
+                checked={isPublic}
+                onChange={(e) => setIsPublic(e.target.checked)}
+                aria-describedby="sc-is-public-hint"
+              />
+              <Label htmlFor="sc-is-public" className="cursor-pointer">
+                {t('identity.isPublic.label')}
+              </Label>
+            </div>
+            <p id="sc-is-public-hint" className="text-xs text-muted-foreground">
+              {t('identity.isPublic.hint')}
             </p>
           </div>
 

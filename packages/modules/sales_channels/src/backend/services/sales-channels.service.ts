@@ -218,10 +218,13 @@ export class SalesChannelsService {
       active: body.active ?? true,
       // Feature 154 (FR-003) — open unless the operator turns it off.
       anonymousAccess: body.anonymousAccess ?? true,
+      // Issue #467 — whether the storefront shows prices on this channel. Off
+      // unless the operator asks for it, which is what every channel got
+      // before the admin API accepted the field.
+      isPublic: body.isPublic ?? false,
       systemDefault: false,
       version: 1,
-      // Legacy columns preserved for one release (research R-12).
-      isPublic: false,
+      // Legacy column preserved for one release (research R-12).
       status: (body.active ?? true) ? 'active' : 'inactive',
     });
 
@@ -365,6 +368,10 @@ export class SalesChannelsService {
     // Feature 154 — the access step reads this off the cached channel, which
     // `emitIdentityChanged` below drops as part of this write.
     if (body.anonymousAccess !== undefined) channel.anonymousAccess = body.anonymousAccess;
+    // Issue #467 — catalogue, search and comparison reads take this off the
+    // cached channel too; the same drop below is what makes a save visible on
+    // the next request rather than after the cache's TTL.
+    if (body.isPublic !== undefined) channel.isPublic = body.isPublic;
     channel.version += 1;
 
     try {
@@ -730,6 +737,7 @@ export class SalesChannelsService {
       defaultCurrency: c.defaultCurrency,
       active: c.active,
       anonymousAccess: c.anonymousAccess,
+      isPublic: c.isPublic,
       systemDefault: c.systemDefault,
       version: c.version,
     };

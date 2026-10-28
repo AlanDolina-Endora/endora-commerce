@@ -20,6 +20,7 @@ const summary = {
   code: 'trade',
   name: { en: 'Trade' },
   active: true,
+  isPublic: false,
   systemDefault: false,
   defaultLanguage: 'en-US',
   defaultCurrency: 'PLN',
@@ -84,6 +85,42 @@ describe('anonymousAccess on the channel shapes', () => {
     expect(
       PublicSalesChannelSchema.parse({ ...identity, anonymousAccess: false }).anonymousAccess,
     ).toBe(false);
+  });
+});
+
+/**
+ * Issue #467 — *show prices* (`isPublic`) is an operator setting: on every
+ * admin channel shape, accepted on create (off unless asked for, which is what
+ * every channel got before the field existed) and on update.
+ */
+describe('isPublic on the admin channel shapes', () => {
+  const withAccess = { ...summary, anonymousAccess: true };
+
+  it('is required on the admin summary and detail', () => {
+    const { isPublic: _omitted, ...withoutFlag } = withAccess;
+    expect(SalesChannelSummarySchema.safeParse(withoutFlag).success).toBe(false);
+    expect(SalesChannelSummarySchema.parse({ ...withAccess, isPublic: true }).isPublic).toBe(true);
+    const detail = { ...withAccess, languages: ['en-US'], currencies: ['PLN'], logoUrl: null };
+    expect(SalesChannelDetailSchema.parse(detail).isPublic).toBe(false);
+  });
+
+  it('defaults to off on create and accepts the operator\'s choice', () => {
+    expect(SalesChannelCreateBodySchema.parse(createBody).isPublic).toBe(false);
+    expect(SalesChannelCreateBodySchema.parse({ ...createBody, isPublic: true }).isPublic).toBe(
+      true,
+    );
+    expect(SalesChannelCreateBodySchema.safeParse({ ...createBody, isPublic: 'yes' }).success).toBe(
+      false,
+    );
+  });
+
+  it('is optional on update and not defaulted', () => {
+    expect(SalesChannelUpdateBodySchema.parse({}).isPublic).toBeUndefined();
+    expect(SalesChannelUpdateBodySchema.parse({ isPublic: true }).isPublic).toBe(true);
+  });
+
+  it('stays off the public channel identity', () => {
+    expect(Object.keys(PublicSalesChannelSchema.shape)).not.toContain('isPublic');
   });
 });
 

@@ -38,6 +38,7 @@ automatycznie dostaje kanał `default`).
    - **Active** *(domyślnie `true`)*.
    - **Open to anonymous visitors** *(domyślnie włączone)* — zob.
      [Otwieranie i zamykanie sklepu dla niezalogowanych odwiedzających](#anonymous-access).
+   - **Show prices** *(domyślnie wyłączone)* — zob. [Pokazywanie cen](#show-prices).
 3. Kliknij **Create channel**. System odrzuci operację, gdy kod jest już używany albo którykolwiek kod
    języka lub waluty jest nieznany.
 
@@ -67,12 +68,28 @@ Na liście kanałów zamknięty kanał ma etykietę **Sign-in required**.
 
 Zamykając sklep, pamiętaj o dwóch sprawach:
 
-- **Pokazywanie cen niezalogowanym odwiedzającym to osobne ustawienie.** Ma znaczenie tylko w
-  sklepie dla nich otwartym.
+- **Pokazywanie cen to osobne ustawienie** — zob. [Pokazywanie cen](#show-prices). Zamknięcie
+  sklepu go nie włącza ani nie wyłącza.
 - **O tym, kto wejdzie przez rejestrację, decyduje moderacja.** Organizacja zarejestrowana w
   zamkniętym sklepie otrzymuje jego kanał. Przy automatycznej moderacji jest od razu aktywna, więc
   dostęp dostaje każdy, kto zarejestruje tam firmę; przy moderacji ręcznej nikt nie wejdzie, dopóki
   operator nie zatwierdzi organizacji.
+
+## Pokazywanie cen {#show-prices}
+
+Pole wyboru **Show prices** w formularzu kanału decyduje, czy storefront kanału pokazuje ceny:
+
+- **Włączone** — ceny są widoczne na listach produktów, w wynikach wyszukiwania, na stronach
+  produktów i w porównaniach, a produkty można dodać do koszyka.
+- **Wyłączone** (domyślnie dla nowego kanału) — w kanale nikt nie widzi cen: ani odwiedzający, ani
+  zalogowani klienci. Storefront nie pokazuje przycisku **Dodaj do koszyka**; kupujący nadal mogą
+  poprosić o wycenę, jeśli zapytania ofertowe są włączone. Sortowanie i filtrowanie katalogu po cenie
+  również nie jest wtedy dostępne.
+
+Pole wyboru jest dostępne niezależnie od tego, czy sklep jest otwarty dla niezalogowanych
+odwiedzających, ponieważ dotyczy także zalogowanych klientów. Zapisanie formularza obowiązuje od
+następnego żądania storefrontu; restart nie jest potrzebny. Zmiana trafia do dziennika audytu z
+wartością sprzed zmiany i po niej.
 
 ## Decydowanie, którzy klienci mogą korzystać ze sklepu
 

@@ -25,6 +25,7 @@ The list page shows every channel registered on the platform. The system-default
    - **Currencies** / **Default currency** — the same two controls over the Dictionary's currencies, with the same rule for the default.
    - **Active** *(default `true`)*.
    - **Open to anonymous visitors** *(default on)* — see [Opening and closing a store to anonymous visitors](#anonymous-access).
+   - **Show prices** *(default off)* — see [Showing prices](#show-prices).
 3. **Create channel.** The system refuses if the code is already in use, or if any language / currency code is unknown.
 
 ## Editing an existing channel
@@ -44,8 +45,17 @@ The list of channels marks a closed channel with a **Sign-in required** badge.
 
 Two things to keep in mind when closing a store:
 
-- **Showing prices to anonymous visitors is a separate setting.** It only matters on a store that is open to them.
+- **Showing prices is a separate setting** — see [Showing prices](#show-prices). Closing a store does not turn it on or off.
 - **Moderation decides who gets in by registering.** An Organization registered on a closed store is assigned that store's channel. With automatic moderation it is active at once, so anyone who registers a business there gets access; with manual moderation nobody gets in until an operator approves the Organization.
+
+## Showing prices {#show-prices}
+
+The **Show prices** checkbox on the channel form decides whether the channel's storefront shows prices:
+
+- **On** — prices are shown on product lists, search results, product pages and comparisons, and products can be added to the cart.
+- **Off** (the default for a new channel) — no prices are shown on the channel, to anyone: neither to visitors nor to signed-in customers. The storefront shows no **Add to cart** button; buyers can still ask for a quote where quotes are enabled. Sorting and filtering the catalogue by price is not offered either.
+
+The checkbox is available whether or not the store is open to anonymous visitors, because it also applies to signed-in customers. Saving the form applies the change from the next storefront request; no restart is needed. The change is recorded in the audit log with the value before and after.
 
 ## Deciding which customers may use a store
 
