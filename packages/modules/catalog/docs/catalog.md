@@ -79,6 +79,10 @@ buyer pays is chosen.
   change meanwhile; a product repriced during the walk may be met twice or not at all, as with any
   cursor over a live price. A page may be short, or even empty, and still have more after it
   (`hasMore: true`) when most of the rows it read are hidden from the viewer; follow its cursor.
+  The cursor of a price ordering or a price range is sealed: it cannot be read or altered, because
+  the position it continues from can be a product the viewer may not see. A cursor that does not
+  open — altered, issued by a release before the seal, or before the instance's session key was
+  changed — starts the listing again at its first page.
 - **The product detail on a non-public sales channel** omits the price.
 
 For developers: the listing paths price a whole page in one batched call —

@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ANONYMOUS_PRODUCT_AUDIENCE } from '@endora-commerce/contracts';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { encodeCursor } from '@endora-commerce/platform/http';
-import type { CatalogQueryService } from '../../../../packages/modules/catalog/src/backend/services/catalog-query.service.js';
+import {
+  PRICE_WALK_CURSOR_PURPOSE,
+  type CatalogCursorSeal,
+  type CatalogQueryService,
+} from '../../../../packages/modules/catalog/src/backend/services/catalog-query.service.js';
 import { settlePriceSurface, warmPriceSort } from '../../helpers/price-surface.js';
 import {
   PRICE_WALK_CHANNEL,
@@ -144,6 +148,14 @@ describe('a price-sorted walk meets every product once and ends', () => {
   });
 
   // ---- a malformed cursor is discarded, never a 500 ---------------------------
+  //
+  // Sealed as the walk seals its own (issue #497), so each case reaches the
+  // field it names: an unsealed one is discarded before any field is read
+  // (`price-cursor-sealed.test.ts`).
+  const sealed = (payload: unknown): string =>
+    (h.container as unknown as { resolve<T>(name: string): T })
+      .resolve<CatalogCursorSeal>('cursorSeal')
+      .seal(PRICE_WALK_CURSOR_PURPOSE, JSON.stringify(payload));
 
   const someId = '00000000-0000-4000-8000-000000000001';
   const at = '2026-03-01T00:00:00.000Z';
@@ -164,7 +176,7 @@ describe('a price-sorted walk meets every product once and ends', () => {
   ])('%s is discarded: the first page, not a 500', async (_name, payload) => {
     await w.seed(w.priced(4, (i) => ({ price: `${100 + i}.00`, age: i })));
     const first = await w.page('&limit=2&sort=price');
-    const again = await w.page(`&limit=2&sort=price&cursor=${encodeURIComponent(encodeCursor(JSON.stringify(payload)))}`);
+    const again = await w.page(`&limit=2&sort=price&cursor=${encodeURIComponent(sealed(payload))}`);
     expect(again.data.map((d) => d.sku)).toEqual(first.data.map((d) => d.sku));
   });
 

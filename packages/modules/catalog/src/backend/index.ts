@@ -97,7 +97,7 @@ import { CatalogAttributeReadService } from './services/catalog-attribute-read.s
 import { CatalogCategoryReadService } from './services/catalog-category-read.service.js';
 import { CatalogProductFilterService } from './services/catalog-product-filter.service.js';
 import { CatalogProductReadService } from './services/catalog-product-read.service.js';
-import { CatalogQueryService } from './services/catalog-query.service.js';
+import { CatalogQueryService, type CatalogCursorSeal } from './services/catalog-query.service.js';
 import { CatalogQuickSearchService } from './services/catalog-quick-search.service.js';
 import { ProductOverridesService } from './services/product-overrides.service.js';
 import { AttributeValueKeyService } from './services/attribute-value-key.service.js';
@@ -173,6 +173,11 @@ export interface CatalogCradle {
   readonly commandBus: CommandBus;
   readonly auditLogService: AuditPort;
   readonly moduleQueueRedis: Redis | undefined;
+  /**
+   * Issue #497 — the platform's cursor seal, a host value both composition
+   * roots register; declared here in the narrow shape the price walks use.
+   */
+  readonly cursorSeal: CatalogCursorSeal;
   /**
    * The process connection, distinct from `moduleQueueRedis`: the assistant's
    * bulk tools delegate over the same queue in both compositions, which is a
@@ -535,12 +540,14 @@ export function registerModule(ctx: ModuleContext): void {
           auditLogService,
           moduleQueueRedis,
           catalogRunBulkOperationWorker,
+          cursorSeal,
         }: CatalogCradle) =>
           catalogModule({
             emFactory,
             eventBus,
             commandBus,
             auditLogService,
+            cursorSeal,
             ...(moduleQueueRedis === undefined ? {} : { redis: moduleQueueRedis }),
             runBulkOperationWorker: catalogRunBulkOperationWorker,
             log: ctx.log,
@@ -829,7 +836,7 @@ export function registerModule(ctx: ModuleContext): void {
     'catalogQueryPort',
     ctx
       .asFunction(
-        ({ emFactory }: CatalogCradle) =>
+        ({ emFactory, cursorSeal }: CatalogCradle) =>
           new CatalogQueryService(
             emFactory,
             undefined,
@@ -845,6 +852,7 @@ export function registerModule(ctx: ModuleContext): void {
             // switched off and both of these are handed to a singleton.
             lazyPort<ListingPriceOrderPort>(ctx, 'pricingService'),
             ctx.log,
+            cursorSeal,
           ),
       )
       .singleton(),

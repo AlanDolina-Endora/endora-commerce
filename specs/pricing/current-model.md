@@ -16,7 +16,9 @@ on `perf/416-surface-rebuild` (from `2716908b3`) on 2026-10-24 for the faster wh
 (issue #416): §1.4 item 7; and on `fix/four-place-unit-prices` (from `ad06079a4`) on 2026-10-25 for
 the four-place unit-price ruling: §1.2's consumers paragraph; and on
 `fix/491-display-mode-none-withholds-amounts` (from `92dba80a9`) on 2026-10-28 for issue #491
-(display mode `none` withholds every amount): §1.2's display-mode paragraph and §1.3. The old model — the Application rule, the per-list
+(display mode `none` withholds every amount): §1.2's display-mode paragraph and §1.3; and on
+`fix/497-price-cursor-leak` (from `857092eab`) on 2026-10-28 for issue #497 (sealed price-walk
+cursors): §1.3's paragraph on the walk. The old model — the Application rule, the per-list
 product roster and brackets, the `Default` list, the product *default price* and the variant price
 override — is gone from the code and, after the conversion migration, from the database. How it
 worked is recorded in this file's history (`git log -- specs/pricing/current-model.md`); the
@@ -214,7 +216,14 @@ then the unpriced, in the default order), never from page 1. A walk meets every 
 price does not change during it exactly once; a product repriced meanwhile may be met twice or not
 at all, as on any keyset walk over a live price — the order goes missing *because* pricing changed
 more often than not. A page cut by its scan budget is short, possibly empty, and hands on a cursor
-at its scan position, so a budget never ends a walk (review 3 of 0.108.0, A1/A2). **No request builds a
+at its scan position, so a budget never ends a walk (review 3 of 0.108.0, A1/A2). That position can
+be a product the viewer may not see, and under a price sort it holds its resolved price and id, as
+the last card of a full page holds a price the viewer's display mode may withhold while the order
+still ranks it; so every cursor a price walk issues — price sort and a price range under another
+sort alike — is sealed (AES-256-GCM under a key derived from `SESSION_COOKIE_SECRET`, the
+platform's `cursorSeal`; issue #497): it decodes to nothing and cannot be forged, and one that does
+not open — altered, of the unsealed format, or sealed before the session key changed — starts the
+walk again, as an unreadable cursor always has. **No request builds a
 surface**: the order may lag a change by the worker's turnaround (SC-005: ≤ 60 s for a targeted
 change, ≤ 150 s at 200 profiles for a catalogue-wide one), a displayed
 price never — cards are always resolved live. Measured in

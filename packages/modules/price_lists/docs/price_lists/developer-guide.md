@@ -306,8 +306,12 @@ too slow, so price sorting and price-range filtering read a precomputed **price 
   order. A walk meets every product whose price does not change while it is under way exactly once;
   a product repriced meanwhile may be met twice or not at all, as on any keyset walk over a live
   price. A page that runs out of its scan budget is short, possibly empty, and its cursor continues
-  from where the scan stopped, so the budget never ends a walk. Prices on cards are always resolved
-  live, so only the order can lag.
+  from where the scan stopped, so the budget never ends a walk. That position can be a product the
+  viewer may not see, and under a price sort it holds the product's price and id, so the catalogue
+  seals every cursor of a price walk with the platform's `cursorSeal` (AES-256-GCM, its key derived
+  from `SESSION_COOKIE_SECRET`; issue #497): a client can neither read a position nor forge one, and
+  a cursor that does not open starts the walk again. Prices on cards are always resolved live, so
+  only the order can lag.
 - **A write marks only what it can move**, at two granularities. Each writer describes its change
   as a `SurfaceChange` (`src/backend/services/surface-change.ts`) and `PricingGeneration.bump`
   hands it to `PriceSurface.markChanged` after the commit, which writes every mark of the change in

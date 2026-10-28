@@ -77,6 +77,10 @@ Na stronie modułu `price_lists` opisano, jak wybierana jest cena, którą płac
   pojawić się dwa razy albo wcale, jak przy każdym kursorze po bieżącej cenie. Strona może być krótsza,
   a nawet pusta, i mimo to mieć dalszy ciąg (`hasMore: true`), gdy większość odczytanych wierszy jest
   ukryta przed oglądającym; wtedy należy podążyć za jej kursorem.
+  Kursor porządku według ceny i zakresu cen jest zapieczętowany: nie da się go odczytać ani zmienić,
+  bo miejsce, od którego prowadzi dalej, może być produktem, którego oglądający nie widzi. Kursor,
+  którego nie da się otworzyć — zmieniony, wydany przez wersję sprzed pieczętowania albo przed zmianą
+  klucza sesji instancji — zaczyna listę od pierwszej strony.
 - **Szczegóły produktu w niepublicznym kanale sprzedaży** nie zawierają ceny.
 
 Dla programistów: ścieżki list wyceniają całą stronę jednym zbiorczym wywołaniem —

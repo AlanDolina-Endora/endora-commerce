@@ -243,7 +243,48 @@ export interface ListProductsParams {
 export const PRICE_PAGE_SCAN_BUDGET_MULTIPLE = 8;
 
 /**
- * The cursor a price-ordered listing issues. Opaque to every caller.
+ * What a price walk seals its cursors with (issue #497): the platform's
+ * `cursorSeal` value, in the narrow shape this module uses.
+ *
+ * Every cursor the two price walks issue is sealed — opaque and tamper-proof —
+ * rather than base64 of its position. A page cut by the scan budget continues
+ * from where its scan stopped (review 3 of release 0.108.0, A1), and that row
+ * can be one the viewer may not see: filtered out by visibility, channel,
+ * status or archival, or one whose price the viewer's display mode withholds.
+ * Under a price sort the position holds that product's resolved price and its
+ * id, and a full page ends on its last card, whose price may be withheld while
+ * the order still ranks it. Sealing keeps the position exactly where it is, so
+ * the walk keeps every guarantee it had — a budget makes a page short or empty
+ * and never ends the walk, and the walk always moves forward — and a client can
+ * neither read a position nor forge one to probe the order with.
+ *
+ * Resuming from the last visible card plus a count of rows to skip was the
+ * alternative that needs no key, and it was rejected: the skip grows with every
+ * page a run of hidden rows empties, and is re-read on each, so the budget
+ * stops bounding a page; and a count is not a position — a row added or removed
+ * behind it moves every later page by one, which repeats or loses a product the
+ * keyset never does.
+ */
+export interface CatalogCursorSeal {
+  seal(purpose: string, payload: string): string;
+  /** `null` for anything not sealed for `purpose` with this instance's key. */
+  open(purpose: string, token: string): string | null;
+}
+
+/** The seal purpose of every cursor a price-sorted listing issues (issue #497). */
+export const PRICE_WALK_CURSOR_PURPOSE = 'catalog.listing.price-walk';
+
+/**
+ * The seal purpose of every cursor a price-filtered listing under another sort
+ * issues (issue #497): its budget can stop it on a hidden product too, and that
+ * position names the product's id. A purpose of its own, so neither walk reads
+ * the other's cursor.
+ */
+export const PRICE_RANGE_WALK_CURSOR_PURPOSE = 'catalog.listing.price-range-walk';
+
+/**
+ * The cursor a price-ordered listing issues, sealed ({@link CatalogCursorSeal})
+ * before it leaves this service: a client can neither read it nor forge it.
  *
  * `unordered` is a walk begun while no price order existed for the viewer
  * (`contracts/price-surface.md` §3): it was served in the default order, and
@@ -256,10 +297,12 @@ export const PRICE_PAGE_SCAN_BUDGET_MULTIPLE = 8;
  * (`after`): see `#listRemainder`.
  *
  * Every field is checked when the cursor is read (`#priceCursor`): a cursor that
- * does not parse, or names a value of the wrong shape, is discarded and the
- * walk starts at its first page — what the default listing does with a cursor
- * it cannot read — rather than reaching a statement as a value the database
- * refuses.
+ * does not open or parse, or names a value of the wrong shape, is discarded and
+ * the walk starts at its first page — what the default listing does with a
+ * cursor it cannot read — rather than reaching a statement as a value the
+ * database refuses. That includes a cursor of the readable format issued before
+ * the seal (issue #497): a link held across the upgrade shows its first page
+ * again, once, rather than an error.
  */
 type PriceListingCursor =
   | { stream: 'priced'; amount: string; productId: string }
@@ -546,7 +589,39 @@ export class CatalogQueryService {
      * binds never reaches it.
      */
     private readonly log?: { warn(obj: object, msg: string): void },
+    /**
+     * Issue #497 — what every cursor of a price walk is sealed with. Optional
+     * only in the signature, like the ordering port: a price walk asked for
+     * without it fails loudly rather than issue a cursor a client can read.
+     */
+    private readonly cursorSeal?: CatalogCursorSeal,
   ) {}
+
+  #requireCursorSeal(): CatalogCursorSeal {
+    if (!this.cursorSeal) {
+      throw new Error(
+        'CatalogQueryService: the cursor seal is not wired — a price walk cannot issue a cursor ' +
+          'without handing the client the position its scan stopped at.',
+      );
+    }
+    return this.cursorSeal;
+  }
+
+  /** A price walk's cursor, sealed for `purpose`. */
+  #sealCursor(purpose: string, value: object): string {
+    return this.#requireCursorSeal().seal(purpose, JSON.stringify(value));
+  }
+
+  /** What a cursor sealed for `purpose` holds, or `null` when it does not open or parse. */
+  #openCursor(purpose: string, cursor: string): unknown {
+    const opened = this.#requireCursorSeal().open(purpose, cursor);
+    if (opened === null) return null;
+    try {
+      return JSON.parse(opened) as unknown;
+    } catch {
+      return null;
+    }
+  }
 
   #requireChannelMembership(): SalesChannelMembershipPort {
     if (!this.channelMembership) {
@@ -1286,14 +1361,15 @@ export class CatalogQueryService {
     // in the tail once the tail has been read, else in the priced stream,
     // whose exhaustion the next page then finds and goes on into the tail —
     // never from its last card, and never ends the walk (review 3 of release
-    // 0.108.0, A1).
+    // 0.108.0, A1). That row may be one the viewer may not see, and its price
+    // is in the position, so the cursor is sealed (issue #497).
     const page = collected.slice(0, params.limit);
     let resumeAt: PriceListingCursor | null = null;
     if (collected.length > params.limit || orderLost) resumeAt = cursors[page.length - 1] ?? null;
     else if (bound && tailCursor) resumeAt = { stream: 'tail', ...tailCursor };
     else if (bound && priceCursor) resumeAt = { stream: 'priced', ...priceCursor };
     const hasMore = resumeAt !== null;
-    const nextCursor = resumeAt === null ? null : encodeObjectCursor(resumeAt);
+    const nextCursor = resumeAt === null ? null : this.#sealCursor(PRICE_WALK_CURSOR_PURPOSE, resumeAt);
 
     const resolvedPrices = await this.#listingPricesFor(page, ctx, context);
     const cardReads = await this.#listingCardReadsFor(
@@ -1338,7 +1414,7 @@ export class CatalogQueryService {
    * listing's own, which that listing checks.
    */
   #priceCursor(cursor: string): PriceListingCursor | null {
-    const decoded = decodeObjectCursor<unknown>(cursor);
+    const decoded = this.#openCursor(PRICE_WALK_CURSOR_PURPOSE, cursor);
     if (!isRecord(decoded)) return null;
     const keyset = this.keysetFor(undefined);
     switch (decoded['stream']) {
@@ -1385,7 +1461,9 @@ export class CatalogQueryService {
       ...page,
       pagination: {
         ...page.pagination,
-        cursor: next ? encodeObjectCursor({ stream: 'unordered', cursor: next } satisfies PriceListingCursor) : null,
+        cursor: next
+          ? this.#sealCursor(PRICE_WALK_CURSOR_PURPOSE, { stream: 'unordered', cursor: next } satisfies PriceListingCursor)
+          : null,
       },
     };
   }
@@ -1418,9 +1496,11 @@ export class CatalogQueryService {
     const keyset = this.keysetFor(params.sort);
     return this.#walkKeepingByPrice(em, params, ctx, where, await this.#priceWalkScope(em, params, ctx), {
       sort: params.sort,
-      start: params.cursor ? keyset.parse(decodeObjectCursor<unknown>(params.cursor)) : null,
+      start: params.cursor ? keyset.parse(this.#openCursor(PRICE_RANGE_WALK_CURSOR_PURPOSE, params.cursor)) : null,
       keep: (price) => price !== null && withinAmountRange(price.amount, range),
-      cursorOf: (after) => encodeObjectCursor(after),
+      // Sealed (issue #497): a page cut by the budget names the row its scan
+      // stopped at, which may be a product the viewer may not see.
+      cursorOf: (after) => this.#sealCursor(PRICE_RANGE_WALK_CURSOR_PURPOSE, after),
       what: 'price-filtered',
     });
   }
@@ -1482,7 +1562,7 @@ export class CatalogQueryService {
         return withinAmountRange(price.amount, range) && afterBoundary(price.amount, product.id);
       },
       cursorOf: (next) =>
-        encodeObjectCursor({
+        this.#sealCursor(PRICE_WALK_CURSOR_PURPOSE, {
           stream: 'rest',
           amount: boundary.amount,
           productId: boundary.productId,
@@ -1497,7 +1577,8 @@ export class CatalogQueryService {
    * by everything a page is narrowed by and then by the live listing price its
    * cards are rendered with — `keep` decides on that price. Bounded by the scan
    * budget; a bound answers a short, possibly empty, page whose cursor
-   * continues from the scan position.
+   * continues from the scan position. `cursorOf` seals it: that position may
+   * be a product the viewer may not see (issue #497).
    */
   async #walkKeepingByPrice(
     em: EntityManager,
