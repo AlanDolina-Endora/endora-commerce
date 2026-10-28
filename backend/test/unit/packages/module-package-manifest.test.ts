@@ -1992,6 +1992,7 @@ describe('module package manifests are generated (feature 080, T041)', () => {
         }),
       );
       expect((manifest['scripts'] as Record<string, string>)['build']).toBe(
+        'node ../../../scripts/clean-package-dist.mjs --src src --out dist && ' +
         'tsc -p tsconfig.build.json && node ../../../scripts/copy-package-assets.mjs ' +
           '--src src --out dist',
       );
@@ -2000,6 +2001,7 @@ describe('module package manifests are generated (feature 080, T041)', () => {
     it('leaves the bare compile alone when it holds none', () => {
       const manifest = manifestOf(widgets(BACKEND_ONLY));
       expect((manifest['scripts'] as Record<string, string>)['build']).toBe(
+        'node ../../../scripts/clean-package-dist.mjs --src src --out dist && ' +
         'tsc -p tsconfig.build.json',
       );
     });
@@ -2011,6 +2013,7 @@ describe('module package manifests are generated (feature 080, T041)', () => {
         widgets({ ...BACKEND_ONLY, 'src/backend/data/PROVENANCE.md': '# where these came from' }),
       );
       expect((manifest['scripts'] as Record<string, string>)['build']).toBe(
+        'node ../../../scripts/clean-package-dist.mjs --src src --out dist && ' +
         'tsc -p tsconfig.build.json',
       );
     });
@@ -2033,6 +2036,7 @@ describe('module package manifests are generated (feature 080, T041)', () => {
         ),
       );
       expect((manifest['scripts'] as Record<string, string>)['build']).toBe(
+        'node ../../../scripts/clean-package-dist.mjs --src src --out dist && ' +
         'tsc -p tsconfig.build.json',
       );
     });
@@ -2103,9 +2107,12 @@ describe('module package manifests are generated (feature 080, T041)', () => {
       // The layer inventory still walks `src/`, which is where the layout
       // contract puts the sources; `--src`/`--out` are the *emit* declaration,
       // and a package that emits elsewhere gets its own answer.
-      expect((manifestOf(files)['scripts'] as Record<string, string>)['build']).toContain(
-        '--src lib --out build',
-      );
+      const build = (manifestOf(files)['scripts'] as Record<string, string>)['build'];
+      expect(build).toContain('--src lib --out build');
+      // The clean before the compile reads the same declaration (issue #443):
+      // a clean of a written-down `dist` would leave `build/` holding the
+      // output of every source deleted since the first build.
+      expect(build).toMatch(/^node \.\.\/\.\.\/\.\.\/scripts\/clean-package-dist\.mjs --src lib --out build && tsc /);
     });
 
     it('counts the package’s own depth, so the copier path resolves from where it is', () => {
@@ -2121,6 +2128,21 @@ describe('module package manifests are generated (feature 080, T041)', () => {
       expect(
         (manifestOf(shallow, 'gadgets')['scripts'] as Record<string, string>)['build'],
       ).toContain('node ../../scripts/copy-package-assets.mjs');
+    });
+
+    it('cleans the emit directory before the first compile and never between two (issue #443)', () => {
+      // `tsc` deletes nothing, so the output of a deleted source survived every
+      // later build in a git-ignored `dist` that every runtime reads. The UI
+      // layer's second `tsc` writes into the same directory, which is why the
+      // clean is the script's first step and appears exactly once.
+      const build = (
+        manifestOf(widgets({ ...BACKEND_ONLY, 'src/admin/index.ts': 'export {};\n' }))[
+          'scripts'
+        ] as Record<string, string>
+      )['build']!;
+      expect(build.startsWith('node ../../../scripts/clean-package-dist.mjs --src src --out dist && ')).toBe(true);
+      expect(build.split('clean-package-dist.mjs')).toHaveLength(2);
+      expect(build).toContain('tsc -p tsconfig.ui.json');
     });
   });
 

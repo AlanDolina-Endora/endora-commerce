@@ -2242,7 +2242,14 @@ export function renderManifest(input: RenderInput): string {
   )
     ? ' && tsc -p tsconfig.ui.json'
     : '';
+  // `tsc` deletes nothing, so without a clean the output of a deleted source
+  // outlives it in a git-ignored `dist` every runtime reads (issue #443). It
+  // runs once, first: the UI compile writes into the same directory. The
+  // flags are the emit layout again, and the script refuses a layout whose
+  // `outDir` is the package itself or overlaps its sources.
+  const clean = `node ${input.repoRootPrefix}/scripts/clean-package-dist.mjs ${emitFlags} && `;
   const build =
+    clean +
     (input.layers.assets.length === 0
       ? 'tsc -p tsconfig.build.json'
       : `tsc -p tsconfig.build.json && node ${input.repoRootPrefix}/scripts/copy-package-assets.mjs ` +
