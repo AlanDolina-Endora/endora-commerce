@@ -96,6 +96,8 @@ describe('GET /api/v1/admin/me', () => {
         sidebarCollapsedGroups: [],
         sidebarRailMode: true,
         listPageSizes: { orders: 50 },
+        // `specs/165-task-management/` R-14: the key reads as its default when nothing is stored.
+        listViewModes: {},
       });
     });
   });
