@@ -35,11 +35,14 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
   'services/task-service.ts':
     'The list, My Tasks, the board, search, the read port and global search compose the visibility pre-filter ' +
     '(`TaskVisibility.condition` / `taskVisibilitySql`); a sub-task count composes it over the children too. ' +
-    'Assignees, tags and sub-task rows are read only for the ids those queries returned; a Task just written is ' +
+    'Assignees, tags, sub-task rows and related-Task pairs are read only for the ids those queries returned (the ' +
+    'other side of a pair through the pre-filter again); a Task just written is ' +
     're-read by the id its Command wrote.',
   'services/task-commands.ts':
     'Every Command runs after its caller loaded the Task through `TaskAccess.loadVisible` (or, for the write ' +
-    'port, is the context owner acting on its own record): it locks that one id and reads its assignees by it.',
+    'port, is the context owner acting on its own record): it locks that one id and reads its assignees by it, ' +
+    'and a delete reads the ids of its sub-tasks — every one, whoever may see it — to record on each that it ' +
+    'lost its parent; the caller counts only those its reader may see.',
   'services/attachment-service.ts':
     'Every read starts from `loadVisible` and is keyed by that Task\'s id, or — to ask which Tasks already hold ' +
     'a file — reads only Task ids by asset and answers them through `visibleIds`, so a file attached to a Task ' +
@@ -56,6 +59,13 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
     'The asset library asks whether **anything** still uses a file before deleting it — platform-wide on ' +
     'purpose, by whoever deletes it, who need not see the Task — and is answered with the Task\'s number, never ' +
     'its title (research R-7; Projects\' `project-asset-references.ts`).',
+  'services/hierarchy-service.ts':
+    'A parent change reads the proposed parent\'s chain of ancestors and the moved Task\'s sub-tree over every ' +
+    'Task, whoever may see it — a hidden descendant still closes a cycle (FR-027, R-15) — starting from the two ' +
+    'ids the caller obtained through `loadVisible`, under the hierarchy lock; it hands back a refusal, never a Task.',
+  'services/relation-service.ts':
+    'Writes and deletes the one `task_relations` row of two Tasks the caller loaded through `loadVisible` and may ' +
+    'change; the related Tasks a reader is shown are read by `task-service.ts` under the visibility pre-filter.',
   'services/workflow-config-service.ts':
     'A status is platform configuration: changing what it means, or removing it, asks how many Tasks are in it ' +
     'and moves them to the replacement **whoever may see them**, because a Task the operator cannot see is ' +

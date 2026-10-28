@@ -227,6 +227,8 @@ export const manifest = defineModuleManifest({
     { code: 'TASK_TAG_NAME_TAKEN' },
     { code: 'TASK_ATTACHMENT_REFUSED' },
     { code: 'TASK_VIEW_NAME_TAKEN' },
+    { code: 'TASK_PARENT_CYCLE' },
+    { code: 'TASK_HIERARCHY_TOO_DEEP' },
   ],
   /**
    * The command palette (Principle XVI, FR-041; `contracts/admin-surfaces.md`

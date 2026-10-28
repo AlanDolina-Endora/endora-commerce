@@ -284,12 +284,12 @@ describe('projects — the `project` Task context (US2)', () => {
       expect((await taskRowsOf(h, open.id)).map((row) => row.id)).toEqual([task.id]);
 
       // A Task of nobody's is theirs to delete; a holder of projects:write may do all three.
-      expect((await callTasks(h, 'DELETE', `/${looseId}`, { cookies: writer.cookies })).statusCode).toBe(204);
+      expect((await callTasks(h, 'DELETE', `/${looseId}`, { cookies: writer.cookies })).statusCode).toBe(200);
       const putIn = await callTasks(h, 'POST', '', { payload: { title: 'Put in by a projects writer', context: into } });
       expect(putIn.statusCode, putIn.body).toBe(201);
       for (const id of [task.id, (putIn.json() as { data: { id: string } }).data.id]) {
         const deleted = await callTasks(h, 'DELETE', `/${id}`);
-        expect(deleted.statusCode, deleted.body).toBe(204);
+        expect(deleted.statusCode, deleted.body).toBe(200);
       }
     } finally {
       writer.undo();

@@ -7348,6 +7348,22 @@
         }
       }
     },
+    "/api/v1/admin/tasks/{id}/relations/{otherId}": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/tasks/{id}/status": {
       "post": {
         "responses": {

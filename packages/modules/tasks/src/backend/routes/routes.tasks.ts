@@ -138,14 +138,11 @@ export async function registerTaskRoutes(app: FastifyInstance, deps: TaskRoutesD
     }),
   );
 
-  app.delete<{ Params: { id: string } }>(
-    `${API}/:id`,
-    { preHandler: requireAdmin('tasks:write') },
-    async (request, reply) => {
-      await tasks.delete(request.params.id);
-      return reply.code(204).send();
-    },
-  );
+  // 200, not 204: the answer says how many of the Task's sub-tasks the caller
+  // may see became top-level (FR-029, `TaskDeleteResponseSchema`).
+  app.delete<{ Params: { id: string } }>(`${API}/:id`, { preHandler: requireAdmin('tasks:write') }, async (request) => ({
+    data: await tasks.delete(request.params.id),
+  }));
 
   app.get<{ Params: { id: string } }>(
     `${API}/:id/history`,

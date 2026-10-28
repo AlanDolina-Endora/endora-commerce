@@ -5,6 +5,7 @@ import {
   MyTasksResponseSchema,
   RecordHistoryPageSchema,
   TaskAssigneeLookupResponseSchema,
+  TaskDeleteResponseSchema,
   TaskDetailResponseSchema,
   TaskListResponseSchema,
   TaskStatusChangeResponseSchema,
@@ -296,11 +297,11 @@ describe('tasks (contract) — §1 Tasks', () => {
       expect(code(context)).toBe('TASK_CONTEXT_INVALID');
     });
 
-    it('deletes with 204, after which the Task is not found', async () => {
+    it('deletes with 200 and how many sub-tasks became top-level (FR-029), after which the Task is not found', async () => {
       const task = await create({ title: 'To delete' });
       const response = await call('DELETE', `/${task.id}`);
-      expect(response.statusCode, response.body).toBe(204);
-      expect(response.body).toBe('');
+      expect(response.statusCode, response.body).toBe(200);
+      expect(TaskDeleteResponseSchema.parse(response.json())).toEqual({ data: { subtasksDetached: 0 } });
       const gone = await call('DELETE', `/${task.id}`);
       expect(gone.statusCode).toBe(404);
       expect(code(gone)).toBe('TASK_NOT_FOUND');
@@ -319,7 +320,7 @@ describe('tasks (contract) — §1 Tasks', () => {
       } finally {
         mayChangeTasks = true;
       }
-      expect((await call('DELETE', `/${task.id}`)).statusCode).toBe(204);
+      expect((await call('DELETE', `/${task.id}`)).statusCode).toBe(200);
     });
   });
 

@@ -211,7 +211,7 @@ describe('tasks — references and mentions in the description (US1, #446)', () 
 
   it('shows a deleted Task, and someone else’s private Task, exactly as one that never existed', async () => {
     const doomed = await create({ title: 'Doomed' });
-    expect((await call('DELETE', `/${doomed.id}`)).statusCode).toBe(204);
+    expect((await call('DELETE', `/${doomed.id}`)).statusCode).toBe(200);
     const privateId = randomUUID();
     await h
       .em()

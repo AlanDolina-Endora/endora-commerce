@@ -14,6 +14,7 @@ import {
   type TaskWritePort,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
+import type { AuditPort } from '@endora-commerce/platform/kernel';
 import { HttpError } from '@endora-commerce/platform/http';
 import { Task } from '../entities/task.entity.js';
 import { assertAssignable } from './task-checks.js';
@@ -49,6 +50,8 @@ export interface TaskWritePortDeps {
   /** `admin_users`' read port — lazy, resolved per call. */
   adminUsers: AdminUserReadPort;
   workflow: TaskWorkflowRead;
+  /** The kernel's audit port — a deleted Task's former sub-tasks each record why they lost their parent. */
+  auditLog: AuditPort;
 }
 
 /** One entry as the Command writes it, and the group it overrides the call's with. */
@@ -128,7 +131,7 @@ export class TaskWritePortService implements TaskWritePort {
     );
     let deleted = 0;
     for (const { id } of doomed) {
-      if (await this.deps.commandBus.run(deleteTaskCommand(id))) deleted += 1;
+      if ((await this.deps.commandBus.run(deleteTaskCommand(id, this.deps.auditLog))).deleted) deleted += 1;
     }
     return { deleted };
   }

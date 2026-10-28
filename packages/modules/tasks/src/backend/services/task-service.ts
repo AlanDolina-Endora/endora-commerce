@@ -15,6 +15,7 @@ import {
   type TaskAssigneeOption,
   type TaskBoardCardField,
   type TaskBoardQuery,
+  type TaskDeleteResult,
   type TaskContextDescription,
   type TaskContextQuery,
   type TaskContextSummary,
@@ -30,6 +31,7 @@ import {
   type UpdateTaskBody,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
+import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { TaskAdminSearchQuery, TaskAdminSearchRow } from '../admin-search-provider.js';
 import { cardFieldValues } from '../domain/board-card-fields.js';
 import { dueOnFor, isOverdue } from '../domain/due-moment.js';
@@ -50,6 +52,7 @@ import {
   type TaskAccess,
   type TaskRow,
 } from './task-access.js';
+import type { TaskHierarchyService } from './hierarchy-service.js';
 import type { TaskAudience, TaskMentionService } from './mention-service.js';
 import type { TaskPriorityService } from './priority-service.js';
 import type { TaskReferenceService } from './reference-service.js';
@@ -125,6 +128,10 @@ export interface TaskServiceDeps {
   mentions: Pick<TaskMentionService, 'tell'>;
   /** The one door a status change goes through (research R-1, `task-transition-service.ts`). */
   transitions: Pick<TaskTransitionService, 'apply'>;
+  /** The sub-task hierarchy: who may be a parent, and the parent change (research R-15). */
+  hierarchy: Pick<TaskHierarchyService, 'assertMayAdopt' | 'setParent'>;
+  /** The kernel's audit port — a deleted Task's former sub-tasks each get an entry (FR-029). */
+  auditLog: AuditPort;
   /** `tasks.time_zone` — the calendar a date-only due date is counted in (research R-17). */
   timeZone: () => Promise<string>;
   /**
@@ -570,6 +577,8 @@ export class TaskService {
     const tagIds = [...new Set(body.tagIds ?? [])];
     await this.deps.tags.assertKnown(tagIds);
     const customFieldValues = await mergeTaskCustomFields(this.deps.customFields, {}, body.customFieldValues ?? {});
+    const parentTaskId = body.parentTaskId ?? null;
+    if (parentTaskId !== null) await this.deps.hierarchy.assertMayAdopt(parentTaskId);
     const due = await this.#due({ dueOn: null, dueAt: null }, body);
     const description = body.description ?? '';
     const graph = await this.deps.workflow.graph();
@@ -584,6 +593,7 @@ export class TaskService {
         priorityCode,
         tagIds,
         customFieldValues,
+        parentTaskId,
         contextNote: null,
         status: graph.initial().code,
       }),
@@ -597,9 +607,11 @@ export class TaskService {
 
   /**
    * `PATCH /tasks/:id` — one Command per kind of change, in this order, each
-   * only when it changes something: the fields, the priority, the tags, the
-   * custom fields, the assignees. A status is not changed here
-   * (`POST /tasks/:id/status`).
+   * only when it changes something: the parent, the fields, the priority, the
+   * tags, the custom fields, the assignees. A status is not changed here
+   * (`POST /tasks/:id/status`). The parent goes first: it is the one change
+   * refused inside its Command (a cycle or a depth, under the hierarchy lock),
+   * so a refusal leaves the rest of the request unwritten.
    */
   async update(id: string, body: UpdateTaskBody, language: SupportedLanguage): Promise<TaskDetail> {
     const row = await this.deps.access.loadVisible(id);
@@ -630,6 +642,8 @@ export class TaskService {
       body.customFieldValues !== undefined
         ? await mergeTaskCustomFields(this.deps.customFields, row.custom_field_values ?? {}, body.customFieldValues)
         : null;
+
+    if (body.parentTaskId !== undefined) await this.deps.hierarchy.setParent(row, body.parentTaskId);
 
     const fields: TaskFieldChanges = {};
     if (body.title !== undefined && body.title !== row.title) fields.title = body.title;
@@ -694,11 +708,17 @@ export class TaskService {
     return { task, openSubtasks: subtasks ? subtasks.total - subtasks.closed : 0 };
   }
 
-  /** `DELETE /tasks/:id`. */
-  async delete(id: string): Promise<void> {
+  /**
+   * `DELETE /tasks/:id` — its sub-tasks become top-level (FR-029), and the
+   * answer says how many of them the caller may see: a sub-task hidden from
+   * them is counted in no number of theirs (User Story 5 scenario 7).
+   */
+  async delete(id: string): Promise<TaskDeleteResult> {
     const row = await this.deps.access.loadVisible(id);
     await this.deps.access.assertMayDelete(row);
-    if (!(await this.deps.commandBus.run(deleteTaskCommand(row.id)))) throw taskNotFound();
+    const { deleted, detachedIds } = await this.deps.commandBus.run(deleteTaskCommand(row.id, this.deps.auditLog));
+    if (!deleted) throw taskNotFound();
+    return { subtasksDetached: (await this.deps.access.visibleIds(detachedIds)).size };
   }
 
   /** `GET /tasks/workflow` — the statuses with how many visible Tasks hold each, and the moves. */
@@ -860,9 +880,10 @@ export class TaskService {
 
   async #detail(row: TaskRow, language: SupportedLanguage): Promise<TaskDetail> {
     const scope = await this.deps.visibility.scope();
-    const [[summary], subtaskRows, counts, creator, me] = await Promise.all([
+    const [[summary], subtaskRows, relatedRows, counts, creator, me] = await Promise.all([
       this.#summaries([row], language, scope),
       this.#visibleChildren(row.id, scope),
+      this.#visibleRelated(row.id, scope),
       this.#collaborationCounts(row.id),
       this.#people([row.created_by_admin_user_id]).then((people) => people.get(row.created_by_admin_user_id)),
       Promise.resolve(actingAdminUserId()),
@@ -887,7 +908,7 @@ export class TaskService {
       startOn: row.start_on,
       customFieldValues,
       links: [],
-      relatedTasks: [],
+      relatedTasks: await this.#summaries(relatedRows, language, scope),
       subtaskItems: await this.#summaries(subtaskRows, language, scope),
       attachmentsCount: counts.attachments,
       commentsCount: counts.comments,
@@ -918,6 +939,24 @@ export class TaskService {
       `select ${TASK_COLUMNS} from "tasks" t where ${where.join(' and ')} order by t."created_at" asc, t."id" asc`,
       params,
     )) as TaskRow[];
+  }
+
+  /**
+   * The Tasks related to one Task that the reader may see, by number (FR-030):
+   * the pairs are read by the visible Task's id, and the other side through
+   * the visibility pre-filter.
+   */
+  async #visibleRelated(taskId: string, scope: TaskVisibilityScope): Promise<TaskRow[]> {
+    const pairs = (await this.deps.emFactory().execute(
+      `select case when r."task_a_id" = ?::uuid then r."task_b_id" else r."task_a_id" end as "id"
+         from "task_relations" r where r."task_a_id" = ?::uuid or r."task_b_id" = ?::uuid`,
+      [taskId, taskId, taskId],
+    )) as Array<{ id: string }>;
+    const rows = await this.#visibleRowsByIds(
+      pairs.map((pair) => pair.id),
+      scope,
+    );
+    return rows.sort((a, b) => a.number.localeCompare(b.number) || a.id.localeCompare(b.id));
   }
 
   /** How many attachments and live comments one visible Task has. */

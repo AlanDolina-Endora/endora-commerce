@@ -11,3 +11,4 @@ Tasks grows into a work-management module (`specs/165-task-management/`): severa
 - New dependencies, all non-deactivatable: `custom_fields`, `assets_library`, `transactional_emails`, `orders`, `catalog`. The module stays operator-toggleable and degrades without `crm`, `quote_requests` and `projects`.
 - A worker on the queue `tasks-reminders` runs where workers run.
 - `taskReadPort` now also hides drafts and other people's private Tasks; `taskWritePort.createMany` honours `sourceKey`, so a retried batch creates only what is missing (#450).
+- `DELETE /api/v1/admin/tasks/:id` answers **200** with `{data: {subtasksDetached}}` instead of 204: deleting a parent makes its sub-tasks top-level, and the answer says how many of them the caller may see. A client that checked for 204 checks for a 2xx.

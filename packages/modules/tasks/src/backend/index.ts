@@ -60,6 +60,8 @@ import { TaskAttachmentService } from './services/attachment-service.js';
 import { TaskBoardCardFieldService } from './services/board-card-field-service.js';
 import { TaskBoardService } from './services/board-service.js';
 import { TaskCommentService } from './services/comment-service.js';
+import { TaskHierarchyService } from './services/hierarchy-service.js';
+import { TaskRelationService } from './services/relation-service.js';
 import { TaskDocumentLookupService } from './services/document-lookup-service.js';
 import { createTaskAudience, TaskMentionService, type TaskAudience } from './services/mention-service.js';
 import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
@@ -115,6 +117,8 @@ interface TasksCradle {
   readonly tasksTagService: TaskTagService;
   readonly tasksAttachmentService: TaskAttachmentService;
   readonly tasksCommentService: TaskCommentService;
+  readonly tasksHierarchyService: TaskHierarchyService;
+  readonly tasksRelationService: TaskRelationService;
   readonly tasksTransitionService: TaskTransitionService;
   readonly tasksWorkflowConfigService: TaskWorkflowConfigService;
   readonly tasksBoardCardFieldService: TaskBoardCardFieldService;
@@ -310,6 +314,8 @@ export function registerModule(ctx: ModuleContext): void {
           tasksReferenceService,
           tasksMentionService,
           tasksTransitionService,
+          tasksHierarchyService,
+          auditLogService,
         }: TasksCradle) => {
           const i18n = lazyPort<AdminI18nTranslatePort>(ctx, 'adminI18nService');
           const settings = lazyPort<SettingsReadPort>(ctx, 'settingsReadPort');
@@ -331,6 +337,8 @@ export function registerModule(ctx: ModuleContext): void {
             references: tasksReferenceService,
             mentions: tasksMentionService,
             transitions: tasksTransitionService,
+            hierarchy: tasksHierarchyService,
+            auditLog: auditLogService,
             // `tasks.time_zone` (R-17): read per call, so an operator's change
             // is seen by the next request.
             timeZone: () => settings.get('tasks.time_zone', null, TaskTimeZoneSchema.shape.timeZone),
@@ -373,6 +381,7 @@ export function registerModule(ctx: ModuleContext): void {
     await registerTaskCollaborationRoutes(app, {
       attachmentService: cradle.tasksAttachmentService,
       commentService: cradle.tasksCommentService,
+      relationService: cradle.tasksRelationService,
       requireAdmin: cradle.requireAdmin,
     });
   });
@@ -520,6 +529,28 @@ export function registerModule(ctx: ModuleContext): void {
   });
   // --- end of Collaboration: comments -------------------------------------------------
 
+  // --- Sub-tasks and related Tasks (User Story 5, research R-15) ---------------------
+  // A Task's parent and its related Tasks — this module's own tables only. Every
+  // change of the hierarchy (a parent set or cleared, a Task created under a
+  // parent, a parent deleted) runs under one advisory lock, so two changes that
+  // would only together close a cycle cannot both commit. A link between two
+  // Tasks is recorded on both, the second entry through the kernel's audit port
+  // on the same transaction. The parent change is asked by the Task service
+  // (`PATCH /tasks/:id`); the relation routes are registered with the other
+  // collaboration routes (`routes.collaboration.ts`).
+  ctx.di.register({
+    tasksHierarchyService: ctx
+      .asFunction(({ commandBus, tasksAccess }: TasksCradle) => new TaskHierarchyService({ commandBus, access: tasksAccess }))
+      .singleton(),
+    tasksRelationService: ctx
+      .asFunction(
+        ({ commandBus, tasksAccess, auditLogService }: TasksCradle) =>
+          new TaskRelationService({ commandBus, access: tasksAccess, auditLog: auditLogService }),
+      )
+      .singleton(),
+  });
+  // --- end of Sub-tasks and related Tasks ---------------------------------------------
+
   // --- Published ports (contracts/ports-and-events.md §1) ---------------------------
   // What another module reads and writes Tasks through. Both are `providePort`:
   // gated, so a consumer resolving either while this module is off gets
@@ -532,13 +563,14 @@ export function registerModule(ctx: ModuleContext): void {
     'taskWritePort',
     ctx
       .asFunction(
-        ({ commandBus, emFactory, taskContextRegistry, tasksWorkflowRead }: TasksCradle) =>
+        ({ commandBus, emFactory, taskContextRegistry, tasksWorkflowRead, auditLogService }: TasksCradle) =>
           new TaskWritePortService({
             commandBus,
             emFactory,
             contexts: taskContextRegistry,
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
             workflow: tasksWorkflowRead,
+            auditLog: auditLogService,
           }),
       )
       .singleton(),

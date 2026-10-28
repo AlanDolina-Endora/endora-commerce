@@ -9,12 +9,14 @@ import {
   type TaskCreatedEvent,
   type TaskDeletedEvent,
 } from '@endora-commerce/contracts';
-import type { Command } from '@endora-commerce/platform/commands';
+import { recordAuditFromContext, type Command } from '@endora-commerce/platform/commands';
+import type { AuditPort } from '@endora-commerce/platform/kernel';
 import { randomUUID } from 'crypto';
 import { Task } from '../entities/task.entity.js';
 import { TaskAssignee } from '../entities/task-assignee.entity.js';
 import { TaskReference } from '../entities/task-reference.entity.js';
 import { TaskTagAssignment } from '../entities/task-tag-assignment.entity.js';
+import { assertParentFits, lockHierarchy } from './hierarchy-service.js';
 import { newlyMentioned } from './mention-service.js';
 import { referenceRowsFor } from './reference-service.js';
 import { taskAssigneeInvalid, taskNotFound } from './task-errors.js';
@@ -34,6 +36,8 @@ import { nextTaskNumber } from './task-number.js';
  * | `tasks.task.custom_fields_change` | — |
  * | `tasks.task.assignees_change` | `tasks.task.assignees_changed.v1` |
  * | `tasks.task.status_change` (`task-transition-service.ts`) | `tasks.task.status_changed.v1` |
+ * | `tasks.task.parent_change` (`hierarchy-service.ts`) | — |
+ * | `tasks.task.relate` / `.unrelate` (`relation-service.ts`) | — |
  * | `tasks.task.delete` | `tasks.task.deleted.v1` |
  *
  * Shared by the HTTP service and the write port, so a Task created by another
@@ -67,6 +71,11 @@ export interface NewTaskFields {
   tagIds?: readonly string[];
   /** Validated and merged by `custom_fields` before the Command runs (R-8). */
   customFieldValues?: Record<string, unknown>;
+  /**
+   * A parent the caller may see and change (`TaskHierarchyService.assertMayAdopt`);
+   * its depth is checked by the Command, under the hierarchy lock (R-15).
+   */
+  parentTaskId?: string | null;
   contextNote: string | null;
   /** The workflow's initial status at the moment of the call (data-model §5). */
   status: string;
@@ -146,6 +155,11 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
       const scoped = em as EntityManager;
       const now = new Date();
       const tagIds = [...new Set(input.tagIds ?? [])];
+      const parentTaskId = input.parentTaskId ?? null;
+      if (parentTaskId !== null) {
+        await lockHierarchy(scoped);
+        await assertParentFits(scoped, null, parentTaskId);
+      }
       const task = scoped.create(Task, {
         id,
         number: await nextTaskNumber(scoped),
@@ -157,6 +171,7 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
         startOn: input.startOn ?? null,
         priorityCode: input.priorityCode ?? null,
         customFieldValues: input.customFieldValues ?? {},
+        parentTaskId,
         createdByAdminUserId: actor.actorAdminUserId,
         contextType: context?.contextType ?? null,
         contextId: context?.contextId ?? null,
@@ -190,6 +205,7 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
           priorityCode: task.priorityCode ?? null,
           assigneeIds: [...input.assigneeIds],
           tagIds,
+          ...(parentTaskId !== null ? { parentTaskId } : {}),
           ...(Object.keys(task.customFieldValues).length > 0 ? { customFieldValues: task.customFieldValues } : {}),
         },
       };
@@ -360,23 +376,56 @@ export function changeTaskAssigneesCommand(
   };
 }
 
-/** `tasks.task.delete` — `false` when the Task was already gone (nothing audited). */
-export function deleteTaskCommand(id: string): Command<boolean> {
+/** What deleting a Task did: whether it was there, and which sub-tasks became top-level. */
+export interface TaskDeletion {
+  deleted: boolean;
+  /** Every former sub-task, whoever may see it — the caller counts those its reader may (FR-028). */
+  detachedIds: string[];
+}
+
+/**
+ * `tasks.task.delete` — `deleted: false` when the Task was already gone
+ * (nothing audited). Its sub-tasks become top-level (FR-029): the database's
+ * `on delete set null` clears their parent, under the hierarchy lock, and each
+ * gets a `tasks.task.parent_change` entry of its own (`reason:
+ * 'parent_deleted'`) on this Command's transaction through the kernel's audit
+ * port — a former sub-task's history says why it has no parent any more.
+ */
+export function deleteTaskCommand(id: string, auditLog: AuditPort): Command<TaskDeletion> {
   let gone: { contextType: string | null; contextId: string | null } | null = null;
   return {
     action: 'tasks.task.delete',
     objectType: 'task',
     objectId: id,
     run: async ({ em }) => {
-      const task = await em.findOne(Task, { id });
-      if (!task) return { result: false, skipAudit: true };
+      const scoped = em as EntityManager;
+      await lockHierarchy(scoped);
+      const task = await scoped.findOne(Task, { id });
+      if (!task) return { result: { deleted: false, detachedIds: [] }, skipAudit: true };
       const before = auditSnapshot(task);
       gone = { contextType: task.contextType ?? null, contextId: task.contextId ?? null };
-      em.remove(task);
-      return { result: true, before, after: null };
+      // Keyed by the Task the caller loaded: its sub-tasks, whoever may see them.
+      const children = (await scoped.execute(`select "id" from "tasks" where "parent_task_id" = ? order by "id"`, [
+        id,
+      ])) as Array<{ id: string }>;
+      for (const child of children) {
+        recordAuditFromContext(auditLog, scoped, {
+          action: 'tasks.task.parent_change',
+          objectType: 'task',
+          objectId: child.id,
+          stateBefore: { parentTaskId: id },
+          stateAfter: { parentTaskId: null, reason: 'parent_deleted' },
+        });
+      }
+      scoped.remove(task);
+      return {
+        result: { deleted: true, detachedIds: children.map((child) => child.id) },
+        before,
+        after: null,
+      };
     },
-    event: (deleted) => {
-      if (!deleted || !gone) return undefined;
+    event: (result) => {
+      if (!result.deleted || !gone) return undefined;
       const payload: TaskDeletedEvent = { ...envelope(), taskId: id, ...gone };
       return { eventName: TASKS_EVENTS.DELETED, payload };
     },

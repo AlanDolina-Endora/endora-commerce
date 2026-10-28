@@ -483,6 +483,18 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
       'Phase 5): a saved view of the Tasks list named as one its owner already has, case-insensitively.',
   },
+  TASK_PARENT_CYCLE: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 7): a Task made a sub-task of itself or of one of its own descendants.',
+  },
+  TASK_HIERARCHY_TOO_DEEP: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 7): a parent change or a new sub-task that would nest sub-tasks deeper than five levels.',
+  },
   PROJECT_NOT_FOUND: {
     to: 'projects',
     reason:

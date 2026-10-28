@@ -14,10 +14,12 @@ import { HttpError } from '@endora-commerce/platform/http';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import type { TaskAttachmentService } from '../services/attachment-service.js';
 import type { TaskCommentService } from '../services/comment-service.js';
+import type { TaskRelationService } from '../services/relation-service.js';
 
 export interface TaskCollaborationRoutesDeps {
   attachmentService: TaskAttachmentService;
   commentService: TaskCommentService;
+  relationService: TaskRelationService;
   requireAdmin: RequireAdminFactory;
 }
 
@@ -36,9 +38,9 @@ function noFile(): HttpError {
 
 /**
  * A Task's collaboration routes (`specs/165-task-management/contracts/admin-api.md`
- * §2) — the attachments from User Story 1; comments arrive with User Story 4,
- * relations with User Story 5, links with User Story 6, reminders with User
- * Story 7.
+ * §2) — the attachments from User Story 1, comments from User Story 4,
+ * related Tasks from User Story 5; links arrive with User Story 6, reminders
+ * with User Story 7.
  *
  * Reading the list is `tasks:read`, and that is enough to download: each entry
  * carries a link this module resolved. The upload — a file of the caller's own
@@ -53,7 +55,28 @@ export async function registerTaskCollaborationRoutes(
   app: FastifyInstance,
   deps: TaskCollaborationRoutesDeps,
 ): Promise<void> {
-  const { requireAdmin, attachmentService: attachments, commentService: comments } = deps;
+  const { requireAdmin, attachmentService: attachments, commentService: comments, relationService: relations } = deps;
+
+  // Related Tasks (FR-030): `tasks:write`, and the service asks that the caller
+  // may see and change **both** Tasks. Idempotent both ways: 204 whether or not
+  // anything changed.
+  app.put<{ Params: { id: string; otherId: string } }>(
+    `${API}/:id/relations/:otherId`,
+    { preHandler: requireAdmin('tasks:write') },
+    async (request, reply) => {
+      await relations.relate(request.params.id, request.params.otherId);
+      return reply.code(204).send();
+    },
+  );
+
+  app.delete<{ Params: { id: string; otherId: string } }>(
+    `${API}/:id/relations/:otherId`,
+    { preHandler: requireAdmin('tasks:write') },
+    async (request, reply) => {
+      await relations.unrelate(request.params.id, request.params.otherId);
+      return reply.code(204).send();
+    },
+  );
 
   app.get<{ Params: { id: string } }>(
     `${API}/:id/comments`,

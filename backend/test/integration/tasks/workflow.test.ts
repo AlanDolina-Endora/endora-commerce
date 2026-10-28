@@ -287,7 +287,7 @@ describe('tasks — the workflow (US2)', () => {
         backlogTask = task.id;
         expect(task.status.code).toBe('backlog');
       } finally {
-        if (backlogTask) expect((await call('DELETE', `/${backlogTask}`)).statusCode).toBe(204);
+        if (backlogTask) expect((await call('DELETE', `/${backlogTask}`)).statusCode).toBe(200);
         await workflowOf(await call('PATCH', '/statuses/todo', { isInitial: true }));
         // Not in use any more: no replacement is asked for.
         await workflowOf(await call('DELETE', '/statuses/backlog'));

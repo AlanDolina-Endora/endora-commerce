@@ -726,6 +726,10 @@ export const ERROR_CODES = {
   TASK_ATTACHMENT_REFUSED: 'TASK_ATTACHMENT_REFUSED',
   /** A saved Tasks list view name its owner already uses, case-insensitively (R-13). */
   TASK_VIEW_NAME_TAKEN: 'TASK_VIEW_NAME_TAKEN',
+  /** A Task parent that would close a cycle — the Task itself or one of its descendants (R-15). */
+  TASK_PARENT_CYCLE: 'TASK_PARENT_CYCLE',
+  /** A Task parent that would nest sub-tasks deeper than `TASK_HIERARCHY_DEPTH_MAX` levels (R-15). */
+  TASK_HIERARCHY_TOO_DEEP: 'TASK_HIERARCHY_TOO_DEEP',
 
   // Projects (`specs/163-projects-and-tasks/`, `contracts/admin-api.md` §2) —
   // the spellings of `PROJECTS_ERROR_CODES`. Each is declared by the `projects`

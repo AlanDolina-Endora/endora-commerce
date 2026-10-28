@@ -289,7 +289,8 @@ describe('tasks — a Task on its own (US2)', () => {
     const seen = capture([TASKS_EVENTS.DELETED]);
     try {
       const response = await call('DELETE', `/${task.id}`);
-      expect(response.statusCode, response.body).toBe(204);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toEqual({ data: { subtasksDetached: 0 } });
       expect((await call('GET', `/${task.id}`)).statusCode).toBe(404);
       const mine = MyTasksResponseSchema.parse((await call('GET', '/mine')).json()).data;
       expect(mine.map((t) => t.id)).not.toContain(task.id);
