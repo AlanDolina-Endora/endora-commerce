@@ -2,11 +2,10 @@ import { useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { CornerLeftUp, ListTree, Plus, Unlink } from 'lucide-react';
 import type { TaskDetail, TaskSummary } from '@endora-commerce/contracts';
-import { formatDateTime } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button, Label } from '@endora-commerce/admin-kit/ui';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
-import { calendarDateLabel, errorMessage } from '../lib/labels.js';
+import { calendarDateLabel, errorMessage, momentLabel } from '../lib/labels.js';
 import { useEditorFocus } from '../lib/use-editor-focus.js';
 import { StatusBadge } from './StatusBadge.js';
 import { TaskPicker } from './TaskPicker.js';
@@ -195,7 +194,7 @@ function SubtaskRow(props: { task: TaskSummary }): ReactNode {
   const { task } = props;
   const t = useTranslation('tasks');
   const { language } = useAppLanguage();
-  const due = task.dueAt ? formatDateTime(task.dueAt) : task.dueOn ? calendarDateLabel(task.dueOn, language) : null;
+  const due = task.dueAt ? momentLabel(task.dueAt, language) : task.dueOn ? calendarDateLabel(task.dueOn, language) : null;
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
       <Link

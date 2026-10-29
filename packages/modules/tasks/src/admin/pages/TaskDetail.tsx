@@ -8,7 +8,7 @@ import {
   type TaskWorkflow,
   type UpdateTaskBody,
 } from '@endora-commerce/contracts';
-import { ApiError, formatDateTime, useAuth } from '@endora-commerce/admin-kit/lib';
+import { ApiError, useAuth } from '@endora-commerce/admin-kit/lib';
 import {
   Alert,
   AlertDescription,
@@ -29,6 +29,7 @@ import {
   ReferenceText,
   TagChips,
   useRecordHistory,
+  type RecordHistoryChange,
 } from '@endora-commerce/admin-kit/components';
 import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
@@ -45,7 +46,7 @@ import { TaskComments } from '../components/TaskComments.js';
 import { TaskCustomFields } from '../components/TaskCustomFields.js';
 import { dueOf, TaskFieldInputs, taskFieldValuesOf, usePriorities, type TaskFieldValues } from '../components/TaskFieldInputs.js';
 import { useCurrentAdmin } from '../lib/current-admin.js';
-import { calendarDateLabel, errorMessage } from '../lib/labels.js';
+import { calendarDateLabel, errorMessage, momentLabel } from '../lib/labels.js';
 import { useEditorFocus } from '../lib/use-editor-focus.js';
 
 const LIST_PATH = '/tasks';
@@ -470,7 +471,7 @@ export function TaskDetail(): ReactNode {
                     </dt>
                     <dd className={task.overdue ? 'font-medium text-destructive' : undefined}>
                       {task.dueAt
-                        ? formatDateTime(task.dueAt)
+                        ? momentLabel(task.dueAt, language)
                         : task.dueOn
                           ? calendarDateLabel(task.dueOn, language)
                           : t('list.noDueDate')}
@@ -543,10 +544,10 @@ export function TaskDetail(): ReactNode {
                   <div className="space-y-0.5 text-xs text-muted-foreground sm:col-span-2">
                     <p>
                       {task.createdBy
-                        ? t('detail.createdBy', { name: task.createdBy.name, date: formatDateTime(task.createdAt) })
-                        : t('detail.createdOn', { date: formatDateTime(task.createdAt) })}
+                        ? t('detail.createdBy', { name: task.createdBy.name, date: momentLabel(task.createdAt, language) })
+                        : t('detail.createdOn', { date: momentLabel(task.createdAt, language) })}
                     </p>
-                    {task.completedAt ? <p>{t('detail.completedAt', { date: formatDateTime(task.completedAt) })}</p> : null}
+                    {task.completedAt ? <p>{t('detail.completedAt', { date: momentLabel(task.completedAt, language) })}</p> : null}
                   </div>
                 </dl>
               )}
@@ -828,6 +829,24 @@ const SHOWN_HISTORY_FIELDS: ReadonlySet<string> = new Set([
   'completedAt',
 ]);
 
+const emptyValue = (value: unknown): boolean => value === null || value === undefined || value === '';
+
+/**
+ * The rows an entry shows: the {@link SHOWN_HISTORY_FIELDS}, and the due date
+ * only where it is not the day of a due moment the same entry shows — a Task
+ * due at a time stores both, and the walk found *Due* and *Due date* side by
+ * side (165 T095). Where either side has a date but no time, the date stays.
+ */
+function shownHistoryChanges(changes: readonly RecordHistoryChange[]): RecordHistoryChange[] {
+  const shown = changes.filter((change) => SHOWN_HISTORY_FIELDS.has(change.field));
+  const dueAt = shown.find((change) => change.field === 'dueAt');
+  const dueOn = shown.find((change) => change.field === 'dueOn');
+  if (!dueAt || !dueOn) return shown;
+  const derived =
+    (emptyValue(dueOn.before) || !emptyValue(dueAt.before)) && (emptyValue(dueOn.after) || !emptyValue(dueAt.after));
+  return derived ? shown.filter((change) => change !== dueOn) : shown;
+}
+
 /**
  * The Task's audit trail (`GET /tasks/:id/history`) on the kit's
  * `RecordHistory` (`specs/163-projects-and-tasks/` research R-17): newest
@@ -853,7 +872,7 @@ function TaskHistory(props: {
     if (field === 'status') return props.statusName(String(raw));
     if (field === 'priorityCode') return props.priorityName(String(raw));
     if ((field === 'dueOn' || field === 'startOn') && typeof raw === 'string') return calendarDateLabel(raw, language);
-    if ((field === 'completedAt' || field === 'dueAt') && typeof raw === 'string') return formatDateTime(raw);
+    if ((field === 'completedAt' || field === 'dueAt') && typeof raw === 'string') return momentLabel(raw, language);
     return String(raw);
   };
 
@@ -867,7 +886,7 @@ function TaskHistory(props: {
         truncated: t('history.truncated'),
       }}
       heading={(entry) => t(`auditLog.${entry.action}`)}
-      changes={(entry) => recordHistoryChanges(entry).filter((change) => SHOWN_HISTORY_FIELDS.has(change.field))}
+      changes={(entry) => shownHistoryChanges(recordHistoryChanges(entry))}
       fieldLabel={(field) => t(`history.field.${field}`)}
       renderValue={renderValue}
     />

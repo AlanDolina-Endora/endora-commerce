@@ -138,6 +138,12 @@ describe('TaskDetail — the fields of a full work item (US1)', () => {
     const assignees = within(details).getByRole('list', { name: en('field.assignee') });
     expect(within(assignees).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Anna Nowak', 'Ada Min']);
     expect(within(details).getByText(en('field.dueAt'))).toBeTruthy();
+    // The admin UI language's medium date and short time — no seconds (T095).
+    expect(
+      within(details).getByText(
+        new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date('2026-11-05T13:30:00.000Z')),
+      ),
+    ).toBeTruthy();
     expect(within(details).getByText(en('field.startOn'))).toBeTruthy();
     expect(within(details).getByText('High')).toBeTruthy();
     expect(within(details).getByText('Installation').closest('ul')).not.toBeNull();

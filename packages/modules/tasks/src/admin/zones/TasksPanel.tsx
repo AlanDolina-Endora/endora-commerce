@@ -2,12 +2,12 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import type { TaskLinkKind, TaskSummary } from '@endora-commerce/contracts';
-import { formatDateTime, useAuth } from '@endora-commerce/admin-kit/lib';
+import { useAuth } from '@endora-commerce/admin-kit/lib';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@endora-commerce/admin-kit/ui';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 import { StatusBadge } from '../components/StatusBadge.js';
-import { calendarDateLabel } from '../lib/labels.js';
+import { calendarDateLabel, momentLabel } from '../lib/labels.js';
 
 /** How many linked Tasks the panel lists; the rest are one link away, on the Tasks list. */
 const PANEL_LIMIT = 20;
@@ -119,7 +119,7 @@ export function TasksPanel({ kind, recordId }: TasksPanelProps): ReactNode {
                     </span>
                     {task.dueAt || task.dueOn ? (
                       <span className={task.overdue ? 'font-medium text-destructive' : 'text-muted-foreground'}>
-                        {task.dueAt ? formatDateTime(task.dueAt) : calendarDateLabel(task.dueOn, language)}
+                        {task.dueAt ? momentLabel(task.dueAt, language) : calendarDateLabel(task.dueOn, language)}
                         {task.overdue ? ` · ${t('list.overdue')}` : null}
                       </span>
                     ) : null}

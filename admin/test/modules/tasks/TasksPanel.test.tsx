@@ -112,7 +112,7 @@ describe('tasks contributes the Tasks panel', () => {
       expect(within(panel).getByText(STATUS.in_progress.name)).toBeInTheDocument();
       expect(within(panel).getByText('Anna Nowak')).toBeInTheDocument();
       expect(within(panel).getByText(en('list.unassigned'))).toBeInTheDocument();
-      expect(within(panel).getByText(new RegExp(new Date(2026, 10, 5).toLocaleDateString('en')))).toBeInTheDocument();
+      expect(within(panel).getByText(new RegExp(new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(2026, 10, 5))))).toBeInTheDocument();
       expect(within(panel).getByText(new RegExp(en('list.overdue')))).toBeInTheDocument();
       expect(within(panel).getByRole('link', { name: en('panel.add') })).toHaveAttribute(
         'href',

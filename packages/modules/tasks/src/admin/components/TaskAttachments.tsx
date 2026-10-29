@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Download, Trash2 } from 'lucide-react';
 import { TASK_ATTACHMENT_MAX_BYTES, type TaskAttachment } from '@endora-commerce/contracts';
-import { formatDateTime } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button } from '@endora-commerce/admin-kit/ui';
 import { AttachmentUploader, ModalDialog, uploadAttachment } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
-import { errorMessage, fileSizeLabel } from '../lib/labels.js';
+import { errorMessage, fileSizeLabel, momentLabel } from '../lib/labels.js';
 
 /**
  * A Task's attachments (`specs/165-task-management/` FR-008, research R-7;
@@ -159,7 +158,7 @@ export function TaskAttachments(props: { taskId: string; canChange: boolean }): 
                   {' · '}
                   <span>{attachment.uploadedBy?.name ?? ''}</span>
                   {' · '}
-                  <span>{formatDateTime(attachment.createdAt)}</span>
+                  <span>{momentLabel(attachment.createdAt, language)}</span>
                 </p>
               </div>
               <div className="flex gap-1">

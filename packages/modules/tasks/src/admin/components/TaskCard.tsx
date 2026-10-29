@@ -11,7 +11,7 @@ import type {
 } from '@endora-commerce/contracts';
 import { TagChips } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
-import { calendarDateLabel } from '../lib/labels.js';
+import { calendarDateLabel, instantDateLabel } from '../lib/labels.js';
 import { ContextLabel } from './ContextLabel.js';
 import { TaskMarkers } from './TaskMarkers.js';
 
@@ -39,8 +39,7 @@ function customText(value: unknown, yes: string, no: string): string | null {
 
 function instantDate(value: unknown, language: string): string | null {
   if (typeof value !== 'string') return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString(language);
+  return instantDateLabel(value, language);
 }
 
 /**

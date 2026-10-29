@@ -14,12 +14,43 @@ export function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.envelope.error.message : fallback;
 }
 
-/** A `YYYY-MM-DD` calendar date in the reader's locale, without a time-zone shift. */
+/*
+ * Dates on the Tasks screens are written one way, in the admin UI language
+ * (165 T095): a calendar date as the language's medium date (*Oct 30, 2026*,
+ * *30 paź 2026*), a moment as that date and the short time — never seconds,
+ * never the browser's own locale.
+ */
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
+
+function dateFormat(language: string, withTime: boolean): Intl.DateTimeFormat {
+  const key = `${language}|${withTime ? 'moment' : 'date'}`;
+  let format = dateFormats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(language, withTime ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' });
+    dateFormats.set(key, format);
+  }
+  return format;
+}
+
+/** A `YYYY-MM-DD` calendar date in the reader's language, without a time-zone shift. */
 export function calendarDateLabel(date: string | null | undefined, language: string): string {
   if (!date) return NO_VALUE;
   const [year, month, day] = date.split('-').map(Number);
   if (!year || !month || !day) return date;
-  return new Date(year, month - 1, day).toLocaleDateString(language);
+  return dateFormat(language, false).format(new Date(year, month - 1, day));
+}
+
+/** A moment (an ISO instant) in the reader's language: its date and its time, without seconds. */
+export function momentLabel(iso: string | null | undefined, language: string): string {
+  if (!iso) return NO_VALUE;
+  const moment = new Date(iso);
+  return Number.isNaN(moment.getTime()) ? iso : dateFormat(language, true).format(moment);
+}
+
+/** The day of a moment, written as a calendar date is; `null` for what is not a moment. */
+export function instantDateLabel(iso: string, language: string): string | null {
+  const moment = new Date(iso);
+  return Number.isNaN(moment.getTime()) ? null : dateFormat(language, false).format(moment);
 }
 
 const SIZE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte'] as const;

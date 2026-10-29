@@ -132,7 +132,7 @@ describe('TaskDetail — sub-tasks (US5)', () => {
     expect(items[0]).toHaveTextContent('Done');
     expect(items[1]).toHaveTextContent('Order the bolts');
     expect(items[1]).toHaveTextContent('Anna Nowak');
-    expect(items[1]).toHaveTextContent(new Date(2026, 10, 7).toLocaleDateString('en'));
+    expect(items[1]).toHaveTextContent(new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(2026, 10, 7)));
     // No list is asked for on load: the detail carries the sub-tasks.
     expect(searches()).toEqual([]);
   });

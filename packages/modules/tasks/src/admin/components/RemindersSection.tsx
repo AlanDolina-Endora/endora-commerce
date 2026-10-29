@@ -5,7 +5,7 @@ import { Alert, AlertDescription, Badge, Button, Checkbox, Input, Label, Select 
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 import { useCurrentAdmin } from '../lib/current-admin.js';
-import { errorMessage } from '../lib/labels.js';
+import { errorMessage, momentLabel } from '../lib/labels.js';
 import { useEditorFocus } from '../lib/use-editor-focus.js';
 
 /** The offsets a reminder before the due date is offered at, in minutes. */
@@ -55,7 +55,7 @@ export function RemindersSection(props: RemindersSectionProps): ReactNode {
   const people = [...(me ? [me] : []), ...task.assignees.filter((assignee) => assignee.id !== me?.id)];
 
   const when = (reminder: TaskReminder): string => {
-    const moment = new Date(reminder.remindAt).toLocaleString(language, { dateStyle: 'medium', timeStyle: 'short' });
+    const moment = momentLabel(reminder.remindAt, language);
     if (reminder.mode === 'absolute' || reminder.offsetMinutes === null) return moment;
     const offsetLabel = (OFFSETS as readonly number[]).includes(reminder.offsetMinutes)
       ? t(`reminders.before.${reminder.offsetMinutes}`)

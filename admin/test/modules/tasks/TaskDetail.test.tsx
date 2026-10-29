@@ -325,6 +325,29 @@ describe('TaskDetail — history and the zone', () => {
     expect(await within(history).findByRole('heading', { name: en('auditLog.tasks.task.create') })).toBeTruthy();
   });
 
+  it('shows a due moment once, without seconds, and not its derived due date beside it (T095)', async () => {
+    const dueAt = '2026-10-30T09:00:00.000Z';
+    getSpy.mockImplementation((path: string) => {
+      if (path === TASK_PATH) return Promise.resolve({ data: current });
+      if (path === WORKFLOW_PATH) return Promise.resolve({ data: workflow() });
+      if (path.startsWith(`${TASK_PATH}/history`)) {
+        return Promise.resolve(
+          historyPage([historyEntry({ id: 'h1', after: { title: 'Approve the drawings', dueOn: '2026-10-30', dueAt } })]),
+        );
+      }
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    await renderPage();
+    const history = screen.getByRole('region', { name: en('detail.history') });
+    expect(await within(history).findByText(en('history.field.dueAt'))).toBeTruthy();
+    expect(within(history).queryByText(en('history.field.dueOn'))).toBeNull();
+    expect(
+      within(history).getByText(
+        new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(dueAt)),
+      ),
+    ).toBeTruthy();
+  });
+
   it('mounts the task.detail.after zone with the Task id, naming no contributor', () => {
     const source = readFileSync(
       resolve(process.cwd(), '../packages/modules/tasks/src/admin/pages/TaskDetail.tsx'),
