@@ -277,16 +277,30 @@ description: "Task list for asset visibility following the records that referenc
 
 ### Tests first
 
-- [ ] T038 [US3] Write the *used by* block of `backend/test/integration/assets_library/reference-visibility.test.ts`:
+- [X] T038 [US3] Write the *used by* block of `backend/test/integration/assets_library/reference-visibility.test.ts`:
   - `GET /assets/:id`: B sees the product only, A and W see both, and no response carries `assetId` on a reference;
   - the detail every mutating by-id route returns (rename via `PATCH`, move, replace, previous-version restore, permalink set and remove, restore) is filtered the same way for B;
   - the same for a Project and an Opportunity reference alongside a CMS embed.
+  - Written 2026-10-29 as the `US3` sibling block. Files uploaded as W (real bytes, so replace and previous-version restore run): F (a product gallery + A's private Task), FP (P1 attachment + a CMS page body embed), FO (O1 Opportunity attachment + a CMS embed). Cases: F's detail per reader (B and N the product only; A, S, W both); B's detail from PATCH rename, move, replace, previous-version restore (versions from the replace's answer), permalink set, permalink remove and restore — each the product only — with W still seeing both after; FP and FO per reader (B, N: the CMS page; S: the Opportunity but not P1; A, W: both). Every reference on the wire has exactly `entityId`, `kind`, `label`. References are compared sorted (`kind:entityId`).
+  - Red 2026-10-29, 3/3, for the stated reason: B got both references (`expected [ …(2) ] to deeply equal [ Array(1) ]`) on the detail, on the first mutating route (PATCH) and on FP. Also red, the new unit cases: `assets-library-reader.test.ts` (the detail did not ask `visibleReferences`), `asset-visibility.test.ts` (order — see T039) and `reference-registry.test.ts` (`inRegistrationOrder` missing; shown by stashing the method, written ahead of its test).
 
 ### Implementation
 
-- [ ] T039 [US3] Filter `detail()` in `AL/src/backend/services/assets-library.service.ts` through `AssetVisibility.visibleReferences` for the caller, and strip `assetId` from the wire; make every route that returns a detail (`AL/src/backend/routes.admin.ts`, and the replace and previous-version paths in `AL/src/backend/services/asset-replace.ts`) return it through the same call. T038 green.
+- [X] T039 [US3] Filter `detail()` in `AL/src/backend/services/assets-library.service.ts` through `AssetVisibility.visibleReferences` for the caller, and strip `assetId` from the wire; make every route that returns a detail (`AL/src/backend/routes.admin.ts`, and the replace and previous-version paths in `AL/src/backend/services/asset-replace.ts`) return it through the same call. T038 green.
+  - Done 2026-10-29. `detail()` takes its references from `visibility.visibleReferences(a.id)` (the service's `visibility` dependency widens to include it); every route answering a detail — upload, read, PATCH, move, restore, permalink set/remove, replace and previous-version restore (both `asset-replace.ts` paths already return through `service.detail`) — goes through it, so `asset-replace.ts` and `routes.admin.ts` needed no change. `assetId` no longer reaches the wire (before this, `findReferences`' hits since T013 carried it: no response schema strips it).
+  - **Deviation (small, inside the library):** `visibleReferences` returned unrestricted references first, then restricted ones; it now walks the descriptors in registration order through a new `AssetReferenceRegistry.inRegistrationOrder()`, so a reader who sees every reference (A, W, the system) gets today's list in today's order. Unit cases: registry order, and interleaved order for an admin and the wildcard.
+  - Other modules that call `assetsLibraryPort.getAsset` (Tasks / Projects / CRM attachment URLs, invoices, settings, cms embeds, pwa) now get the caller's list: a customer or API-key context sees no restricted reference; an admin's call asks each present restricted owner's `visibleEntityIds` once per detail. None of them reads `references` (they read `url`). T049 should measure the attachment-list paths too.
+  - `assets-library-url.test.ts`'s unrestricted stub gained `visibleReferences: async () => []` (its registry is empty). OpenAPI: no schema change — the baseline test is red only on master's catalog paths (#398), no asset path. T038 green (34/34 in the file).
 
 **Checkpoint**: all P1 stories hold. No record's number or existence leaks through the library for a restricted reader.
+
+**Phase 5 gate** (2026-10-29, on `6260f8ab1`):
+- `pnpm run build:packages` exit 0; `pnpm -r run typecheck` exit 0; `pnpm -r run lint` exit 0 (no warning in a touched file).
+- `mod-assets-library` 24 files / 392 tests. Backend targeted (`b2b_test` on 5441): `test/integration/assets_library` + `test/contract/assets_library` + `{cms,blog}/asset-reference-while-off` + `{tasks,projects,crm}/attachments` + `catalog/asset-references`: 36 files / 241 tests; the detail's other callers — `test/integration/{tasks,projects,cms,invoices}`, `crm/{attachments,attachment-upload}`, `contract/crm/attachments`: 89 files / 734 tests — all green.
+- `test:unit:fast` at load ~22: 361 / 365 files, 7 836 / 7 841 tests; the 5 red were whole-tree scans timing out (`migration-order-boot-warning`, `module-package-manifest` ×2, `package-peer-coherence`, `check-module-boundary`), the same set as Phase 3. Re-run alone with `--testTimeout=400000`: 4 / 4 files, 281 / 281 green.
+- Checks: `check:port-dependencies`, `check:off-state-coverage`, `check:module-boundary`, `check:action-route-permissions`, `check:port-catches`, `check:port-shape`, `check:entry-presence`, `check:naming`, `check:language` — all exit 0.
+- OpenAPI baseline: run without the flag — red only on master's catalog paths (#398); no asset route or schema changed, not re-recorded.
+- No file moved or deleted.
 
 ---
 
