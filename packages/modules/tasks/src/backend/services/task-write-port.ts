@@ -15,7 +15,7 @@ import {
   type TaskWritePort,
 } from '@endora-commerce/contracts';
 import type { CommandBus } from '@endora-commerce/platform/commands';
-import type { AuditPort } from '@endora-commerce/platform/kernel';
+import { rethrowIfModuleDisabled, type AuditPort } from '@endora-commerce/platform/kernel';
 import { HttpError } from '@endora-commerce/platform/http';
 import { Task } from '../entities/task.entity.js';
 import { assertAssignable } from './task-checks.js';
@@ -143,6 +143,7 @@ export class TaskWritePortService implements TaskWritePort {
       try {
         id = await this.deps.commandBus.run(createTaskCommand(where, { ...task, status, sourceKey }));
       } catch (error) {
+        rethrowIfModuleDisabled(error);
         // Another call created this key meanwhile: the unique index refused
         // this one, whose Command rolled back whole. Its Task is the answer.
         if (sourceKey === null || !(error instanceof UniqueConstraintViolationException)) throw error;

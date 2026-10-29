@@ -64,7 +64,7 @@ are additive (`release-intent.md`).
 | `src/migrations/<stamp>_projects_reference_kinds.ts` (new) | Widens `project_references_target_type_check`. |
 | `src/admin/pages/project-detail/tabs/TasksTab.tsx` | Status chip from `status.name` and `status.color`, and assignees as a list. The `tasks.status.*` keys are removed from `i18n/{en,pl}.json`. |
 | `src/backend/project-access-seam.test.ts` (added at T025) | `RULE_SCOPED_READ_LEDGER['services/project-access.ts']` 12 → 14: the two reads of `findVisibleMany` and `searchVisible`, both composing `visibleProjectSql`. |
-| `src/backend/project-access-seam.test.ts` (added at T087) | `RULE_SCOPED_READ_LEDGER['services/project-access.ts']` 14 → 15: `existingWithStages`, the system-only existence query behind `existingContexts`. |
+| `src/backend/project-access-seam.test.ts` (added at T087) | `RULE_SCOPED_READ_LEDGER['services/project-access.ts']` 14 → 16: `existingWithStages`, the system-only existence query behind `existingContexts` — one statement naming `projects` and `project_stages`, counted once per table. |
 | `src/backend/services/{project-service,stage-service}.ts` (added at T087) | Comments only: a Project or Stage deleted while Tasks is off is cleaned up by the Tasks maintenance pass (#450). |
 | `src/backend/routes/routes.stage-tasks.ts` (added at T019) | `GET /projects/:id/tasks` passes the response language to `tasksByStage`, which names each status from the record's `statusName`. |
 
