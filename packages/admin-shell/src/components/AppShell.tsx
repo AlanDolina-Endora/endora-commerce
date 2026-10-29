@@ -996,7 +996,7 @@ function pinAnnouncementText(
 }
 
 export function AppShell(): ReactNode {
-  const { me, logout, hasPermission } = useAuth();
+  const { me, logout } = useAuth();
   // The host's nav with every installed module's contributed entry folded in.
   const composedNav = useComposedNav();
   // Feature 073 — the effective enabled-set. A module that is off contributes
@@ -1439,13 +1439,14 @@ export function AppShell(): ReactNode {
               <Search size={16} />
             </button>
             {/*
-              Issue #112 — the bell is a surface like any other: it renders only
-              where the operator holds the code its feed is gated on and the
-              owning module is present. It used to render for every
-              authenticated admin and poll every 30 s, so a restricted role got a
-              permanent 403 and a deactivated `admin_notifications` a 503.
+              Issue #112 — the bell renders only while the owning module is
+              present, so a deactivated `admin_notifications` contributes no
+              widget polling a 503. Issue #518 — and for every signed-in admin:
+              the feed answers each admin their own notifications with no
+              permission code, and `admin:read` decides only whether the
+              `all_admins` broadcasts are among them.
             */}
-            {isModulePresent('admin_notifications') && hasPermission('admin:read') ? (
+            {isModulePresent('admin_notifications') ? (
               <NotificationBell />
             ) : null}
             <button

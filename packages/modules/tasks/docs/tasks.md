@@ -98,6 +98,10 @@ Assigning a task to yourself, or unassigning it, tells nobody. Nor is
 anybody told about a task they may not see: a task of a project goes to the
 bell only of somebody who may see that project. While the *Admin notifications*
 module is switched off assigning works the same and nobody is told.
+Every administrator has the bell and reads their own notifications on it,
+whatever their role: no permission is needed for that. The *View notifications
+sent to all admins* permission only adds the notifications addressed to every
+administrator at once.
 
 **My tasks** is your own open work: the tasks assigned to you that are neither
 `done` nor `cancelled`, the ones due soonest first, the ones without a due date
