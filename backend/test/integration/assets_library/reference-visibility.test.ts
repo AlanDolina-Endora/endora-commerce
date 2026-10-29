@@ -488,7 +488,9 @@ describe('assets library — reference visibility (feature 166)', () => {
       .em()
       .getConnection()
       .execute<Array<{ n: string }>>(`select count(*)::text as n from asset_object_cleanups`);
-    return Number(rows[0]?.n ?? 0);
+    const [row] = rows;
+    if (!row) throw new Error('count(*) answered no row');
+    return Number(row.n);
   }
 });
 
