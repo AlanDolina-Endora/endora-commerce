@@ -93,14 +93,14 @@ export function CategoriesMega({ megamenu }: CategoriesMegaProps): ReactNode {
               <ul className="industria-mega__list">
                 {items.map((item, i) => (
                   <li key={item.id}>
-                    <a
+                    <LocalizedAnchor
                       href={item.url ?? '/catalog'}
                       onMouseEnter={() => queueActive(i)}
                       onFocus={() => setActiveNow(i)}
                       aria-current={i === active ? 'true' : undefined}
                     >
                       {item.label}
-                    </a>
+                    </LocalizedAnchor>
                   </li>
                 ))}
                 <li>

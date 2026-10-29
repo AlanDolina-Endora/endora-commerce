@@ -17,7 +17,7 @@ import { backendBaseUrl } from '../../../lib/env.mjs';
 import { tForLocale } from '../../../lib/i18n/messages';
 import { signInErrorMessage, signInErrorParam } from '../../../lib/auth/sign-in-errors';
 import { SIGN_IN_REQUIRED_REASON } from '../../../lib/channel/closed-store';
-import { localeRedirect } from '../../../lib/i18n/navigation';
+import { localeRedirect, localizedPath } from '../../../lib/i18n/navigation';
 import { LocalizedLink } from '../../../lib/i18n/localized-link';
 
 /**
@@ -106,7 +106,9 @@ export default async function LoginPage({
         </form>
         <SocialLoginButtons
           backendBaseUrl={backendBaseUrl()}
-          next={nextPath}
+          // Feature 167 — the return address under this page's prefix, from which the
+          // backend learns the language to come back in.
+          next={await localizedPath(nextPath)}
           locale={locale}
           modulePresent={mfaPresent}
           availableProviders={federatedProviders}

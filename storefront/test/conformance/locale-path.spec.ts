@@ -143,7 +143,7 @@ test.describe('language in the URL path', () => {
       const offenders = [...html.matchAll(/<a\b[^>]*>/g)]
         .map((m) => m[0])
         // The language switcher links to the other languages on purpose.
-        .filter((tag) => !/\shreflang=/.test(tag))
+        .filter((tag) => !/\shreflang=/i.test(tag))
         .map((tag) => /\shref="([^"]*)"/.exec(tag)?.[1] ?? '')
         .filter((href) => href.startsWith('/') && !href.startsWith('//'))
         .filter((href) => !/^\/(api|pwa|offline|_next)(\/|$)/.test(href) && !/^\/[^/?#]*\.[a-z0-9]+([?#]|$)/i.test(href))
