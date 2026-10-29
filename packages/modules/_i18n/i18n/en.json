@@ -29,7 +29,7 @@
   "adminRoles.owners": "grantable while these modules are on: {modules}",
   "adminRoles.page.descriptionPrefix": "Permission bundles assigned in",
   "adminRoles.page.title": "Roles",
-  "adminRoles.permission.admin:read": "View admin notifications",
+  "adminRoles.permission.admin:read": "View notifications sent to all admins",
   "adminRoles.permission.admin_users:manage": "Manage admin users + roles",
   "adminRoles.permission.analytics:read": "View analytics",
   "adminRoles.permission.assets.read": "Browse assets library",

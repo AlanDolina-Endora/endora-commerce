@@ -198,6 +198,11 @@ Nobody is told about a task they may not see, about a draft, or by themselves.
 While the *Admin notifications* module is switched off everything works the
 same and nobody is told.
 
+Every administrator has the bell and reads their own notifications on it,
+whatever their role: no permission is needed for that. The *View notifications
+sent to all admins* permission only adds the notifications addressed to every
+administrator at once.
+
 **Changing a status.** A task moves only along a move the workflow allows; any
 other is refused, naming the statuses it may move to. The status control and
 the board offer only the allowed ones. Closing a task whose sub-tasks are still

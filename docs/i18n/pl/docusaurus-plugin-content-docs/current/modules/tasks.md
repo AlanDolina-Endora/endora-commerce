@@ -218,6 +218,11 @@ Nikt nie dostaje powiadomienia o zadaniu, którego nie może zobaczyć, o szkicu
 ani o własnym działaniu. Gdy moduł *Admin notifications* jest
 wyłączony, wszystko działa tak samo, a nikt nie dostaje powiadomień.
 
+Każdy administrator ma dzwonek i czyta w nim własne powiadomienia, niezależnie
+od roli: nie potrzebuje do tego żadnego uprawnienia. Uprawnienie *Podgląd
+powiadomień wysyłanych do wszystkich administratorów* dodaje jedynie
+powiadomienia kierowane jednocześnie do wszystkich administratorów.
+
 **Zmiana statusu.** Zadanie przechodzi tylko przejściem, na które pozwala
 przebieg; każde inne jest odrzucane z podaniem statusów, do których może
 przejść. Pole statusu i tablica proponują tylko dozwolone. Zamknięcie zadania,

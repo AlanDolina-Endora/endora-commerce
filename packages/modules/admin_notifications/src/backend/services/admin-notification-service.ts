@@ -27,7 +27,20 @@ export interface NotificationMessageInput {
   params?: Record<string, string | number>;
 }
 
-export interface ListNotificationsInput {
+/**
+ * Whether the reader may see the `all_admins` broadcast audience (issue #518).
+ *
+ * The bell is a signed-in-admin surface: an administrator always reads and
+ * acknowledges their own `admin_user` rows. Broadcasts are gated on
+ * `admin:read`, which the route resolves and passes here — the service holds
+ * no permission check of its own. Required, not defaulted: a caller that
+ * forgot to ask must not be answered with the broadcasts.
+ */
+export interface BroadcastAccess {
+  includeBroadcasts: boolean;
+}
+
+export interface ListNotificationsInput extends BroadcastAccess {
   adminUserId: string;
   unread?: boolean;
   limit?: number;
@@ -156,9 +169,14 @@ export class AdminNotificationService {
     // binding is prepended when the final params array is assembled below.
     const whereParams: (string | number | boolean | null)[] = [];
 
-    // Visible to this admin: their personal rows OR broadcasts.
+    const { includeBroadcasts } = input;
+
+    // Visible to this admin: their personal rows, and broadcasts when they may
+    // read them.
     whereParts.push(
-      `(n."audience" = 'all_admins' or (n."audience" = 'admin_user' and n."target_admin_user_id" = ?))`,
+      includeBroadcasts
+        ? `(n."audience" = 'all_admins' or (n."audience" = 'admin_user' and n."target_admin_user_id" = ?))`
+        : `(n."audience" = 'admin_user' and n."target_admin_user_id" = ?)`,
     );
     whereParams.push(input.adminUserId);
 
@@ -240,12 +258,16 @@ export class AdminNotificationService {
       ? this.serializeCursor({ createdAt: new Date(visibleRows[visibleRows.length - 1]!.createdAt), id: visibleRows[visibleRows.length - 1]!.id })
       : null;
 
-    const unreadCount = await this.countUnreadForAdmin(input.adminUserId);
+    const unreadCount = await this.countUnreadForAdmin(input.adminUserId, { includeBroadcasts });
 
     return { items, nextCursor, unreadCount };
   }
 
-  async markRead(notificationId: string, adminUserId: string): Promise<void> {
+  async markRead(
+    notificationId: string,
+    adminUserId: string,
+    access: BroadcastAccess,
+  ): Promise<void> {
     // command-coverage-ignore: admin notification bookkeeping — system-generated
     // alert record / read-state, not an audited domain-state mutation.
     const em = this.emFactory();
@@ -253,7 +275,7 @@ export class AdminNotificationService {
     if (!entry) {
       throw new NotificationNotFoundError(notificationId);
     }
-    if (!this.isVisibleToAdmin(entry, adminUserId)) {
+    if (!this.isVisibleToAdmin(entry, adminUserId, access.includeBroadcasts)) {
       throw new NotificationNotFoundError(notificationId);
     }
     if (entry.audience === 'admin_user') {
@@ -275,7 +297,7 @@ export class AdminNotificationService {
     await em.persistAndFlush(cursor);
   }
 
-  async markAllRead(adminUserId: string): Promise<number> {
+  async markAllRead(adminUserId: string, access: BroadcastAccess): Promise<number> {
     const em = this.emFactory();
     const knex = em.getConnection().getKnex();
     let count = 0;
@@ -294,6 +316,8 @@ export class AdminNotificationService {
       [adminUserId],
     )) as { rows: Array<{ id: string }> };
     count += personalUpdate.rows.length;
+
+    if (!access.includeBroadcasts) return count;
 
     // Broadcasts — insert per-admin read cursors for every visible unread broadcast.
     const broadcastInsert = (await knex.raw(
@@ -317,9 +341,23 @@ export class AdminNotificationService {
     return count;
   }
 
-  async countUnreadForAdmin(adminUserId: string): Promise<number> {
+  async countUnreadForAdmin(adminUserId: string, access: BroadcastAccess): Promise<number> {
     const em = this.emFactory();
     const knex = em.getConnection().getKnex();
+    if (!access.includeBroadcasts) {
+      const personal = (await knex.raw(
+        `
+        select count(*)::int as "count"
+          from "admin_notifications" n
+         where n."archived_at" is null
+           and n."audience" = 'admin_user'
+           and n."target_admin_user_id" = ?
+           and n."read_at" is null;
+      `,
+        [adminUserId],
+      )) as { rows: Array<{ count: number }> };
+      return personal.rows[0]?.count ?? 0;
+    }
     const sql = `
       select count(*)::int as "count"
         from "admin_notifications" n
@@ -391,8 +429,12 @@ export class AdminNotificationService {
     }
   }
 
-  private isVisibleToAdmin(entry: AdminNotification, adminUserId: string): boolean {
-    if (entry.audience === 'all_admins') return true;
+  private isVisibleToAdmin(
+    entry: AdminNotification,
+    adminUserId: string,
+    includeBroadcasts: boolean,
+  ): boolean {
+    if (entry.audience === 'all_admins') return includeBroadcasts;
     return entry.targetAdminUserId === adminUserId;
   }
 
