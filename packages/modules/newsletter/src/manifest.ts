@@ -272,5 +272,39 @@ export const manifest = defineModuleManifest({
       keywords: ['newsletter', 'automations', 'workflow', 'automatyzacje'],
       weight: 233,
     },
+    // Issue #516 (Principle XVI): the last three sidebar screens. Tags and
+    // blocks open on `newsletter:read`; the provider screen opens on
+    // `newsletter:write`, its route's code and the code of its save and its
+    // test send (`check:action-route-permissions` ledgers the read-gated GET).
+    {
+      id: 'open-newsletter-tags',
+      labelKey: 'actions.openTags.label',
+      descriptionKey: 'actions.openTags.description',
+      icon: 'Inbox',
+      targetRoute: '/newsletter/tags',
+      requiredPermission: 'newsletter:read',
+      keywords: ['newsletter', 'tags', 'fields', 'subscribers', 'tagi', 'pola'],
+      weight: 234,
+    },
+    {
+      id: 'open-newsletter-blocks',
+      labelKey: 'actions.openBlocks.label',
+      descriptionKey: 'actions.openBlocks.description',
+      icon: 'Inbox',
+      targetRoute: '/newsletter/blocks',
+      requiredPermission: 'newsletter:read',
+      keywords: ['newsletter', 'blocks', 'email', 'header', 'footer', 'bloki', 'nagłówek', 'stopka'],
+      weight: 235,
+    },
+    {
+      id: 'open-newsletter-provider',
+      labelKey: 'actions.openProvider.label',
+      descriptionKey: 'actions.openProvider.description',
+      icon: 'Inbox',
+      targetRoute: '/newsletter/provider',
+      requiredPermission: 'newsletter:write',
+      keywords: ['newsletter', 'provider', 'sender', 'smtp', 'throttle', 'nadawca', 'wysyłka'],
+      weight: 236,
+    },
   ],
 });

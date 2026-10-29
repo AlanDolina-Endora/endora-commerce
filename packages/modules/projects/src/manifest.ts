@@ -346,7 +346,9 @@ export const manifest = defineModuleManifest({
    * §4). Each opens a screen of this module's own admin layer and declares the
    * code that screen is gated on. The Templates screen is `projects:configure`
    * while the list it loads is read-gated (the create form offers Templates to
-   * every writer), which `check:action-route-permissions` ledgers.
+   * every writer), which `check:action-route-permissions` ledgers. The roles and
+   * loss-reason dictionaries joined with issue #516: both are sidebar screens on
+   * `projects:configure`.
    */
   actions: [
     {
@@ -388,6 +390,26 @@ export const manifest = defineModuleManifest({
       requiredPermission: 'projects:analytics',
       keywords: ['project', 'analytics', 'report', 'statistics', 'projekt', 'analityka', 'raport'],
       weight: 343,
+    },
+    {
+      id: 'open-project-roles',
+      labelKey: 'actions.openProjectRoles.label',
+      descriptionKey: 'actions.openProjectRoles.description',
+      icon: 'Users',
+      targetRoute: '/projects/roles',
+      requiredPermission: 'projects:configure',
+      keywords: ['project', 'roles', 'role', 'team', 'projekt', 'role', 'zespół'],
+      weight: 344,
+    },
+    {
+      id: 'open-project-loss-reasons',
+      labelKey: 'actions.openProjectLossReasons.label',
+      descriptionKey: 'actions.openProjectLossReasons.description',
+      icon: 'Tag',
+      targetRoute: '/projects/loss-reasons',
+      requiredPermission: 'projects:configure',
+      keywords: ['project', 'loss', 'lost', 'reasons', 'projekt', 'utrata', 'powody'],
+      weight: 345,
     },
   ],
   i18n: { bundlesDir: 'i18n' },

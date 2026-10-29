@@ -127,13 +127,24 @@ interface Subject {
 const SUBJECTS: readonly Subject[] = [
   {
     module: 'catalog',
-    actions: ['new-product', 'open-attributes', 'open-categories', 'open-products'],
+    // `open-attachment-types`, `open-attribute-sets` and `open-bulk-operations`
+    // arrived with issue #516: the sidebar's remaining screens (Principle XVI).
+    actions: [
+      'new-product',
+      'open-attachment-types',
+      'open-attribute-sets',
+      'open-attributes',
+      'open-bulk-operations',
+      'open-categories',
+      'open-products',
+    ],
     axis: 'platform-unavailable',
     admin: catalogAdmin,
   },
   {
     module: 'orders',
-    actions: ['open-orders', 'order-statuses'],
+    // `new-order` arrived with issue #516: the create form is a sidebar entry.
+    actions: ['new-order', 'open-orders', 'order-statuses'],
     axis: 'platform-unavailable',
     admin: ordersAdmin,
   },
@@ -315,12 +326,18 @@ describe('batch 15 contributes no palette action while off (Constitution XVII it
     // makes it. `/orders/new` was `App.tsx`'s and therefore ungated while the
     // sidebar row that advertised it carried `orders:write` and the
     // `order.entry.tabs` contribution P4d declared carried the same code. No
-    // manifest action targets it — `orders` never declared one — so this is the
-    // route and the zone agreeing, which is the pair that can disagree.
+    // manifest action targeted it until issue #516 added `new-order`, so the
+    // route, the zone and that action now agree, which is the trio that can
+    // disagree.
     const route = (ordersAdmin.routes ?? []).find((entry) => entry.path === '/orders/new');
     expect(route?.requiredPermission).toBe('orders:write');
     const tab = (ordersAdmin.zones ?? []).find((entry) => entry.zone === 'order.entry.tabs');
     expect(tab?.requiredPermission).toBe('orders:write');
+    const action = (
+      REGISTERED_MANIFESTS.find((entry) => entry.manifest.id === 'orders')?.manifest.actions ?? []
+    ).find((entry) => entry.id === 'new-order');
+    expect(action?.targetRoute).toBe('/orders/new');
+    expect(action?.requiredPermission).toBe('orders:write');
   });
 
   it('neither module advertises a route it does not own', () => {

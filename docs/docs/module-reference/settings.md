@@ -43,6 +43,8 @@ Rendered from the module's own manifest, and from nothing written by hand. What 
 
 | Action | Opens | Permission |
 | --- | --- | --- |
+| `clear-cache` | `/settings/cache` | `settings:write` |
+| `open-setting-groups` | `/settings/groups` | `settings:read` |
 | `open-settings` | `/settings` | `settings:read` |
 
 ## Settings
