@@ -279,6 +279,9 @@ export function TaskDetail(): ReactNode {
 
   const mine = me !== null && task.createdBy?.id === me.id;
   const someoneElsesPrivate = task.private && !mine;
+  // A private Task is assigned to nobody but its Creator (FR-038): with anybody
+  // else on it, turning Private on could only be refused (T095).
+  const privateBlocked = !task.private && task.assignees.some((assignee) => assignee.id !== me?.id);
 
   const assignToMe = (): Promise<boolean> =>
     me ? write({ addAssigneeIds: [me.id] }, () => t('detail.saved')) : Promise.resolve(false);
@@ -422,7 +425,7 @@ export function TaskDetail(): ReactNode {
                       id={privateId}
                       role="switch"
                       checked={task.private}
-                      disabled={busy}
+                      disabled={busy || privateBlocked}
                       aria-describedby={`${privateId}-hint`}
                       onChange={(event): void =>
                         void write({ private: event.target.checked }, () => t('detail.saved'))
@@ -431,7 +434,11 @@ export function TaskDetail(): ReactNode {
                     {t('detail.private')}
                   </label>
                   <p id={`${privateId}-hint`} className="text-xs text-muted-foreground">
-                    {t('detail.privateHint')}
+                    {task.private
+                      ? t('detail.privateOnHint')
+                      : privateBlocked
+                        ? t('detail.privateBlocked')
+                        : t('detail.privateHint')}
                   </p>
                 </div>
               ) : null}

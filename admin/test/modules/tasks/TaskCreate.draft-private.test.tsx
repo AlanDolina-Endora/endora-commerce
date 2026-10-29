@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
 import type { TaskDetail as TaskDetailData } from '@endora-commerce/contracts';
@@ -171,6 +171,38 @@ describe('TaskDetail — drafts and private Tasks', () => {
     expect((privateSwitch as HTMLInputElement).checked).toBe(true);
     await userEvent.click(privateSwitch);
     expect(patchSpy).toHaveBeenCalledWith(TASK_PATH, { private: false });
+  });
+
+  it('explains what turning Private on does, and is off-limits while other people are assigned (T095)', async () => {
+    // Assigned to the Creator alone: offered, with what turning it on would do.
+    current = taskDetail({ private: false, context: null, assignees: [{ id: ME_ID, name: 'Ada Min', active: true }] });
+    await renderDetail();
+    const offered = screen.getByRole('switch', { name: en('detail.private') });
+    expect(offered).toBeEnabled();
+    expect(offered).toHaveAccessibleDescription(en('detail.privateHint'));
+    cleanup();
+
+    // Assigned to somebody else too: turning it on could only be refused, so it is not offered, and says why.
+    current = taskDetail({
+      private: false,
+      context: null,
+      assignees: [
+        { id: ME_ID, name: 'Ada Min', active: true },
+        { id: ANNA_ID, name: 'Anna Nowak', active: true },
+      ],
+    });
+    await renderDetail();
+    const blocked = screen.getByRole('switch', { name: en('detail.private') });
+    expect(blocked).toBeDisabled();
+    expect(blocked).toHaveAccessibleDescription(en('detail.privateBlocked'));
+  });
+
+  it('says what a private Task is while it is one', async () => {
+    current = taskDetail({ private: true, context: null, assignees: [] });
+    await renderDetail();
+    expect(screen.getByRole('switch', { name: en('detail.private') })).toHaveAccessibleDescription(
+      en('detail.privateOnHint'),
+    );
   });
 
   it('is read-only to a holder of See private tasks, who may still delete it', async () => {
