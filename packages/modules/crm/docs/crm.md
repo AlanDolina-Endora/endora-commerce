@@ -1380,8 +1380,15 @@ Nothing is lost: switched back on, the links show their documents again. A
 computed value picks the quote requests up again at its next recalculation.
 
 The **Tasks** module is optional in the same way. While it is switched off a
-task mentioned in a text reads as *Task unavailable* and the `@@` document list
-offers no tasks; switched back on, the mentions show their tasks again.
+task mentioned in a text reads as *Task unavailable*, the `@@` document list
+offers no tasks and an opportunity's screen shows no *Tasks* panel; switched
+back on, the mentions show their tasks again. While it is on, the *Tasks* panel
+at the end of an opportunity's screen lists the tasks linked to it that you may
+see — the Tasks module's own page describes it.
+
+So is the **Projects** module: while it is switched off a project mentioned in a
+text reads as *Project unavailable* and the `@@` document list offers no
+projects; switched back on, the mentions show their projects again.
 
 ### In the Admin UI
 
@@ -1657,22 +1664,25 @@ The length limits count the stored string, marks included: a description up to
 20,000 characters, a note or a message up to 10,000, an event's description up
 to 5,000.
 
-## References to products, orders, quote requests and tasks
+## References to products, orders, quote requests, tasks, opportunities and projects
 
 The description of an opportunity, a note and a message can mention a
-**product**, an **order**, a **quote request** or a **task**. A mention is a
-token in the text:
+**product**, an **order**, a **quote request**, a **task**, another
+**opportunity** or a **project**. A mention is a token in the text:
 
 ```text
 [[product:<product id>]]
 [[order:<order id>]]
 [[quote_request:<quote request id>]]
 [[task:<task id>]]
+[[opportunity:<opportunity id>]]
+[[project:<project id>]]
 ```
 
-This is the same reference standard the Projects module uses, so a text reads
-the same on both screens. Texts written before quote requests and tasks could
-be mentioned are unchanged: their tokens are a subset of these.
+This is the same reference standard the Projects and Tasks modules use, so a
+text reads the same on every screen. Texts written before quote requests,
+tasks, opportunities and projects could be mentioned are unchanged: their
+tokens are a subset of these.
 
 The text is stored and returned exactly as it was written — a string with the
 tokens and the formatting marks of *Formatted text* in it, never HTML. Beside
@@ -1691,10 +1701,12 @@ once.
 ```
 
 - `label` is the product's **current** name, in the reader's language, or the
-  order's, the quote request's or the task's number — looked up each time the
-  text is read, so a renamed product shows its new name.
+  order's, the quote request's, the task's, the opportunity's or the project's
+  number — looked up each time the text is read, so a renamed product shows its
+  new name.
 - `url` is where the mention leads in the Admin UI — `/catalog/products/…`,
-  `/orders/…`, `/quote-requests/…` or `/tasks/…`.
+  `/orders/…`, `/quote-requests/…`, `/tasks/…`, `/crm/opportunities/…` or
+  `/projects/…`.
 - An available **order** also carries `order`: what the reader is shown beside
   its number.
 
@@ -1717,15 +1729,18 @@ once.
 
   `status` is the order's status code, `total` its total as a decimal string,
   `customerName` the billing company — or, without one, the billing recipient —
-  and `null` when there is neither. A product, a quote request, a task and a
-  person carry no such object.
+  and `null` when there is neither. A product, a quote request, a task, an
+  opportunity, a project and a person carry no such object.
 - A product that no longer exists, an order of an organization the reader may
   not see, a quote request or a task that is gone or that the reader may not
   see, and a quote request or a task while the Quote Requests or the Tasks
   module is switched off, come back with `"available": false` and **no label
-  and no link**. The mention stays in the text; nothing about its target is
-  shown. A task is also hidden when the record it belongs to — a project, for
-  example — is one the reader may not see.
+  and no link**. So does an opportunity that is gone, and a project that is
+  gone, that the reader may not see or whose module is switched off. The
+  mention stays in the text; nothing about its target is shown. A task is also
+  hidden when the record it belongs to — a project, for example — is one the
+  reader may not see, and a private task or a draft of somebody else's always
+  is.
 
 A token that is not well-formed — an unknown type, something that is not an id
 — is simply text.
@@ -1741,11 +1756,12 @@ never as the token**: the field shows the document's number or the product's
 name as a small label while you write, and the token is only what is stored.
 Once saved, the text shows that name as a link in its place, and
 *Product unavailable* / *Order unavailable* / *Quote request unavailable* /
-*Task unavailable* for a target that is gone or that you may not see — in the
+*Task unavailable* / *Opportunity unavailable* / *Project unavailable* for a target that is gone or that you may not see — in the
 saved text and in the field alike when it is opened for editing; what you
 cannot see is saved back unchanged. A name is shown only to somebody who could
 open the target itself: an order's number needs `orders:read`, a quote
-request's `rfqs:handle`, a task's `tasks:read`, a product's name
+request's `rfqs:handle`, a task's `tasks:read`, an opportunity's `crm:read`, a
+project's `projects:read` and the project's own visibility, a product's name
 `catalog:read`.
 
 **An order says more when it is read.** In saved text an order mentioned is
@@ -1758,16 +1774,20 @@ reader — opens it in a new tab instead.
 
 *Insert product* searches the catalogue, and is offered to a role that also
 holds `catalog:read`. *Insert document* searches **one list of documents**,
-grouped **Orders · Quote requests · Tasks** — the list the Projects module
-offers too:
+grouped **Orders · Quote requests · Tasks · Opportunities · Projects** — the
+list the Projects and Tasks modules offer too:
 
 - **Orders** and **Quote requests** of the opportunity's organization only —
   on the create form, of the organization chosen there; without one, neither
   group is offered;
 - **Tasks** any you may see;
-- each group only to a role that also holds the permission its module reads it
-  with — `orders:read`, `rfqs:handle`, `tasks:read` — and only while that module
-  is switched on. A role holding none of the three is not offered the button.
+- **Opportunities** any opportunity, by number or title — this module's own;
+- **Projects** any project you may see, by number or title;
+- every group but *Opportunities* only to a role that also holds the
+  permission its module reads it with — `orders:read`, `rfqs:handle`,
+  `tasks:read`, `projects:read` — and only while that module is switched on. A
+  role holding none of the four is not offered the button, and so not the
+  *Opportunities* group either.
 
 A token typed or pasted by hand is saved without any of these, and reads as
 unavailable to whoever lacks the permission.
@@ -1780,13 +1800,14 @@ straight from the keyboard:
 | Type | To mention | Offered to |
 | --- | --- | --- |
 | `@` | a **person** — a user of the Admin UI who may read opportunities | anybody writing the text |
-| `@@` | a **document** — an order or a quote request of the opportunity's organization, or a task — from the grouped list above | a role that also holds `orders:read`, `rfqs:handle` or `tasks:read`; each group only with its own |
+| `@@` | a **document** — an order or a quote request of the opportunity's organization, a task, an opportunity or a project — from the grouped list above | a role that also holds `orders:read`, `rfqs:handle`, `tasks:read` or `projects:read`; each group only with its own |
 | `@@@` | a **product** | a role that also holds `catalog:read` |
 
 Type the `@` at the start of the text or after a space and a list opens **where
 you are typing** — under that line, or above it when there is no room below;
-keep typing to narrow it — a first name, a surname, an order, quote request or
-task number, a task's title, a product name or SKU. **Arrow keys** move through the list, **Enter** or
+keep typing to narrow it — a first name, a surname, an order, quote request,
+task, opportunity or project number, a task's, an opportunity's or a project's
+title, a product name or SKU. **Arrow keys** move through the list, **Enter** or
 **Tab** chooses, **Escape** closes it and leaves what you typed. Choosing
 replaces the `@` and the letters after it with the mention — shown as
 **@Tomasz Nowak**, as a document's number or as a product's name — and you
@@ -2282,7 +2303,7 @@ the person may see, and is no more than a name to choose by.
 | `GET /api/v1/admin/crm/lookups/contacts?organizationId=…&q=…` | `crm:write` | Members of one organization the caller may see: `id`, `name`, `email`. |
 | `GET /api/v1/admin/crm/lookups/mentionable?q=…&organizationId=…` | `crm:write` | Active administrators holding `crm:read` — the people a text may mention: `id`, `name`. |
 | `GET /api/v1/admin/crm/lookups/quote-requests?organizationId=…&q=…` | `crm:write` and `rfqs:handle` | Quote requests of one organization the caller may see that can be linked: the open ones, and the one whose number is typed in full. `id`, `number`, `status`. Answers `503` while the Quote Requests module is off. |
-| `GET /api/v1/admin/crm/lookups/documents?opportunityId=…&q=…` | `crm:write` | The `@@` document list: `{ "groups": [{ "kind": "order" \| "quote_request" \| "task", "items": [{ "id", "label", "sublabel"? }] }] }`, at most ten per group. Orders and quote requests of the opportunity's organization (`organizationId=…` instead, before the opportunity exists); tasks the caller may see, with the task's title as `sublabel`. A group is present only for a caller holding `orders:read`, `rfqs:handle` or `tasks:read` respectively, and only while its module is on. An opportunity the caller cannot see answers `404`. The same shape as the Projects module's `GET /api/v1/admin/projects/lookups/documents`. |
+| `GET /api/v1/admin/crm/lookups/documents?opportunityId=…&q=…` | `crm:write` | The `@@` document list: `{ "groups": [{ "kind": "order" \| "quote_request" \| "task" \| "opportunity" \| "project", "items": [{ "id", "label", "sublabel"? }] }] }`, at most ten per group, in that order. Orders and quote requests of the opportunity's organization (`organizationId=…` instead, before the opportunity exists); tasks, opportunities and projects the caller may see, with the title as `sublabel`. The `opportunity` group is always present; any other only for a caller holding `orders:read`, `rfqs:handle`, `tasks:read` or `projects:read` respectively, and only while its module is on. An opportunity the caller cannot see answers `404`. The same shape as the Projects module's `GET /api/v1/admin/projects/lookups/documents`. |
 
 The currencies offered when an opportunity is created are the ones the active
 sales channels sell in.

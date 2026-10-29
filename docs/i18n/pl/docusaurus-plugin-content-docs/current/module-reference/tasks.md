@@ -30,18 +30,29 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | Moduł | Wiążąca | Co to oznacza |
 | --- | --- | --- |
 | `_i18n` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `admin_roles` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `admin_users` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `assets_library` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `audit_logs` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `auth` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `catalog` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `custom_fields` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `orders` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `settings` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
+| `transactional_emails` | tak | ten moduł instaluje się i migruje po nim, a operator nie może go wyłączyć, dopóki ten moduł działa |
 | `admin_notifications` | nie | degrades-without `adminNotificationRecordPort` — osoby, którym przypisano nowe zadania, nie dostają powiadomień. |
 | `admin_search` | nie | contributes-to `adminSearchProviderRegistry` |
+| `crm` | nie | degrades-without `opportunityReadPort` — szans sprzedaży nie można przywoływać ani łączyć; istniejące są pokazywane jako niedostępne, a panel zadań na szansie sprzedaży się nie wyświetla. |
+| `projects` | nie | degrades-without `projectReadPort` — projektów nie można przywoływać; istniejące odwołania są pokazywane jako niedostępne. |
+| `quote_requests` | nie | degrades-without `quoteRequestReadPort` — zapytań ofertowych nie można przywoływać ani łączyć; istniejące odwołania i powiązania są pokazywane jako niedostępne. |
 
 ## Uprawnienia
 
 | Kod | Etykieta | Wymaga też |
 | --- | --- | --- |
+| `tasks:configure` | Configure tasks | `tasks:read` |
 | `tasks:read` | View tasks | — |
+| `tasks:see_private` | See private tasks | `tasks:read` |
 | `tasks:write` | Create and edit tasks | `tasks:read` |
 
 ## Paleta poleceń
@@ -50,13 +61,18 @@ Operator włącza i wyłącza ten moduł na **/platform/modules**. Decyduje o ty
 | --- | --- | --- |
 | `new-task` | `/tasks/new` | `tasks:write` |
 | `open-my-tasks` | `/tasks/mine` | `tasks:read` |
+| `open-task-priorities` | `/tasks/settings/priorities` | `tasks:configure` |
+| `open-task-tags` | `/tasks/settings/tags` | `tasks:configure` |
+| `open-task-workflow` | `/tasks/settings/workflow` | `tasks:configure` |
 | `open-tasks` | `/tasks` | `tasks:read` |
 
 ## Ustawienia
 
 | Kod | Nazwa | Typ |
 | --- | --- | --- |
+| `tasks.board_card_fields` | Fields shown on a task board card | `json` |
 | `tasks.enabled` | Tasks enabled | `boolean` |
+| `tasks.time_zone` | Time zone of task due dates, reminders and the daily digest | `string` |
 
 ## Tłumaczenia
 

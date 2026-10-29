@@ -243,8 +243,10 @@ later are created the next time the project enters it.
 
 If the Tasks module fails while creating them, the project is still in the new
 stage, the stage history says *Creating the stage's tasks failed.*, and they can
-be created again — once — with *Create the stage's tasks again* on the stage in
-the *Stages* tab.
+be created again with *Create the stage's tasks again* on the stage in the
+*Stages* tab. Each stage task is created **exactly once**, however the creation
+failed and however often it is retried: a retry creates only the ones still
+missing.
 
 **With the Tasks module switched off** a project keeps working with nothing
 but its own stages, and nothing is lost:
@@ -258,8 +260,14 @@ but its own stages, and nothing is lost:
 - the stage tasks and the gates are kept, and apply again to what happens
   after Tasks is switched back on.
 
-Deleting a project deletes its tasks with it (while Tasks is on; with Tasks
-off they stay, hidden, because nobody can see the project they belong to).
+Deleting a project deletes its tasks with it. With Tasks switched off they stay
+for the moment, hidden, because nobody can see the project they belong to, and
+a stage deleted then keeps its tasks too. **Within fifteen minutes of Tasks
+being switched back on** they are cleaned up: the tasks of a deleted project
+are deleted, and the tasks of a deleted stage stay in their project with no
+stage — each recorded in the audit log. Nothing is cleaned up while the
+Projects module is switched off: a project that cannot be asked is not taken
+for deleted.
 
 ## Templates
 
@@ -477,7 +485,7 @@ The description, notes and messages can **refer to things** as they are typed:
 | Type | To refer to | Offered to |
 | --- | --- | --- |
 | `@` | a person | administrators who may create and run projects; the list offers only the people who may see the project |
-| `@@` | a document — one list, grouped: Orders, Quote Requests, Tasks | Orders with the permission to view Orders, Quote Requests with the permission to handle them, Tasks with the permission to view tasks; Orders and Quote Requests are those of the project's Organizations — none for an internal project; on the **New project** form, those of the Organizations chosen on it |
+| `@@` | a document — one list, grouped: Orders, Quote Requests, Tasks, Opportunities, Projects | Orders with the permission to view Orders, Quote Requests with the permission to handle them, Tasks with the permission to view tasks, Opportunities with the permission to view CRM; Projects — any other project you may see — always; Orders and Quote Requests are those of the project's Organizations — none for an internal project; on the **New project** form, those of the Organizations chosen on it |
 | `@@@` | a Product | administrators who may view the catalog |
 
 The buttons above the field do the same — *Mention a person*, *Insert
@@ -743,7 +751,18 @@ between the project's stages does not.
 The module reads and writes tasks only through `taskReadPort` and
 `taskWritePort`, after deciding that Tasks is present (`degrades-without`
 edges). Stage tasks are created after the move's own transaction has
-committed, one audited `tasks.task.create` command each. The note of a stage
+committed, one audited `tasks.task.create` command each, each carrying the
+stage's own stage-task definition id as its `sourceKey`: `createMany` creates a
+key the project does not hold yet and answers the existing task's id for one it
+does, so a retry is idempotent. `created` in the answer of
+`materialize-tasks` therefore counts the stage's tasks after the retry, those
+of earlier attempts included.
+
+The descriptor also implements `existingContexts(ids)`, answered by
+`ProjectAccess.existingWithStages` — one statement over `projects` and
+`project_stages`, answered only to the system actor. The Tasks module's
+maintenance pass calls it to find the tasks of projects and stages deleted
+while Tasks was off (see the Tasks page, *Task contexts*). The note of a stage
 task left unassigned is stored as the responsible role (`role:<id>`), not as a
 sentence; the descriptor's `renderNote` words it in each reader's language.
 
@@ -756,9 +775,11 @@ command that saves the text — `projects.project.note_add`, `.note_update`,
 The audit entries carry the comment's id, kind and length, never its text: the
 audit trail is not tenant-scoped. References are resolved on every read, in one
 call per kind, through their owners' ports and read codes — `orderReadPort`,
-`quoteRequestReadPort` (through `linked-records.ts`), `taskReadPort` (through
-`project-tasks.ts`, after `present()`), `catalogProductReadPort` and
-`adminUserReadPort`.
+`quoteRequestReadPort` and `opportunityReadPort` (both through
+`linked-records.ts`), `taskReadPort` (through `project-tasks.ts`, after
+`present()`), `catalogProductReadPort` and `adminUserReadPort`; a referenced
+project is read through `ProjectAccess`, so it is shown only to somebody who
+may see it.
 
 Notifications go through `adminNotificationRecordPort` (a `degrades-without`
 edge: presence is decided first, and nothing is caught) with the kinds

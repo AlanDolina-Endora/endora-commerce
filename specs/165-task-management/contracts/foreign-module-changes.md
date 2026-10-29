@@ -48,6 +48,7 @@ are additive (`release-intent.md`).
 | `src/backend/index.ts`, `src/backend/services/owner-read-permissions.ts` (added at T034) | Registers the door and an unexported `OpportunityReadPortService` instance for the resolver and the `@@` list; `projects:read` joins the owner read checks. |
 | `src/admin/lib/references.ts` (added at T034) | `@@` is also offered when the Projects group (`projects:read`) could answer. |
 | `i18n/{en,pl}.json` | Group labels. |
+| `docs/crm.md` (added at T089) | The two new reference kinds (tokens, labels, URLs, the `@@` groups and their gates, the lookup's answer), Projects as an optional module for references, and the *Tasks* panel on an Opportunity. FR-043; T089 names the CRM docs. |
 
 ## D. `packages/modules/projects/`
 
@@ -66,6 +67,7 @@ are additive (`release-intent.md`).
 | `src/backend/project-access-seam.test.ts` (added at T025) | `RULE_SCOPED_READ_LEDGER['services/project-access.ts']` 12 → 14: the two reads of `findVisibleMany` and `searchVisible`, both composing `visibleProjectSql`. |
 | `src/backend/project-access-seam.test.ts` (added at T087) | `RULE_SCOPED_READ_LEDGER['services/project-access.ts']` 14 → 16: `existingWithStages`, the system-only existence query behind `existingContexts` — one statement naming `projects` and `project_stages`, counted once per table. |
 | `src/backend/services/{project-service,stage-service}.ts` (added at T087) | Comments only: a Project or Stage deleted while Tasks is off is cleaned up by the Tasks maintenance pass (#450). |
+| `docs/projects.md` (added at T089) | The two new reference kinds in the `@@` row and the developer section; Stage Tasks created exactly once on retry (`sourceKey`, `created`); clean-up of a Project or Stage deleted while Tasks was off; `existingContexts`. FR-043; T089 names the Projects docs. |
 | `src/backend/routes/routes.stage-tasks.ts` (added at T019) | `GET /projects/:id/tasks` passes the response language to `tasksByStage`, which names each status from the record's `statusName`. |
 
 ## E. `packages/modules/custom_fields/`
@@ -95,6 +97,7 @@ No code change. `src/backend/services/admin-preference-document.test.ts` (added 
   - `backend/test/perf/tasks/context-visibility.perf.test.ts`
   - `backend/test/integration/projects/{task-context,templates,visibility,stage-tasks,completion-gate}.test.ts`, `helpers.ts`
   - `admin/test/modules/tasks/*`, `admin/test/modules/projects/ProjectDetail.tasks-tab.test.tsx`
+- **Documentation (added at T089):** the Polish materialisations and cache entries of the three pages and of the two regenerated module references — `docs/i18n/pl/docusaurus-plugin-content-docs/current/{modules/{tasks,crm,projects},module-reference/{tasks,crm}}.md` and `docs/translation-cache/pl/{packages--modules--{tasks,crm,projects}--docs--*.md,generated:module-reference--{tasks,crm}}.json` (`docs/docs/contributing/documentation-i18n.md`).
 - **The derived-ledger rule** (AGENTS.md *traps*): before closing each phase, grep `backend/test/**` and `admin/test/**` for every moved path, which includes the two CRM component files.
 - **Generated files**, committed in the same merge request: `composer:generate`, `manifests:generate` and `pnpm install --lockfile-only` (the tasks package gains peers: `bullmq`, `ioredis`, `@endora-commerce/email-components`).
 - **Ledgers that 163 also had to touch**, each in the change that needs it:

@@ -559,3 +559,24 @@ The services refuse to give a private Task any assignee other than its Creator (
 - one private Task and one draft for the demo admin.
 
 `demo-shop.test.ts` counts move accordingly.
+
+**Settled at T088:** the step is not in the `tasks` module — a standalone Task names `admin_users`' rows, so it is a demo-composition step, `packages/demo-composition/src/tasks.ts`, as the Project Tasks are (`tasks` keeps `demo: false`). The Order link is made only where the demo organisation has an Order; the demo seeds none, so the demo shop has no link row. `demoProjectTasksStep` also writes each Stage Task's `source_key` (R-19).
+
+## Implementation rulings
+
+Decided while implementing (2026-10-28 – 2026-10-29), each recorded under its task in `tasks.md` with the test that holds it. The user-visible ones are also listed in `spec.md` *Amendments*.
+
+| Ruling | Where it was settled | What it replaces |
+| --- | --- | --- |
+| Publishing somebody else's draft is **404 `TASK_NOT_FOUND`**, identical to a missing Task; publishing a published Task is **409 `TASK_ALREADY_PUBLISHED`**. | T076/T078 | "403 `TASK_DRAFT_ONLY_CREATOR`" (R-20), unreachable without first revealing the draft (SC-005); the code left `TASKS_ERROR_CODES`. |
+| **A draft emits no event** — `created`, `assignees_changed`, `status_changed`, `deleted` — while it is one; `tasks.task.created.v1` is emitted at publication with the assignees it has then. Audit rows are written as for any Task. | T078 | R-3 said a draft does not exist for other modules; the events were not named. |
+| ***My Tasks* excludes drafts**; the Creator uses the list's `draft=true` filter. | T018, re-checked at T078 | — (admin-api §1 already implied it). |
+| **`DELETE /tasks/:id` → 200 `{data: {subtasksDetached}}`**, the former sub-tasks the caller may see. | T062 | "204 … also reports" (admin-api §1). |
+| A Stage retry's **`created` counts the Stage's Tasks after it ran**, earlier attempts' included (`createMany` answers their ids). No contract change. | T086 | — |
+| **A Task's priority is checked inside its Command**: `createTaskCommand` and `changeTaskPriorityCommand` hold the priority row `FOR SHARE` and answer 422 `TASK_PRIORITY_UNKNOWN` when it is gone (issue #507). | Phase 12 (T082 note) | A check before the Command only. |
+| **The maintenance pass runs one Command per Task** — `deleteTaskCommand(id, auditLog, {reason: 'context_gone', onlyIn})` or `ungroupTaskCommand` (`reason: 'context_group_gone'`) — each re-checking under its own lock. | T087 | `recordReassignments` inside one Command (R-19). |
+| **Priorities reuse the status error codes**: a taken code and a missing replacement are 422 `TASK_WORKFLOW_INVALID` with `rule` `priority_code_taken` / `priority_replacement_required`; the bound is 409 `TASK_STATUS_IN_USE_TOO_MANY` with `details.code: 'priority'`. | T082 | New codes per refusal. |
+| **Board card fields and the time zone are written through the settings module's audited write** (`setValueForAllChannels`), CRM's precedent, not Tasks Commands. | T055, T071 | `tasks.board.card_fields` / `tasks.time_zone.change` Commands (data-model §7). |
+| **A reminder's bell entry is written with `adminNotificationRecordPort.recordWithin(em, input)`**, co-transactionally with the delivery row: the bell exactly once, the e-mail at most once (SC-004 amended). | T072 (orchestrator ruling 3) | The de-duplication fallback of the plan. |
+| **Assignees added in one Command get distinct `assigned_at`**, each row stamped 1 ms after the previous in input order, so the read order (`assigned_at`, then `admin_user_id` — the same in the Command, `task-service.ts` and `comment-service.ts`) is the order they were given. **Kept, re-judged at T096:** the order is already deterministic without the stamp (the `admin_user_id` tie-break), but it would then be the ids' order rather than the order a user chose; a position column is a schema change for a display order; the stamps are at most 20 ms apart (≤ 20 assignees) and never collide with a later Command's. Nothing reads `assigned_at` as a business time finer than a second. | T016, re-checked at T096 | — |
+

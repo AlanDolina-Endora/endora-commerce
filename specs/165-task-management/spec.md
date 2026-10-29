@@ -2,7 +2,7 @@
 
 **Feature Branch**: `165-task-management` (spec directory `specs/165-task-management/`)
 **Created**: 2026-10-28
-**Status**: Draft — owner's rulings of 2026-10-28 recorded in *Clarifications*; ready for planning
+**Status**: Implemented (2026-10-29) — owner's rulings of 2026-10-28 recorded in *Clarifications*; planning amendments and implementation rulings marked *(Planning amendment)* / *(Implementation ruling)* where they apply and listed in *Amendments*
 **Input**: Owner's requirements (in Polish) for the Tasks module (`tasks`, *Zadania*): assign
 one or more Admin UI users to a Task; Task as a Custom Fields entity type; a due date;
 reminders; attachments; a WYSIWYG description; notes/comments with `@` references to people,
@@ -175,6 +175,8 @@ Admin UI on another device and apply *My installs* from the saved list.
    list and the board; only the owner (or a platform administrator) may delete one.
 6. **Given** *My Tasks*, **When** it is opened, **Then** it shows the user's open Tasks — as an
    assignee — in list or board form with the same filters, the soonest due first.
+   *(Implementation ruling)*: drafts are not in *My Tasks*; their Creator finds them with the
+   list's *drafts* filter (FR-037: a draft is not yet assigned work).
 
 ---
 
@@ -292,18 +294,25 @@ notification listing the three.
    **Then** each recipient receives at that moment one Admin UI notification and one e-mail
    naming the Task with a link.
 2. **Given** a reminder, **When** its moment passes while the platform was down, **Then** it is
-   delivered once when the platform is back, never twice.
+   delivered once when the platform is back, never twice. *(Planning amendment)*: this holds
+   for a reminder less than 24 hours past its moment; an older one is recorded as expired and
+   not sent. The same 24-hour grace reconciles this scenario with scenario 6, which otherwise
+   contradict each other for a long switch-off.
 3. **Given** a reminder relative to the due date, **When** the due date changes, **Then** the
    reminder moves with it; when the due date is removed, the reminder is removed and its
    creator is told on the Task.
 4. **Given** a reminder whose Task is closed, deleted, or no longer visible to a recipient,
    **When** its moment comes, **Then** nothing is sent to that recipient.
 5. **Given** a user's own settings, **When** they turn on the daily digest and choose an hour,
-   **Then** each day at that hour in the platform's time zone they receive one notification and
+   **Then** each day at that hour in the Tasks time zone they receive one notification and
    one e-mail listing their open Tasks due that day and overdue; on a day with none, nothing
-   is sent.
+   is sent. *(Planning amendment)*: the time zone is the Tasks module's own operator setting
+   (default *Europe/Warsaw*), not "the platform's time zone" — the platform has none that is
+   always present. It also decides when a date-only due date becomes overdue.
 6. **Given** the Tasks module is switched off, **When** a reminder or a digest is due, **Then**
-   nothing is sent and nothing accumulates to be sent later.
+   nothing is sent and nothing accumulates to be sent later. *(Planning amendment)*: when
+   Tasks is back on, a reminder whose moment passed less than 24 hours earlier is delivered
+   once (scenario 2); an older one is not; only the current day's digest is sent.
 
 ---
 
@@ -327,7 +336,10 @@ references or by its address.
    Project completion gate.
 2. **Given** a draft, **When** its Creator publishes it, **Then** it becomes a normal Task and
    its assignees and mentioned people are notified as for a new Task; a published Task cannot
-   return to draft.
+   return to draft. *(Implementation ruling)*: for anybody but its Creator a draft does not
+   exist, so their attempt to publish it is answered "not found", exactly as for a Task that
+   does not exist; publishing a Task that is already published is refused as such. Other
+   modules learn of a draft only when it is published.
 3. **Given** a Task, **When** its Creator marks it private, **Then** it is visible to the
    Creator and to holders of *See private tasks* only (owner ruling Q1 = B), cannot be
    placed in a Project, and has no assignee other than the Creator.
@@ -434,7 +446,10 @@ their Project without a Stage.
 - **FR-005**: The reference picker MUST offer people (Admin UI users), Opportunities, Quote
   Requests, Products, Projects, Orders and Tasks, limited to kinds the user may read and whose
   modules are on. Opportunities and Projects MUST become referenceable kinds of the shared
-  reference grammar; other modules' texts MAY adopt them later.
+  reference grammar. *(Planning amendment)*: to keep one grammar, they are referenceable in
+  CRM's and Projects' texts too — an Opportunity's description and notes and a Project's
+  description, notes and messages — not only in Tasks, per the owner's 2026-10-26
+  standardisation ruling.
 - **FR-006**: A person newly mentioned in a saved description or comment MUST be notified once,
   naming the Task by number and never the text, unless they are the author or may not see the
   Task.
@@ -448,6 +463,9 @@ their Project without a Stage.
 - **FR-011**: Every change to a Task — fields, assignees, Status, Tags, Priority, links,
   parent, attachments, comments edited or deleted, publication, privacy — MUST be recorded in
   its history with author and time, through the platform's audited write path.
+  *(Planning amendment)*: an operator deleting a Tag records one audit entry on the Tag, with
+  how many Tasks carried it, not one entry per Task (CRM's precedent). Removing a Status or a
+  Priority in use does record one entry per Task moved.
 
 **Statuses and workflow**
 
@@ -585,8 +603,11 @@ their Project without a Stage.
   cases; a board of 500 visible Tasks shows its first cards within 2 seconds.
 - **SC-003**: 100 % of Status changes that the workflow does not permit are refused, from every
   entry point (Task screen, board, bulk, other modules).
-- **SC-004**: 100 % of reminders are delivered exactly once within 2 minutes of their moment
-  while the platform runs, and once after downtime.
+- **SC-004**: 100 % of reminders are delivered within 2 minutes of their moment while the
+  platform runs, and once after downtime of less than 24 hours. *(Planning amendment)*: the
+  Admin UI notification is delivered **exactly once**; the e-mail **at most once** — a failure
+  between recording the delivery and sending the e-mail loses the e-mail, never duplicates it
+  (an e-mail outbox is out of scope).
 - **SC-005**: No private Task (to anyone without *See private tasks*), draft, or Task in a
   Project the reader may not see is revealed through any list, board, search, reference,
   panel, count, notification or address — verified by an off-state and a visibility test per
@@ -612,7 +633,8 @@ their Project without a Stage.
 - The digest is off by default (Q3 = A).
 - Reminders and the digest use the existing Admin UI notifications and transactional e-mail;
   the platform has no per-user notification preferences, so the digest setting is the Tasks
-  module's own per-user preference. Its hour is in the platform's reporting time zone.
+  module's own per-user preference. Its hour is in the Tasks time zone, an operator setting of
+  the module (*Planning amendment*, see US7 scenario 5).
 - Attachment limits are those of Project attachments (25 MB per file, plus the asset library's
   own policy).
 - Links to Opportunities, Orders and Quote Requests are added by users; nothing links Tasks
@@ -651,3 +673,34 @@ automations ("when Status becomes X, do Y"); e-mail-to-Task; guest users.
   reader may not see shows as unavailable. Recorded in FR-031 and User Story 6.
 - Q3: Daily digest default → A: **A** — off until each user turns it on and chooses an hour
   (FR-036).
+
+## Amendments
+
+### Planning amendments (2026-10-28, `plan.md` *Amendments from planning*)
+
+Facts measured while planning, not owner rulings; each is marked where it applies.
+
+- **SC-004** — the notification exactly once, the e-mail at most once.
+- **US7 scenarios 2 and 6** — reconciled by one rule: a reminder less than 24 hours past its
+  moment is delivered once; an older one is recorded as expired and not sent.
+- **The time zone** — the digest hour and date-only due dates use the Tasks module's own time
+  zone setting (default *Europe/Warsaw*) instead of "the platform's time zone".
+- **FR-011** — deleting a Tag is recorded once, on the Tag.
+- **FR-005** — Opportunities and Projects are referenceable in CRM and Projects too.
+
+### Implementation rulings (2026-10-28 – 2026-10-29)
+
+Decided while implementing, each recorded under its task in `tasks.md`; the technical detail
+is in `research.md` *Implementation rulings*. The user-visible ones:
+
+- Another user's draft does not exist for them, publishing it included (US8 scenario 2); a
+  draft tells nobody, other modules included, until it is published.
+- *My Tasks* shows no drafts; their Creator finds them with the *drafts* filter (US3
+  scenario 6).
+- Deleting a parent answers how many sub-tasks it had that the user may see, which became
+  top-level Tasks (US5 scenario 6).
+- Retrying a Stage's Task creation reports how many Tasks the Stage has afterwards, those of
+  earlier attempts included (US10 scenario 1).
+- A Project or Stage deleted while Tasks was off is cleaned up within fifteen minutes of Tasks
+  being on — inside FR-040's hour.
+
