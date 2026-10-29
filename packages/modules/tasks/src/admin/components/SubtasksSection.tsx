@@ -7,6 +7,7 @@ import { Alert, AlertDescription, Button, Label } from '@endora-commerce/admin-k
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 import { calendarDateLabel, errorMessage } from '../lib/labels.js';
+import { useEditorFocus } from '../lib/use-editor-focus.js';
 import { StatusBadge } from './StatusBadge.js';
 import { TaskPicker } from './TaskPicker.js';
 
@@ -42,6 +43,7 @@ export function SubtasksSection(props: SubtasksSectionProps): ReactNode {
   const [chosen, setChosen] = useState<TaskSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const focus = useEditorFocus(picking);
 
   const setParent = async (parentTaskId: string | null): Promise<void> => {
     setBusy(true);
@@ -54,6 +56,8 @@ export function SubtasksSection(props: SubtasksSectionProps): ReactNode {
       );
       setPicking(false);
       setChosen(null);
+      // *Remove from parent* unmounts with the parent line; focus goes to the opener.
+      if (parentTaskId === null) focus.returnFocus();
     } catch (failure) {
       setError(errorMessage(failure, t('detail.saveError')));
     } finally {
@@ -77,6 +81,7 @@ export function SubtasksSection(props: SubtasksSectionProps): ReactNode {
             </Button>
             {picking ? null : (
               <Button
+                ref={focus.openerRef}
                 type="button"
                 variant="ghost"
                 size="sm"
@@ -126,7 +131,7 @@ export function SubtasksSection(props: SubtasksSectionProps): ReactNode {
       ) : null}
 
       {picking ? (
-        <div className="space-y-2 rounded-md border p-3">
+        <div ref={focus.editorRef} className="space-y-2 rounded-md border p-3">
           <Label htmlFor={pickerId}>{t('subtasks.parentPicker')}</Label>
           <TaskPicker id={pickerId} value={chosen} onChange={setChosen} exclude={[task.id]} disabled={busy} />
           <div className="flex flex-wrap gap-2">

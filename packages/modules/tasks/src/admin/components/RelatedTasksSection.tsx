@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Link2, X } from 'lucide-react';
 import type { TaskDetail, TaskSummary } from '@endora-commerce/contracts';
@@ -6,6 +6,7 @@ import { Alert, AlertDescription, Button, Label } from '@endora-commerce/admin-k
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 import { errorMessage } from '../lib/labels.js';
+import { useEditorFocus } from '../lib/use-editor-focus.js';
 import { StatusBadge } from './StatusBadge.js';
 import { TaskPicker } from './TaskPicker.js';
 
@@ -35,12 +36,16 @@ export function RelatedTasksSection(props: RelatedTasksSectionProps): ReactNode 
   const [chosen, setChosen] = useState<TaskSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const focus = useEditorFocus(picking);
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
-  const run = async (change: () => Promise<void>, notice: string): Promise<void> => {
+  const run = async (change: () => Promise<void>, notice: string, removed = false): Promise<void> => {
     setBusy(true);
     setError(null);
     try {
       await change();
+      // The removed row's button goes with it: focus rests on the section's heading.
+      if (removed) headingRef.current?.focus();
       setPicking(false);
       setChosen(null);
       props.onChange(notice);
@@ -53,7 +58,7 @@ export function RelatedTasksSection(props: RelatedTasksSectionProps): ReactNode 
 
   return (
     <section aria-labelledby={headingId} className="space-y-3 text-sm">
-      <h2 id={headingId} className="text-base font-semibold">
+      <h2 ref={headingRef} id={headingId} tabIndex={-1} className="text-base font-semibold">
         {t('detail.related')}
       </h2>
 
@@ -79,7 +84,11 @@ export function RelatedTasksSection(props: RelatedTasksSectionProps): ReactNode 
                   disabled={busy}
                   aria-label={t('related.remove', { number: related.number })}
                   onClick={(): void =>
-                    void run(() => tasksApi.unrelate(task.id, related.id), t('related.removed', { number: related.number }))
+                    void run(
+                      () => tasksApi.unrelate(task.id, related.id),
+                      t('related.removed', { number: related.number }),
+                      true,
+                    )
                   }
                 >
                   <X aria-hidden="true" />
@@ -94,6 +103,7 @@ export function RelatedTasksSection(props: RelatedTasksSectionProps): ReactNode 
 
       {canChange && !picking ? (
         <Button
+          ref={focus.openerRef}
           type="button"
           variant="outline"
           size="sm"
@@ -110,7 +120,7 @@ export function RelatedTasksSection(props: RelatedTasksSectionProps): ReactNode 
       ) : null}
 
       {picking ? (
-        <div className="space-y-2 rounded-md border p-3">
+        <div ref={focus.editorRef} className="space-y-2 rounded-md border p-3">
           <Label htmlFor={pickerId}>{t('related.picker')}</Label>
           <TaskPicker
             id={pickerId}

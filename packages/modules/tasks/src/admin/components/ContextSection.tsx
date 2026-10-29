@@ -5,6 +5,7 @@ import type { TaskContextOption, TaskDetail, UpdateTaskBody } from '@endora-comm
 import { Button, Label, Select } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
+import { useEditorFocus } from '../lib/use-editor-focus.js';
 import { LookupPicker } from './LookupPicker.js';
 
 export interface ContextSectionProps {
@@ -41,6 +42,7 @@ export function ContextSection(props: ContextSectionProps): ReactNode {
   const [picking, setPicking] = useState(false);
   const [chosen, setChosen] = useState<TaskContextOption | null>(null);
   const [group, setGroup] = useState('');
+  const focus = useEditorFocus(picking);
   const mayMove = canChange && !task.private && (task.context === null || task.context.canChangeTasks);
 
   const close = (): void => {
@@ -93,6 +95,7 @@ export function ContextSection(props: ContextSectionProps): ReactNode {
       {mayMove && !picking ? (
         <div className="flex flex-wrap gap-2 pt-1">
           <Button
+            ref={focus.openerRef}
             type="button"
             variant="outline"
             size="sm"
@@ -110,7 +113,12 @@ export function ContextSection(props: ContextSectionProps): ReactNode {
               size="sm"
               className="min-h-11 sm:min-h-8"
               disabled={busy}
-              onClick={(): void => void props.onWrite({ context: null }, t('context.removed'))}
+              onClick={(): void => {
+                void props.onWrite({ context: null }, t('context.removed')).then((written) => {
+                  // This button unmounts with the record; focus goes to the opener that is left.
+                  if (written) focus.returnFocus();
+                });
+              }}
             >
               <X aria-hidden="true" />
               {t('context.remove')}
@@ -120,7 +128,7 @@ export function ContextSection(props: ContextSectionProps): ReactNode {
       ) : null}
 
       {picking ? (
-        <div className="space-y-2 rounded-md border p-3">
+        <div ref={focus.editorRef} className="space-y-2 rounded-md border p-3">
           <div className="space-y-1">
             <Label htmlFor={pickerId}>{t('context.picker')}</Label>
             <LookupPicker

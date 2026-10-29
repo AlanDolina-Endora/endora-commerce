@@ -98,6 +98,8 @@ async function renderPage(permissions: readonly string[] = ['tasks:read', 'tasks
 }
 
 const section = (): HTMLElement => screen.getByRole('region', { name: en('detail.reminders') });
+/** Each remove control names the reminder it removes, by when it fires. */
+const REMOVE = new RegExp(`^${en('reminders.remove', { when: '' }).trim()}`);
 const taskReads = (): number => getSpy.mock.calls.filter(([path]) => path === TASK_PATH).length;
 
 describe('TaskDetail — reminders (US7)', () => {
@@ -132,6 +134,18 @@ describe('TaskDetail — reminders (US7)', () => {
     });
     await waitFor(() => expect(taskReads()).toBeGreaterThan(before));
     expect(await screen.findByText(en('reminders.added'))).toBeInTheDocument();
+    await waitFor(() => expect(within(section()).getByRole('button', { name: en('reminders.add') })).toHaveFocus());
+  });
+
+  it('moves focus into the form when it opens and back to Add reminder on Cancel (WCAG 2.4.3)', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    await user.click(within(section()).getByRole('button', { name: en('reminders.add') }));
+    await waitFor(() =>
+      expect(within(section()).getByRole('radio', { name: en('reminders.mode.absolute') })).toHaveFocus(),
+    );
+    await user.click(within(section()).getByRole('button', { name: en('reminders.cancel') }));
+    await waitFor(() => expect(within(section()).getByRole('button', { name: en('reminders.add') })).toHaveFocus());
   });
 
   it('adds a reminder some time before the due date', async () => {
@@ -186,11 +200,14 @@ describe('TaskDetail — reminders (US7)', () => {
     const user = userEvent.setup();
     await renderPage();
     const before = taskReads();
-    const [first] = within(section()).getAllByRole('button', { name: en('reminders.remove') });
+    const when = new Date('2026-11-04T08:00:00.000Z').toLocaleString('en', { dateStyle: 'medium', timeStyle: 'short' });
+    // The first and the third fire at the same moment; the first is the reader's.
+    const [first] = within(section()).getAllByRole('button', { name: en('reminders.remove', { when }) });
     await user.click(first!);
 
     await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith(`${TASK_PATH}/reminders/${reminder().id}`));
     await waitFor(() => expect(taskReads()).toBeGreaterThan(before));
+    expect(within(section()).getByRole('heading', { name: en('detail.reminders') })).toHaveFocus();
   });
 
   it('gives a reader no add control, and a remove control only on a reminder they set', async () => {
@@ -201,6 +218,6 @@ describe('TaskDetail — reminders (US7)', () => {
     await renderPage(['tasks:read']);
     expect(within(section()).queryByRole('button', { name: en('reminders.add') })).toBeNull();
     // The first was set by the reader (ME_ID), the second by someone else.
-    expect(within(section()).getAllByRole('button', { name: en('reminders.remove') })).toHaveLength(1);
+    expect(within(section()).getAllByRole('button', { name: REMOVE })).toHaveLength(1);
   });
 });

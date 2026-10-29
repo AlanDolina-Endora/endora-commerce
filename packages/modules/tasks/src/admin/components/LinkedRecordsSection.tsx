@@ -1,4 +1,4 @@
-import { useCallback, useId, useState, type ReactNode } from 'react';
+import { useCallback, useId, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Link2, X } from 'lucide-react';
 import { TASK_LINK_KINDS, type TaskDetail, type TaskLink, type TaskLinkKind, type TaskLookupOption } from '@endora-commerce/contracts';
@@ -7,6 +7,7 @@ import { Alert, AlertDescription, Button, Label, Select } from '@endora-commerce
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 import { errorMessage } from '../lib/labels.js';
+import { useEditorFocus } from '../lib/use-editor-focus.js';
 import { LookupPicker } from './LookupPicker.js';
 
 /** The module that owns each kind a Task may be linked to, and the code it reads its records with. */
@@ -56,6 +57,8 @@ export function LinkedRecordsSection(props: LinkedRecordsSectionProps): ReactNod
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pickedKind = kind ?? linkable[0] ?? null;
+  const focus = useEditorFocus(picking);
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
   const load = useCallback(
     (q: string): Promise<TaskLookupOption[]> => (pickedKind ? tasksApi.lookupRecords(pickedKind, q) : Promise.resolve([])),
@@ -68,11 +71,13 @@ export function LinkedRecordsSection(props: LinkedRecordsSectionProps): ReactNod
     setChosen(null);
   };
 
-  const run = async (change: () => Promise<unknown>, notice: string): Promise<void> => {
+  const run = async (change: () => Promise<unknown>, notice: string, removed = false): Promise<void> => {
     setBusy(true);
     setError(null);
     try {
       await change();
+      // The removed row's button goes with it: focus rests on the section's heading.
+      if (removed) headingRef.current?.focus();
       close();
       props.onChange(notice);
     } catch (failure) {
@@ -83,11 +88,11 @@ export function LinkedRecordsSection(props: LinkedRecordsSectionProps): ReactNod
   };
 
   const remove = (link: TaskLink): Promise<void> =>
-    run(() => tasksApi.removeLink(task.id, link.id), t('links.removed'));
+    run(() => tasksApi.removeLink(task.id, link.id), t('links.removed'), true);
 
   return (
     <section aria-labelledby={headingId} className="space-y-3 text-sm">
-      <h2 id={headingId} className="text-base font-semibold">
+      <h2 ref={headingRef} id={headingId} tabIndex={-1} className="text-base font-semibold">
         {t('detail.links')}
       </h2>
 
@@ -109,8 +114,12 @@ export function LinkedRecordsSection(props: LinkedRecordsSectionProps): ReactNod
                     <span className="font-medium [overflow-wrap:anywhere]">{link.label}</span>
                   )
                 ) : (
-                  <span className="text-muted-foreground" title={t('links.unavailableHint')}>
-                    {t('links.unavailable')}
+                  <span className="space-y-0.5">
+                    <span className="block text-muted-foreground">{t('links.unavailable')}</span>
+                    {/* Visible, and the remove control's description: a `title` reaches neither touch nor keyboard. */}
+                    <span id={`${headingId}-${link.id}-why`} className="block text-xs text-muted-foreground">
+                      {t('links.unavailableHint')}
+                    </span>
                   </span>
                 )}
               </span>
@@ -126,6 +135,7 @@ export function LinkedRecordsSection(props: LinkedRecordsSectionProps): ReactNod
                       ? t('links.remove', { label: link.label })
                       : t('links.removeUnavailable')
                   }
+                  aria-describedby={link.available && link.label ? undefined : `${headingId}-${link.id}-why`}
                   onClick={(): void => void remove(link)}
                 >
                   <X aria-hidden="true" />
@@ -140,6 +150,7 @@ export function LinkedRecordsSection(props: LinkedRecordsSectionProps): ReactNod
 
       {canChange && linkable.length > 0 && !picking ? (
         <Button
+          ref={focus.openerRef}
           type="button"
           variant="outline"
           size="sm"
@@ -156,7 +167,7 @@ export function LinkedRecordsSection(props: LinkedRecordsSectionProps): ReactNod
       ) : null}
 
       {picking && pickedKind ? (
-        <div className="space-y-2 rounded-md border p-3">
+        <div ref={focus.editorRef} className="space-y-2 rounded-md border p-3">
           <div className="space-y-1">
             <Label htmlFor={kindId}>{t('links.kindPicker')}</Label>
             <Select

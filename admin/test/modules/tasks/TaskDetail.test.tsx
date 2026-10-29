@@ -89,12 +89,29 @@ async function renderPage(permissions?: readonly string[]): Promise<void> {
 }
 
 const contextCard = (): HTMLElement => screen.getByRole('region', { name: en('detail.context') });
+const MOVE_LABEL = core('kanban.moveTo.label', { title: 'Order the racking' });
+/** The status control: the kit's *Move to…* menu, the board's own (WCAG 3.2.2 — a move is one deliberate press). */
+const moveMenu = (): HTMLElement => screen.getByRole('button', { name: MOVE_LABEL });
+async function openMoveMenu(): Promise<string[]> {
+  await userEvent.click(await screen.findByRole('button', { name: MOVE_LABEL }));
+  const list = screen.getByRole('group', { name: MOVE_LABEL });
+  return within(list)
+    .getAllByRole('button')
+    .map((button) => button.textContent ?? '');
+}
+async function moveTo(status: string): Promise<void> {
+  await openMoveMenu();
+  await userEvent.click(within(screen.getByRole('group', { name: MOVE_LABEL })).getByRole('button', { name: status }));
+}
+const statusGroup = (): HTMLElement => screen.getByRole('group', { name: en('field.status') });
 
 describe('TaskDetail — the header and the context card', () => {
   it('names the Task, its number and its status', async () => {
     await renderPage();
     expect(screen.getAllByText('TSK-000001').length).toBeGreaterThan(0);
-    expect((screen.getByLabelText(en('field.status')) as HTMLSelectElement).value).toBe('todo');
+    expect(within(statusGroup()).getByText(STATUS.todo.name)).toBeInTheDocument();
+    // No native select: arrow keys on one would write a move per keypress (WCAG 3.2.2).
+    expect(screen.queryByRole('combobox', { name: en('field.status') })).toBeNull();
   });
 
   it('links the context card to the Project, with its Stage and the owner note', async () => {
@@ -143,15 +160,15 @@ describe('TaskDetail — the header and the context card', () => {
 });
 
 describe('TaskDetail — writing', () => {
-  it('changes the status at once, through the workflow move, and shows the answer', async () => {
+  it('changes the status through the Move to… menu, the workflow move, and shows the answer', async () => {
     postSpy.mockResolvedValue({ data: { task: taskDetail({ status: STATUS.in_progress }), openSubtasks: 0 } });
     await renderPage();
-    await screen.findByRole('option', { name: STATUS.in_progress.name });
-    await userEvent.selectOptions(screen.getByLabelText(en('field.status')), 'in_progress');
+    await moveTo(STATUS.in_progress.name);
+    expect(postSpy).toHaveBeenCalledTimes(1);
     expect(postSpy).toHaveBeenCalledWith(`${TASK_PATH}/status`, { from: 'todo', to: 'in_progress' });
-    await waitFor(() =>
-      expect((screen.getByLabelText(en('field.status')) as HTMLSelectElement).value).toBe('in_progress'),
-    );
+    await waitFor(() => expect(within(statusGroup()).getByText(STATUS.in_progress.name)).toBeInTheDocument());
+    // The chosen target unmounted with the list: focus is back on the menu's trigger (WCAG 2.4.3).
+    await waitFor(() => expect(moveMenu()).toHaveFocus());
   });
 
   it('offers only the moves the workflow permits from the current status (165 US2 scenario 5)', async () => {
@@ -167,13 +184,7 @@ describe('TaskDetail — writing', () => {
       return Promise.reject(new Error(`unexpected GET ${path}`));
     });
     await renderPage();
-    const select = screen.getByLabelText(en('field.status'));
-    await within(select).findByRole('option', { name: STATUS.in_progress.name });
-    expect(within(select).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)).toEqual([
-      'todo',
-      'in_progress',
-      'cancelled',
-    ]);
+    expect(await openMoveMenu()).toEqual([STATUS.in_progress.name, STATUS.cancelled.name]);
   });
 
   it('shows the server’s refusal of a move and then offers only the targets it named', async () => {
@@ -187,17 +198,19 @@ describe('TaskDetail — writing', () => {
       }),
     );
     await renderPage();
-    await screen.findByRole('option', { name: STATUS.done.name });
-    await userEvent.selectOptions(screen.getByLabelText(en('field.status')), 'done');
+    await moveTo(STATUS.done.name);
     expect(await screen.findByText('The task workflow does not allow this move. It can move to: Cancelled.')).toBeTruthy();
-    const select = screen.getByLabelText(en('field.status')) as HTMLSelectElement;
-    expect(select.value).toBe('todo');
-    await waitFor(() =>
-      expect(within(select).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)).toEqual([
-        'todo',
-        'cancelled',
-      ]),
-    );
+    expect(within(statusGroup()).getByText(STATUS.todo.name)).toBeInTheDocument();
+    await waitFor(() => expect(moveMenu()).toBeEnabled());
+    expect(await openMoveMenu()).toEqual([STATUS.cancelled.name]);
+  });
+
+  it('moves focus into the editor when it opens and back to Edit when it closes (WCAG 2.4.3)', async () => {
+    await renderPage();
+    await userEvent.click(screen.getByRole('button', { name: en('detail.edit') }));
+    await waitFor(() => expect(screen.getByLabelText(new RegExp(en('field.title')))).toHaveFocus());
+    await userEvent.click(screen.getByRole('button', { name: core('common.action.cancel') }));
+    await waitFor(() => expect(screen.getByRole('button', { name: en('detail.edit') })).toHaveFocus());
   });
 
   it('edits the details in place and sends only what changed', async () => {
@@ -210,6 +223,7 @@ describe('TaskDetail — writing', () => {
     await userEvent.click(screen.getByRole('button', { name: core('common.action.save') }));
     expect(patchSpy).toHaveBeenCalledWith(TASK_PATH, { title: 'Order the galvanised racking' });
     expect(await screen.findByRole('heading', { name: /Order the galvanised racking/ })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('button', { name: en('detail.edit') })).toHaveFocus());
   });
 
   it('assigns the Task to the caller in one step', async () => {
@@ -259,7 +273,7 @@ describe('TaskDetail — writing', () => {
 
   it('is read-only for a reader: no status control, no edit, no delete', async () => {
     await renderPage(['tasks:read']);
-    expect(screen.queryByLabelText(en('field.status'))).toBeNull();
+    expect(screen.queryByRole('button', { name: MOVE_LABEL })).toBeNull();
     expect(screen.getAllByText(STATUS.todo.name).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: en('detail.edit') })).toBeNull();
     expect(screen.queryByRole('button', { name: en('detail.delete') })).toBeNull();

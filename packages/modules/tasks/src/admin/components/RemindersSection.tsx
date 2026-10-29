@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import { BellPlus, X } from 'lucide-react';
 import type { TaskDetail, TaskReminder } from '@endora-commerce/contracts';
 import { Alert, AlertDescription, Badge, Button, Checkbox, Input, Label, Select } from '@endora-commerce/admin-kit/ui';
@@ -6,6 +6,7 @@ import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n'
 import { tasksApi } from '../api.js';
 import { useCurrentAdmin } from '../lib/current-admin.js';
 import { errorMessage } from '../lib/labels.js';
+import { useEditorFocus } from '../lib/use-editor-focus.js';
 
 /** The offsets a reminder before the due date is offered at, in minutes. */
 const OFFSETS = [15, 60, 1440, 2880, 10080] as const;
@@ -47,6 +48,8 @@ export function RemindersSection(props: RemindersSectionProps): ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasDue = task.dueOn !== null || task.dueAt !== null;
+  const focus = useEditorFocus(adding);
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
   // Who may be reminded: the reader and the assignees, each once.
   const people = [...(me ? [me] : []), ...task.assignees.filter((assignee) => assignee.id !== me?.id)];
@@ -105,7 +108,7 @@ export function RemindersSection(props: RemindersSectionProps): ReactNode {
 
   return (
     <section aria-labelledby={headingId} className="space-y-3 text-sm">
-      <h2 id={headingId} className="text-base font-semibold">
+      <h2 ref={headingRef} id={headingId} tabIndex={-1} className="text-base font-semibold">
         {t('detail.reminders')}
       </h2>
 
@@ -129,9 +132,14 @@ export function RemindersSection(props: RemindersSectionProps): ReactNode {
                   size="sm"
                   className="min-h-11 min-w-11 shrink-0 px-2 sm:min-h-8 sm:min-w-8"
                   disabled={busy}
-                  aria-label={t('reminders.remove')}
-                  title={t('reminders.remove')}
-                  onClick={(): void => void run(() => tasksApi.removeReminder(task.id, reminder.id), t('reminders.removed'))}
+                  aria-label={t('reminders.remove', { when: when(reminder) })}
+                  title={t('reminders.remove', { when: when(reminder) })}
+                  onClick={(): void => {
+                    void run(() => tasksApi.removeReminder(task.id, reminder.id), t('reminders.removed')).then((done) => {
+                      // The removed row's button goes with it: focus rests on the section's heading.
+                      if (done) headingRef.current?.focus();
+                    });
+                  }}
                 >
                   <X aria-hidden="true" />
                 </Button>
@@ -144,14 +152,22 @@ export function RemindersSection(props: RemindersSectionProps): ReactNode {
       )}
 
       {canChange && !adding ? (
-        <Button type="button" variant="outline" size="sm" className="min-h-11 sm:min-h-8" disabled={busy} onClick={open}>
+        <Button
+          ref={focus.openerRef}
+          type="button"
+          variant="outline"
+          size="sm"
+          className="min-h-11 sm:min-h-8"
+          disabled={busy}
+          onClick={open}
+        >
           <BellPlus aria-hidden="true" />
           {t('reminders.add')}
         </Button>
       ) : null}
 
       {adding ? (
-        <div className="space-y-3 rounded-md border p-3">
+        <div ref={focus.editorRef} className="space-y-3 rounded-md border p-3">
           <fieldset className="space-y-1">
             <legend className="text-sm font-medium">{t('reminders.mode')}</legend>
             <label className="flex min-h-11 items-center gap-2 sm:min-h-8">

@@ -204,6 +204,21 @@ describe('TaskDetail — sub-tasks (US5)', () => {
     await userEvent.click(within(subtasksSection()).getByRole('button', { name: en('subtasks.detach') }));
     await waitFor(() => expect(patchSpy).toHaveBeenCalledWith(TASK_PATH, { parentTaskId: null }));
     await waitFor(() => expect(within(subtasksSection()).queryByRole('link', { name: 'TSK-000009' })).toBeNull());
+    // The pressed button unmounted with the parent line: focus moves to the section's opener (WCAG 2.4.3).
+    await waitFor(() =>
+      expect(within(subtasksSection()).getByRole('button', { name: en('subtasks.makeChild') })).toHaveFocus(),
+    );
+  });
+
+  it('moves focus into the parent picker when it opens and back to its opener when it closes (WCAG 2.4.3)', async () => {
+    await renderPage();
+    const section = subtasksSection();
+    await userEvent.click(within(section).getByRole('button', { name: en('subtasks.makeChild') }));
+    await waitFor(() =>
+      expect(within(section).getByRole('combobox', { name: en('subtasks.parentPicker') })).toHaveFocus(),
+    );
+    await userEvent.click(within(section).getByRole('button', { name: core('common.action.cancel') }));
+    await waitFor(() => expect(within(section).getByRole('button', { name: en('subtasks.makeChild') })).toHaveFocus());
   });
 
   it('offers no change to a reader', async () => {
@@ -221,7 +236,9 @@ describe('TaskDetail — sub-tasks (US5)', () => {
       data: { task: { ...current, status: STATUS.done, closed: true }, openSubtasks: 1 },
     });
     await renderPage();
-    await userEvent.selectOptions(screen.getByLabelText(en('field.status')), 'done');
+    const move = core('kanban.moveTo.label', { title: 'Order the racking' });
+    await userEvent.click(await screen.findByRole('button', { name: move }));
+    await userEvent.click(within(screen.getByRole('group', { name: move })).getByRole('button', { name: STATUS.done.name }));
     await waitFor(() => expect(postSpy).toHaveBeenCalledWith(`${TASK_PATH}/status`, { from: 'todo', to: 'done' }));
     expect(await screen.findByText(en('detail.openSubtasks', { count: 1 }))).toBeInTheDocument();
   });
@@ -245,6 +262,8 @@ describe('TaskDetail — related Tasks (US5)', () => {
     await userEvent.click(within(section).getByRole('button', { name: en('related.remove', { number: 'TSK-000002' }) }));
     await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith(`${TASK_PATH}/relations/${OTHER_TASK_ID}`));
     expect(await within(section).findByText(en('related.empty'))).toBeInTheDocument();
+    // The removed row's button is gone: focus rests on the section's heading (WCAG 2.4.3).
+    expect(within(section).getByRole('heading', { name: en('detail.related') })).toHaveFocus();
   });
 
   it('relates another Task through the picker', async () => {
@@ -261,6 +280,16 @@ describe('TaskDetail — related Tasks (US5)', () => {
     await userEvent.click(within(section).getByRole('button', { name: core('common.action.save') }));
     await waitFor(() => expect(putSpy).toHaveBeenCalledWith(`${TASK_PATH}/relations/${OTHER_TASK_ID}`, {}));
     expect(await within(section).findByRole('link', { name: /TSK-000002/ })).toBeInTheDocument();
+    await waitFor(() => expect(within(section).getByRole('button', { name: en('related.add') })).toHaveFocus());
+  });
+
+  it('moves focus into the related-task picker and back to Add related task on Cancel (WCAG 2.4.3)', async () => {
+    await renderPage();
+    const section = relatedSection();
+    await userEvent.click(within(section).getByRole('button', { name: en('related.add') }));
+    await waitFor(() => expect(within(section).getByRole('combobox', { name: en('related.picker') })).toHaveFocus());
+    await userEvent.click(within(section).getByRole('button', { name: core('common.action.cancel') }));
+    await waitFor(() => expect(within(section).getByRole('button', { name: en('related.add') })).toHaveFocus());
   });
 });
 

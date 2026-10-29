@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Pencil, Send, Trash2, UserCheck } from 'lucide-react';
 import {
@@ -20,10 +20,10 @@ import {
   Input,
   Label,
   PageHeader,
-  Select,
 } from '@endora-commerce/admin-kit/ui';
 import {
   ModalDialog,
+  MoveToMenu,
   RecordHistory,
   recordHistoryChanges,
   ReferenceText,
@@ -46,6 +46,7 @@ import { TaskCustomFields } from '../components/TaskCustomFields.js';
 import { dueOf, TaskFieldInputs, taskFieldValuesOf, usePriorities, type TaskFieldValues } from '../components/TaskFieldInputs.js';
 import { useCurrentAdmin } from '../lib/current-admin.js';
 import { calendarDateLabel, errorMessage } from '../lib/labels.js';
+import { useEditorFocus } from '../lib/use-editor-focus.js';
 
 const LIST_PATH = '/tasks';
 
@@ -61,9 +62,11 @@ function allowedTargetsOf(failure: unknown): readonly string[] | null {
  * `contracts/admin-surfaces.md` §2–§3).
  *
  * Top to bottom: **the header** — title, number and status; **the details** —
- * a status control that writes at once and offers only the moves the
- * configured workflow permits from where the Task is (`specs/165-task-management/`
- * research R-1), and the rest edited in place, sending only what changed —
+ * the status with the kit's *Move to…* menu, the board's own, which offers only
+ * the moves the configured workflow permits from where the Task is
+ * (`specs/165-task-management/` research R-1) and writes one move per
+ * deliberate press, never per arrow key (WCAG 3.2.2, T092), and the rest
+ * edited in place, sending only what changed —
  * several assignees (R-2), the description in the kit's reference editor and
  * drawn with its references as links (R-4, R-5), the due date with an
  * optional time, the start date, the priority and the tags (User Story 1);
@@ -117,6 +120,11 @@ export function TaskDetail(): ReactNode {
   /** After a move that closed the Task: how many of its visible sub-tasks are still open (FR-028). */
   const [openSubtasks, setOpenSubtasks] = useState(0);
   const [editing, setEditing] = useState(false);
+  const editFocus = useEditorFocus(editing);
+  /** The *Move to…* menu's wrapper: its trigger takes focus back after a move (the chosen target unmounts). */
+  const moveMenuRef = useRef<HTMLDivElement>(null);
+  const statusLabelRef = useRef<HTMLParagraphElement>(null);
+  const refocusMove = useRef(false);
   const [deleting, setDeleting] = useState(false);
   const [historyVersion, setHistoryVersion] = useState(0);
   const sequence = useRef(0);
@@ -140,6 +148,16 @@ export function TaskDetail(): ReactNode {
     setLoading(true);
     void load();
   }, [load]);
+
+  // After a move from the menu: back to its trigger once it is enabled again, or
+  // to the status's label when no move is left from the new status (WCAG 2.4.3).
+  useEffect(() => {
+    if (!refocusMove.current || busy) return;
+    refocusMove.current = false;
+    const trigger = moveMenuRef.current?.querySelector('button');
+    if (trigger) trigger.focus();
+    else statusLabelRef.current?.focus();
+  });
 
   // The statuses and moves of the workflow, for the status control and the history.
   useEffect(() => {
@@ -272,14 +290,12 @@ export function TaskDetail(): ReactNode {
     refusedFrom !== null && refusedFrom.from === task.status.code
       ? refusedFrom.allowed
       : (workflow?.transitions ?? []).filter((edge) => edge.from === task.status.code).map((edge) => edge.to);
-  const statusOptions = [
-    { code: task.status.code, name: task.status.name },
-    ...allowedTargets
-      .map((code) => workflow?.statuses.find((status) => status.code === code))
-      .filter((status): status is NonNullable<typeof status> => status !== undefined)
-      .sort((a, b) => a.weight - b.weight)
-      .map((status) => ({ code: status.code, name: status.name[language] || status.defaultName })),
-  ];
+  const moveTargets = allowedTargets
+    .filter((code) => code !== task.status.code)
+    .map((code) => workflow?.statuses.find((status) => status.code === code))
+    .filter((status): status is NonNullable<typeof status> => status !== undefined)
+    .sort((a, b) => a.weight - b.weight)
+    .map((status) => ({ code: status.code, name: status.name[language] || status.defaultName, color: status.color }));
   const assignedToMe = me !== null && task.assignees.some((person) => person.id === me.id);
 
   return (
@@ -337,6 +353,7 @@ export function TaskDetail(): ReactNode {
                   <div className="flex flex-wrap gap-2">
                     {canWrite ? (
                       <Button
+                        ref={editFocus.openerRef}
                         type="button"
                         variant="outline"
                         size="sm"
@@ -369,20 +386,24 @@ export function TaskDetail(): ReactNode {
               ) : null}
 
               {canWrite ? (
-                <div className="max-w-xs space-y-1">
-                  <Label htmlFor={statusId}>{t('field.status')}</Label>
-                  <Select
-                    id={statusId}
-                    value={task.status.code}
-                    disabled={busy}
-                    onChange={(event): void => void changeStatus(event.target.value)}
-                  >
-                    {statusOptions.map((status) => (
-                      <option key={status.code} value={status.code}>
-                        {status.name}
-                      </option>
-                    ))}
-                  </Select>
+                <div role="group" aria-labelledby={statusId} className="max-w-xs space-y-1">
+                  <p ref={statusLabelRef} id={statusId} tabIndex={-1} className="text-sm font-medium leading-none">
+                    {t('field.status')}
+                  </p>
+                  <StatusBadge status={task.status} />
+                  {moveTargets.length > 0 ? (
+                    <div ref={moveMenuRef}>
+                      <MoveToMenu
+                        title={task.title}
+                        targets={moveTargets}
+                        busy={busy}
+                        onMove={(code): void => {
+                          refocusMove.current = true;
+                          void changeStatus(code);
+                        }}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
@@ -416,6 +437,7 @@ export function TaskDetail(): ReactNode {
 
               {editing ? (
                 <TaskEditForm
+                  editorRef={editFocus.editorRef}
                   task={task}
                   busy={busy}
                   onCancel={(): void => {
@@ -677,6 +699,8 @@ export function TaskDetail(): ReactNode {
 }
 
 interface TaskEditFormProps {
+  /** The form's container: its first control takes focus when it opens. */
+  editorRef: RefObject<HTMLDivElement | null>;
   task: TaskDetailData;
   busy: boolean;
   onCancel: () => void;
@@ -727,7 +751,7 @@ function TaskEditForm(props: TaskEditFormProps): ReactNode {
   };
 
   return (
-    <div className="space-y-4">
+    <div ref={props.editorRef} className="space-y-4">
       <div className="space-y-1">
         <Label htmlFor={ids.title}>
           {t('field.title')}

@@ -336,7 +336,7 @@
   "reminders.save": "Save reminder",
   "reminders.cancel": "Cancel",
   "reminders.added": "Reminder added.",
-  "reminders.remove": "Remove reminder",
+  "reminders.remove": "Remove the reminder: {when}",
   "reminders.removed": "Reminder removed.",
   "reminders.error": "The reminder could not be saved.",
   "digest.title": "Daily digest",

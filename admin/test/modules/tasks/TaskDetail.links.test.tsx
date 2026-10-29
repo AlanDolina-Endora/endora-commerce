@@ -143,6 +143,11 @@ describe('TaskDetail — linked records (US6)', () => {
     expect(items[0]).toHaveTextContent(en('links.kind.opportunity'));
     expect(items[0]).toHaveTextContent(en('links.unavailable'));
     expect(within(items[0]!).queryByRole('link')).toBeNull();
+    // Why it is unavailable is read with it, not only hovered (a `title` alone reaches neither touch nor keyboard).
+    expect(items[0]).toHaveTextContent(en('links.unavailableHint'));
+    expect(within(items[0]!).getByRole('button', { name: en('links.removeUnavailable') })).toHaveAccessibleDescription(
+      en('links.unavailableHint'),
+    );
     expect(items[1]).toHaveTextContent(en('links.kind.order'));
     expect(within(items[1]!).getByRole('link', { name: 'ORD-0042' })).toHaveAttribute('href', `/orders/${ORDER_ID}`);
     // Nothing is asked for on load: the detail carries its links.
@@ -163,6 +168,16 @@ describe('TaskDetail — linked records (US6)', () => {
     await userEvent.click(within(linksSection()).getByRole('button', { name: en('links.removeUnavailable') }));
     await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith(`${TASK_PATH}/links/${hiddenDeal.id}`));
     await waitFor(() => expect(within(linksSection()).getAllByRole('listitem')).toHaveLength(1));
+    expect(within(linksSection()).getByRole('heading', { name: en('detail.links') })).toHaveFocus();
+  });
+
+  it('moves focus into the link form when it opens and back to Link a record on Cancel (WCAG 2.4.3)', async () => {
+    await renderPage();
+    const section = linksSection();
+    await userEvent.click(within(section).getByRole('button', { name: en('links.add') }));
+    await waitFor(() => expect(within(section).getByLabelText(en('links.kindPicker'))).toHaveFocus());
+    await userEvent.click(within(section).getByRole('button', { name: core('common.action.cancel') }));
+    await waitFor(() => expect(within(section).getByRole('button', { name: en('links.add') })).toHaveFocus());
   });
 
   it('links a record through the picker: the kind, then the record by number', async () => {
@@ -237,6 +252,16 @@ describe('TaskDetail — the context card (US6 scenario 3)', () => {
       }),
     );
     expect(await within(section).findByRole('link', { name: 'PRJ-000002 Showroom' })).toBeInTheDocument();
+    await waitFor(() => expect(within(section).getByRole('button', { name: en('context.change') })).toHaveFocus());
+  });
+
+  it('moves focus into the record picker when it opens and back to Move on Cancel (WCAG 2.4.3)', async () => {
+    await renderPage();
+    const section = contextSection();
+    await userEvent.click(within(section).getByRole('button', { name: en('context.change') }));
+    await waitFor(() => expect(within(section).getByRole('combobox', { name: en('context.picker') })).toHaveFocus());
+    await userEvent.click(within(section).getByRole('button', { name: core('common.action.cancel') }));
+    await waitFor(() => expect(within(section).getByRole('button', { name: en('context.change') })).toHaveFocus());
   });
 
   it('takes the Task out of its record', async () => {
@@ -245,6 +270,8 @@ describe('TaskDetail — the context card (US6 scenario 3)', () => {
     await userEvent.click(within(contextSection()).getByRole('button', { name: en('context.remove') }));
     await waitFor(() => expect(patchSpy).toHaveBeenCalledWith(TASK_PATH, { context: null }));
     expect(await within(contextSection()).findByText(en('detail.contextNone'))).toBeInTheDocument();
+    // *Remove from the record* unmounted: focus moves to the opener that is left.
+    await waitFor(() => expect(within(contextSection()).getByRole('button', { name: en('context.choose') })).toHaveFocus());
   });
 
   it('offers no move when the record refuses changes, on a private Task, or to a reader', async () => {

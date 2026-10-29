@@ -336,7 +336,7 @@
   "reminders.save": "Zapisz przypomnienie",
   "reminders.cancel": "Anuluj",
   "reminders.added": "Dodano przypomnienie.",
-  "reminders.remove": "Usuń przypomnienie",
+  "reminders.remove": "Usuń przypomnienie: {when}",
   "reminders.removed": "Usunięto przypomnienie.",
   "reminders.error": "Nie udało się zapisać przypomnienia.",
   "digest.title": "Dzienne podsumowanie",
