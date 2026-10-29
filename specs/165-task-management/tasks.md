@@ -1146,7 +1146,7 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - CRM and Projects docs: the two new reference kinds.
 
   Run `check:module-docs` and `check:docs-translations`.
-- [ ] T090 [P] Extend the off-state coverage in `backend/test/integration/tasks/off-state.test.ts`:
+- [X] T090 [P] Extend the off-state coverage in `backend/test/integration/tasks/off-state.test.ts`:
   - every new route answers 503;
   - the worker probe stays idle;
   - the asset protection still holds;
@@ -1154,6 +1154,8 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - the Opportunity, Order and Quote Request detail APIs are unaffected.
 
   Run `check:off-state-coverage`.
+  - Done 2026-10-29. **Routes:** the hand list (13 probes, the 163 core and US2's) is replaced by the module's every path and method **read off `openapi-baseline.json`** — 55, 54 probed (`DELETE /me/digest` answers an empty 204 once restored and the harness parses every restored answer as JSON; its `GET`/`PUT` siblings share the gate) — with a per-story sanity list so a baseline that lost the paths fails rather than probing nothing. `settingWrite` now probes `tasks.time_zone` (the module has ordinary settings since US3/US7; the docblock that said it had none is corrected). **New, each on both axes** (`deactivated`, `platform-unavailable`): the composed `tasks-reminders` tick asks none of its three probes while off and all three once back (passes wrapped to count `hasWork`); a library file a Task uses answers 409 `ASSET_REFERENCED` to deletion while off and is let go once detached; the `task` custom-field entity type is hidden while off and back after; the Opportunity, Order and Quote Request admin detail APIs, each linked from a Task, answer **byte-identical JSON** before, while off and after.
+  - Coverage tests of existing behaviour: they passed on first run; the positive halves (three probes asked once back, `task` listed, 409 while on) show each case measures something. 12 / 12. `check:off-state-coverage`: switchable 41, proven 41, findings 0.
 - [ ] T091 Run the performance tests: the T024 suite plus the board under 2 s with 5 000 Tasks (SC-002). Record the figures under this task.
 - [ ] T092 Have `endora-commerce-designer` review `TasksPage` (board and list), `TaskDetail` and the three settings pages against `.claude/skills/ux-laws/SKILL.md`. Fix every finding marked must, and record the others as follow-up issues.
 - [ ] T093 Have an independent reviewer go over the visibility path:
