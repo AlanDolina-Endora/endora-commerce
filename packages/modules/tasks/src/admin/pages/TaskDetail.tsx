@@ -648,7 +648,11 @@ export function TaskDetail(): ReactNode {
 
         <Card className="min-w-0 lg:col-span-2">
           <CardContent className="pt-6">
-            <TaskAttachments taskId={task.id} canChange={canWrite} />
+            <TaskAttachments
+              taskId={task.id}
+              canChange={canWrite}
+              onChange={(): void => setHistoryVersion((version) => version + 1)}
+            />
           </CardContent>
         </Card>
 

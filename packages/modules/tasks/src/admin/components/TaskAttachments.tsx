@@ -20,9 +20,12 @@ import { errorMessage, fileSizeLabel, momentLabel } from '../lib/labels.js';
  *
  * **A download link is read at the moment it is used**: each attachment
  * carries a signed link valid for minutes, so *Download* reads the list again.
+ *
+ * `onChange` is told after a file is added or removed — both are audited, so
+ * the screen reads its history again (165 T095).
  */
-export function TaskAttachments(props: { taskId: string; canChange: boolean }): ReactNode {
-  const { taskId, canChange } = props;
+export function TaskAttachments(props: { taskId: string; canChange: boolean; onChange?: () => void }): ReactNode {
+  const { taskId, canChange, onChange } = props;
   const t = useTranslation('tasks');
   const tCore = useTranslation('core');
   const { language } = useAppLanguage();
@@ -73,6 +76,7 @@ export function TaskAttachments(props: { taskId: string; canChange: boolean }): 
         (previous ?? []).some((item) => item.id === added.id) ? (previous ?? []) : [...(previous ?? []), added],
       );
       setNotice(t('attachments.added'));
+      onChange?.();
     } catch (failure) {
       setActionError(errorMessage(failure, t('attachments.error.attach')));
     } finally {
@@ -110,6 +114,7 @@ export function TaskAttachments(props: { taskId: string; canChange: boolean }): 
       setAttachments((previous) => (previous ?? []).filter((item) => item.id !== pendingRemove.id));
       setNotice(t('attachments.removed', { name: pendingRemove.fileName }));
       setPendingRemove(null);
+      onChange?.();
     } catch (failure) {
       setRemoveError(errorMessage(failure, t('attachments.error.remove')));
     } finally {

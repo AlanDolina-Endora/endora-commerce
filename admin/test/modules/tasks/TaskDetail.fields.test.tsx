@@ -212,6 +212,36 @@ describe('TaskDetail — the fields of a full work item (US1)', () => {
     expect(within(section).getByRole('button', { name: en('attachments.upload') })).toBeTruthy();
   });
 
+  it('reads the history again after a file is added or removed, as after a reminder (T095)', async () => {
+    const historyReads = (): number =>
+      getSpy.mock.calls.filter(([path]) => String(path).startsWith(`${TASK_PATH}/history`)).length;
+    const added: TaskAttachment = { ...ATTACHMENT, id: '00000000-0000-4000-8000-0000000000f3', fileName: 'notes.txt' };
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ data: added }), { status: 201, headers: { 'Content-Type': 'application/json' } })),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+    deleteSpy.mockResolvedValue(undefined);
+    try {
+      await renderPage();
+      const section = screen.getByRole('region', { name: en('attachments.title') });
+      await within(section).findByText('plan.pdf');
+      await waitFor(() => expect(historyReads()).toBeGreaterThan(0));
+      const before = historyReads();
+
+      const input = section.querySelector('input[type="file"]') as HTMLInputElement;
+      await userEvent.upload(input, new File(['hello'], 'notes.txt', { type: 'text/plain' }));
+      expect(await within(section).findByText('notes.txt')).toBeTruthy();
+      await waitFor(() => expect(historyReads()).toBe(before + 1));
+
+      await userEvent.click(within(section).getByRole('button', { name: en('attachments.remove', { name: 'plan.pdf' }) }));
+      await userEvent.click(await screen.findByRole('button', { name: en('attachments.removeConfirm') }));
+      await waitFor(() => expect(within(section).queryByText('plan.pdf')).toBeNull());
+      await waitFor(() => expect(historyReads()).toBe(before + 2));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('a reader sees the fields and the files, and none of the controls', async () => {
     await renderPage(['tasks:read']);
     expect(screen.queryByRole('button', { name: en('detail.edit') })).toBeNull();
