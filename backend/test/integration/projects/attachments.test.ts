@@ -13,6 +13,7 @@ import { composeModules, createRootContainer, registerValues } from '@endora-com
 import { setupBackendServer, teardownBackendServer, type BackendServerHandle } from '../../helpers/test-server.js';
 import { AssetReferenceRegistry } from '../../../../packages/modules/assets_library/src/backend/services/reference-registry.js';
 import { AssetsLibraryService } from '../../../../packages/modules/assets_library/src/backend/services/assets-library.service.js';
+import { AssetVisibility } from '../../../../packages/modules/assets_library/src/backend/services/asset-visibility.js';
 import { TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { withModuleOff } from '../../helpers/off-state.js';
 import { Asset } from '../../helpers/package-entities.js';
@@ -312,6 +313,14 @@ describe('projects — attachments (US7)', () => {
           emFactory: () => h.em(),
           adapters: h.assetsLibrary.adapters,
           referenceRegistry: own,
+          // Feature 166: the library's visibility rule over the same registry, for the
+          // system actor — this test is about enumeration, which no reader narrows.
+          visibility: new AssetVisibility({
+            registry: own,
+            isPresent: () => true,
+            permissions: () => ({ listPermissions: async () => [] }),
+            tenantContext: () => ({ actor: { kind: 'system' } }),
+          }),
           loadUploadPolicy: async () => ({ allowedTypes: ['*'], maxFileSizeMb: 0 }),
         });
 

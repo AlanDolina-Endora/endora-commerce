@@ -17,6 +17,7 @@ import { TEST_ADMIN_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.j
 import { CrmOpportunityAttachment } from '../../helpers/package-entities.js';
 import { AssetReferenceRegistry } from '../../../../packages/modules/assets_library/src/backend/services/reference-registry.js';
 import { AssetsLibraryService } from '../../../../packages/modules/assets_library/src/backend/services/assets-library.service.js';
+import { AssetVisibility } from '../../../../packages/modules/assets_library/src/backend/services/asset-visibility.js';
 import {
   CRM_ADMIN,
   CRM_API,
@@ -229,6 +230,14 @@ describe('crm attachments', () => {
           emFactory: () => h.em(),
           adapters: h.assetsLibrary.adapters,
           referenceRegistry: own,
+          // Feature 166: the library's visibility rule over the same registry, for the
+          // system actor — this test is about enumeration, which no reader narrows.
+          visibility: new AssetVisibility({
+            registry: own,
+            isPresent: () => true,
+            permissions: () => ({ listPermissions: async () => [] }),
+            tenantContext: () => ({ actor: { kind: 'system' } }),
+          }),
           loadUploadPolicy: async () => ({ allowedTypes: ['*'], maxFileSizeMb: 0 }),
         });
 

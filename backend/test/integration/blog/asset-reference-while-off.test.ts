@@ -13,6 +13,7 @@ import { composeModules } from '@endora-commerce/platform/composition';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { AssetReferenceRegistry } from '../../../../packages/modules/assets_library/src/backend/services/reference-registry.js';
 import { AssetsLibraryService } from '../../../../packages/modules/assets_library/src/backend/services/assets-library.service.js';
+import { AssetVisibility } from '../../../../packages/modules/assets_library/src/backend/services/asset-visibility.js';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { LanguageReferenceRegistry } from '../../../../packages/modules/languages/src/backend/services/language-reference-registry.js';
 
@@ -94,6 +95,14 @@ describe('an asset a deactivated blog still references cannot be deleted (D-68)'
       emFactory: () => h.em(),
       adapters: h.assetsLibrary.adapters,
       referenceRegistry: registry,
+      // Feature 166: the library's visibility rule over the same registry, for the
+      // system actor — this test is about enumeration, which no reader narrows.
+      visibility: new AssetVisibility({
+        registry: registry,
+        isPresent: () => true,
+        permissions: () => ({ listPermissions: async () => [] }),
+        tenantContext: () => ({ actor: { kind: 'system' } }),
+      }),
       loadUploadPolicy: async () => ({ allowedTypes: ['*'], maxFileSizeMb: 0 }),
     });
   }

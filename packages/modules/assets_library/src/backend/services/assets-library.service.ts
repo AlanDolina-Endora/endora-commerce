@@ -18,7 +18,7 @@ import {
   type AssetPermalinkReleaseReason,
 } from '../entities/asset-permalink-release.entity.js';
 import { HttpError } from '@endora-commerce/platform/http';
-import { assetNotFound } from './asset-visibility.js';
+import { assetNotFound, type AssetVisibility } from './asset-visibility.js';
 import type { AdapterRegistry } from './storage/adapter-registry.js';
 import type { AssetReferenceRegistry } from './reference-registry.js';
 import { UploadPipeline, type UploadInput, type UploadPolicy } from './upload-pipeline.js';
@@ -49,6 +49,13 @@ export interface AssetsLibraryServiceDeps {
   emFactory: () => EntityManager;
   adapters: AdapterRegistry;
   referenceRegistry: AssetReferenceRegistry;
+  /**
+   * Which assets the ambient caller may see (`specs/166-asset-reference-visibility/`
+   * R-5, R-9, R-11): the list leaves hidden assets out, move-many skips them
+   * and a permalink conflict does not name them. An unrestricted caller (the
+   * system, the platform wildcard) is answered without a read.
+   */
+  visibility: Pick<AssetVisibility, 'exclusionFor' | 'hiddenAmong'>;
   /** Upload-policy provider — reads `assets.allowed_file_types` + max-size. */
   loadUploadPolicy: () => Promise<UploadPolicy>;
   /** Live retention setting; omitted by standalone consumers to keep the 30-day default. */
@@ -208,7 +215,7 @@ export class AssetsLibraryService {
           409,
           ERROR_CODES.ASSET_PERMALINK_TAKEN,
           `The permalink "${permalink}" is already used by another asset.`,
-          { permalink, assetId: holders[0]?.id ?? null },
+          { permalink, assetId: await this.#nameableHolder(holders[0]?.id ?? null) },
         );
       }
       throw err;
@@ -250,9 +257,20 @@ export class AssetsLibraryService {
         409,
         ERROR_CODES.ASSET_PERMALINK_TAKEN,
         `The permalink "${permalink}" is already used by another asset.`,
-        { permalink, assetId: holder.id },
+        { permalink, assetId: await this.#nameableHolder(holder.id) },
       );
     }
+  }
+
+  /**
+   * The asset holding a permalink, as the conflict may name it: `null` when the
+   * caller may not see it (`specs/166-asset-reference-visibility/` R-11). The
+   * name lives in one shared namespace, so *taken* cannot be hidden without
+   * letting two assets share it — *by which asset* can.
+   */
+  async #nameableHolder(holderId: string | null): Promise<string | null> {
+    if (holderId === null) return null;
+    return (await this.deps.visibility.hiddenAmong([holderId])).has(holderId) ? null : holderId;
   }
 
   /** Records a name that stopped being held, naming its last holder (research R-22). */
@@ -360,6 +378,21 @@ export class AssetsLibraryService {
       });
     }
     if (!query.includeDeleted) clauses.push({ deletedAt: null });
+
+    // Assets the caller may not see are left out in SQL, before paging
+    // (`specs/166-asset-reference-visibility/` R-5), so every page is full and
+    // the cursor never lands on a hidden row. The candidates are scoped by this
+    // list's own clauses first: only rows this list could return are evaluated.
+    // An unrestricted caller gets an empty set without a read.
+    const hidden = await this.deps.visibility.exclusionFor(async (candidates) => {
+      const rows = await em.fork().find(
+        Asset,
+        { $and: [...clauses, { id: { $in: [...candidates] } }] },
+        { fields: ['id'] },
+      );
+      return rows.map((row) => row.id);
+    });
+    if (hidden.length > 0) clauses.push({ id: { $nin: hidden } });
 
     const where: Record<string, unknown> = clauses.length > 0 ? { $and: clauses } : {};
 
@@ -524,9 +557,16 @@ export class AssetsLibraryService {
     return this.detail(a);
   }
 
+  /**
+   * Move what exists and the caller may see. An id the caller may not see is
+   * skipped exactly as a missing one is — not moved, not counted, not in the
+   * audit row (`specs/166-asset-reference-visibility/` R-9).
+   */
   async moveMany(assetIds: string[], folderId: string | null): Promise<{ movedCount: number }> {
     const em = this.deps.emFactory();
-    const assets = await em.find(Asset, { id: { $in: assetIds } });
+    const found = await em.find(Asset, { id: { $in: assetIds } });
+    const hidden = await this.deps.visibility.hiddenAmong(found.map((a) => a.id));
+    const assets = found.filter((a) => !hidden.has(a.id));
     for (const a of assets) a.folderId = folderId;
     if (assets.length > 0) {
       this.#audit(em, 'asset.move_many', folderId ?? 'root', null, {

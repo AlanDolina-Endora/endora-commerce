@@ -24,6 +24,11 @@ import type { AdminUserReadPort } from '@endora-commerce/contracts';
 const KEY_HEX = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
 const API_ORIGIN = 'https://api.example.test';
 const ASSET_ID = 'aabbccdd-1111-2222-3333-444455556666';
+/** Feature 166: the caller is unrestricted — nothing hidden, nothing asked. */
+const UNRESTRICTED = {
+  exclusionFor: async () => [],
+  hiddenAmong: async () => new Set<string>(),
+};
 
 function seededAsset(overrides: Partial<Asset> = {}): Asset {
   const now = new Date('2026-09-10T09:00:00.000Z');
@@ -77,6 +82,7 @@ function makeService(
     emFactory: () => em,
     adapters,
     referenceRegistry: new AssetReferenceRegistry(),
+    visibility: UNRESTRICTED,
     loadUploadPolicy: async () => ({ allowedTypes: ['*'], maxFileSizeMb: 0 }),
     ...extra,
   });
@@ -307,6 +313,7 @@ describe('AssetsLibraryService — the permalink base is read once per call (fea
       emFactory: () => em,
       adapters,
       referenceRegistry: new AssetReferenceRegistry(),
+      visibility: UNRESTRICTED,
       loadUploadPolicy: async () => ({ allowedTypes: ['*'], maxFileSizeMb: 0 }),
     });
     const page = await service.listAssets({});

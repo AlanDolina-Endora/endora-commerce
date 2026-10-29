@@ -74,6 +74,7 @@ Assumptions).
 | `backend/test/perf/assets_library/reference-visibility.perf.test.ts` (new) | SC-004 (R-16). |
 | `backend/test/integration/{tasks,projects,crm}/asset-reference-restriction.test.ts` (new) | The SQL complement property of each owner's `readerRestriction` over seeded rows (Tasks: private, draft, public, an unseen Project context, a NULL `context_id`; Projects: Member / Viewer / Organization reach, no `projects:read`; CRM: two Organizations, no `crm:read`). Here and not co-located: no co-located test of those packages opens a database (T001 (f)). |
 | `backend/test/integration/tasks/off-state.test.ts` | Its existing "library refuses delete while off" case also asserts the file is absent from a restricted reader's list. |
+| `backend/test/integration/{cms,blog}/asset-reference-while-off.test.ts`, `backend/test/integration/{projects,crm}/attachments.test.ts` (their `libraryOver` helpers) | Construct `AssetsLibraryService` with its new required `visibility` dependency (T029): an `AssetVisibility` over the test's own registry, for the system actor. The cases are about enumeration, which no reader narrows. |
 
 No generated artefact changes: no new module, migration, entity, manifest field other than one
 `dependencies` entry, admin contribution or doc page. `manifests:generate` still re-renders the

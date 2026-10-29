@@ -140,6 +140,7 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
     emFactory: options.emFactory,
     adapters,
     referenceRegistry,
+    visibility,
     loadUploadPolicy: () => loadUploadPolicy(options.emFactory),
     loadRetentionDays,
     ...(options.auditLog ? { auditLog: options.auditLog } : {}),
