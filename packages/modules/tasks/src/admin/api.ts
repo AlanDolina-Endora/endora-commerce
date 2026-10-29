@@ -1,6 +1,7 @@
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import type {
   CreateTaskBody,
+  CreateTaskReminderBody,
   CreateTaskStatusBody,
   SetTaskTransitionsBody,
   UpdateTaskStatusBody,
@@ -13,15 +14,18 @@ import type {
   TaskComment,
   TaskContextOption,
   TaskDeleteResult,
+  TaskDigestSubscription,
   TaskDetail,
   TaskLink,
   TaskLinkKind,
   TaskListResponse,
   TaskLookupOption,
   TaskPriorityConfig,
+  TaskReminder,
   TaskStatusChangeResult,
   TaskSummary,
   TaskTag,
+  TaskTimeZone,
   TaskWorkflow,
   UpdateTaskBody,
 } from '@endora-commerce/contracts';
@@ -260,6 +264,41 @@ export const tasksApi = {
   /** Delete a comment — its author only; it stays in the thread, marked. */
   removeComment(taskId: string, commentId: string): Promise<void> {
     return apiClient.delete<void>(`${BASE}/${taskId}/comments/${commentId}`);
+  },
+
+  /** A reminder at a moment or before the due date, for the caller and assignees — `tasks:write`. */
+  addReminder(taskId: string, body: CreateTaskReminderBody): Promise<TaskReminder> {
+    return data(apiClient.post<{ data: TaskReminder }>(`${BASE}/${taskId}/reminders`, body));
+  },
+
+  /** Removes a reminder — its creator, or a writer. */
+  removeReminder(taskId: string, reminderId: string): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/${taskId}/reminders/${reminderId}`);
+  },
+
+  /** The caller's daily digest: its hour, or `null` while it is off. */
+  digest(): Promise<TaskDigestSubscription> {
+    return data(apiClient.get<{ data: TaskDigestSubscription }>(`${BASE}/me/digest`));
+  },
+
+  /** Turns the caller's daily digest on, at `hour` of the Tasks time zone. */
+  setDigest(hour: number): Promise<TaskDigestSubscription> {
+    return data(apiClient.put<{ data: TaskDigestSubscription }>(`${BASE}/me/digest`, { hour }));
+  },
+
+  /** Turns the caller's daily digest off. */
+  stopDigest(): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/me/digest`);
+  },
+
+  /** The Tasks time zone — `tasks:read`. */
+  timeZone(): Promise<TaskTimeZone> {
+    return data(apiClient.get<{ data: TaskTimeZone }>(`${BASE}/settings/time-zone`));
+  },
+
+  /** Sets the Tasks time zone — `tasks:configure`; 422 for a zone that is not one. */
+  setTimeZone(timeZone: string): Promise<TaskTimeZone> {
+    return data(apiClient.put<{ data: TaskTimeZone }>(`${BASE}/settings/time-zone`, { timeZone }));
   },
 
   history(id: string, cursor?: string): Promise<RecordHistoryPage> {

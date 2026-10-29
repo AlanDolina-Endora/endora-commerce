@@ -109,18 +109,24 @@ export function dueWords(
   return due.dueOn ? dayWords(due.dueOn, language) : null;
 }
 
-/** One line of a digest: the number, the title, and whether it is due today or since when it is overdue. */
-export function digestLine(entry: TaskDigestEntry, today: string, language: TaskEmailLanguage): string {
-  const title = entry.title.replace(/\s+/g, ' ').trim();
-  const when =
-    entry.dueOn < today
-      ? language === 'pl-PL'
-        ? `po terminie od ${dayWords(entry.dueOn, language)}`
-        : `overdue since ${dayWords(entry.dueOn, language)}`
-      : language === 'pl-PL'
-        ? 'na dziś'
-        : 'due today';
-  return `${entry.number} ${title} — ${when}`;
+/**
+ * One Task of a digest as the template reads it: its number, its title on one
+ * line, its due date in `language`, and whether it is overdue or due today —
+ * the words around them are the template's, per language, so an operator
+ * edits them on the templates screen and no sentence is written here.
+ */
+export function digestItem(
+  entry: TaskDigestEntry,
+  today: string,
+  language: TaskEmailLanguage,
+): { number: string; title: string; due: string; overdue: boolean; today: boolean } {
+  return {
+    number: entry.number,
+    title: entry.title.replace(/\s+/g, ' ').trim(),
+    due: dayWords(entry.dueOn, language),
+    overdue: entry.dueOn < today,
+    today: entry.dueOn >= today,
+  };
 }
 
 /**
@@ -207,13 +213,14 @@ export function createTaskEmail(deps: TaskEmailDeps): TaskEmail {
         messageId: `${TASK_DIGEST_EMAIL_CODE}:${input.adminUserId}:${input.date}`,
         document: null,
         variables: (language) => {
-          const lines = input.tasks.map((entry) => digestLine(entry, input.date, language));
+          const tasks = input.tasks.map((entry) => digestItem(entry, input.date, language));
           return {
             digest: {
               date: dayWords(input.date, language),
-              taskCount: String(input.tasks.length),
-              taskList: lines.join('\n'),
-              tasks: lines.map((line) => ({ line })),
+              taskCount: String(tasks.length),
+              // One Task a line — the number, the title and the due date, no words around them.
+              taskList: tasks.map((task) => `${task.number} ${task.title} — ${task.due}`).join('\n'),
+              tasks,
             },
           };
         },

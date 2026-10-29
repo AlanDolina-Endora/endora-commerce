@@ -175,12 +175,13 @@ const concreteUrl = (pattern: string): string => pattern.replace(/:[A-Za-z]+/g, 
 const READ_AND_WRITE = ['tasks:read', 'tasks:write'];
 
 describe('tasks admin surface', () => {
-  it('is registered: the list, My Tasks, the create screen, the workflow screen (165) and one Task', () => {
+  it('is registered: the list, My Tasks, the create screen, the two settings screens (165) and one Task', () => {
     expect(routes.map((route) => route.path)).toEqual([
       '/tasks',
       '/tasks/mine',
       '/tasks/new',
       '/tasks/settings/workflow',
+      '/tasks/settings/general',
       '/tasks/:id',
     ]);
   });
@@ -213,7 +214,7 @@ describe('tasks admin surface', () => {
     }
   });
 
-  it('withholds the create screen from a reader, the workflow screen from a writer, and everything from somebody without tasks:read', async () => {
+  it('withholds the create screen from a reader, the settings screens from a writer, and everything from somebody without tasks:read', async () => {
     presentModules = new Set(['tasks']);
     permissions = new Set(['tasks:read']);
     const reader = renderAt('/tasks/new');
@@ -227,6 +228,9 @@ describe('tasks admin surface', () => {
     const writer = renderAt('/tasks/settings/workflow');
     await waitFor(() => expect(notFoundIsRendered()).toBe(true));
     writer.unmount();
+    const general = renderAt('/tasks/settings/general');
+    await waitFor(() => expect(notFoundIsRendered()).toBe(true));
+    general.unmount();
 
     permissions = new Set(['tasks:write']);
     const shell = renderAt('/');

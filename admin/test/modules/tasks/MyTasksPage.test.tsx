@@ -76,6 +76,8 @@ beforeEach(() => {
   getSpy.mockImplementation((path: string) => {
     if (path === MINE_PATH || path.startsWith(`${MINE_PATH}?`)) return Promise.resolve({ data: [OVERDUE, taskSummary(), UNDATED] });
     if (path === '/api/v1/admin/tasks/workflow') return Promise.resolve({ data: workflow() });
+    // The *Daily digest* control (User Story 7) reads the caller's digest: off.
+    if (path === '/api/v1/admin/tasks/me/digest') return Promise.resolve({ data: null });
     if (path === '/api/v1/admin/tasks/board/card-fields') return Promise.resolve({ data: { fields: [], available: [], maxFields: 6 } });
     if (path.startsWith(BOARD_PATH)) return Promise.resolve({ data: board() });
     if (path.startsWith('/api/v1/admin/tasks/priorities')) return Promise.resolve({ data: [] });

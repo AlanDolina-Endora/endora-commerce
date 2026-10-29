@@ -2,7 +2,8 @@
  * `tasks`' admin surface (`specs/163-projects-and-tasks/contracts/admin-surfaces.md`
  * §1–§3): 163's four screens and two sidebar rows — the Tasks screen and *My
  * Tasks* now each a list or a board (`specs/165-task-management/` User Story 3)
- * — and the workflow screen (User Story 2) with its *Task settings* row.
+ * — the workflow screen (User Story 2) with its *Task settings* row, and the
+ * general settings screen (User Story 7), linked from the workflow screen.
  *
  * The palette actions are the manifest's (`src/manifest.ts`, §4). The zone
  * `task.detail.after` is mounted by `pages/TaskDetail.tsx`; this module
@@ -31,6 +32,8 @@ const TASKS_PATH = '/tasks';
 
 const WORKFLOW_PATH = `${TASKS_PATH}/settings/workflow`;
 
+const GENERAL_SETTINGS_PATH = `${TASKS_PATH}/settings/general`;
+
 export const contributions: AdminContributions = {
   routes: [
     {
@@ -53,6 +56,12 @@ export const contributions: AdminContributions = {
     {
       path: WORKFLOW_PATH,
       component: () => import('./pages/settings/TaskWorkflowPage.js'),
+      requiredPermission: CONFIGURE_PERMISSION,
+    },
+    {
+      // The time zone (User Story 7, R-17), reached from the workflow screen.
+      path: GENERAL_SETTINGS_PATH,
+      component: () => import('./pages/settings/TaskGeneralSettingsPage.js'),
       requiredPermission: CONFIGURE_PERMISSION,
     },
     {

@@ -20,12 +20,13 @@ function bundle(language: 'en' | 'pl'): Record<string, string> {
 }
 
 describe('tasks admin contributions', () => {
-  it('declares its screens, each on the code its route enforces — the workflow on tasks:configure (165 T047)', () => {
+  it('declares its screens, each on the code its route enforces — the workflow (165 T047) and general settings (T071) on tasks:configure', () => {
     expect((contributions.routes ?? []).map((route) => [route.path, route.requiredPermission])).toEqual([
       ['/tasks', 'tasks:read'],
       ['/tasks/mine', 'tasks:read'],
       ['/tasks/new', 'tasks:write'],
       ['/tasks/settings/workflow', 'tasks:configure'],
+      ['/tasks/settings/general', 'tasks:configure'],
       ['/tasks/:id', 'tasks:read'],
     ]);
     expect((contributions.routes ?? []).filter((route) => route.index)).toHaveLength(1);

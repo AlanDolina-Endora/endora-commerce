@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import type { TaskStatusConfig, TaskWorkflow } from '@endora-commerce/contracts';
 import {
@@ -15,6 +16,7 @@ import {
 import { StatusTransitionGraph, type StatusTransitionGraphStatus } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../../api.js';
+import { TASK_GENERAL_SETTINGS_PATH } from '../../lib/settings-paths.js';
 import { TaskStatusDeleteDialog } from '../../components/workflow/TaskStatusDeleteDialog.js';
 import { BoardCardFieldsEditor } from '../../components/BoardCardFieldsEditor.js';
 import { TaskStatusDialog, type TaskStatusDialogSubmit } from '../../components/workflow/TaskStatusDialog.js';
@@ -119,7 +121,20 @@ export function TaskWorkflowPage(): ReactNode {
     setWorkflow(await tasksApi.deleteStatus(pendingDelete.code, replacement));
   };
 
-  const header = <PageHeader title={t('workflow.title')} description={t('workflow.description')} />;
+  const header = (
+    <PageHeader
+      title={t('workflow.title')}
+      description={t('workflow.description')}
+      actions={
+        <Link
+          to={TASK_GENERAL_SETTINGS_PATH}
+          className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline sm:min-h-8"
+        >
+          {t('settings.link')}
+        </Link>
+      }
+    />
+  );
 
   if (workflow === null) {
     return (

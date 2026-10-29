@@ -34,6 +34,7 @@ import { tasksApi } from '../api.js';
 import { AssigneePicker, type ChosenAssignee } from '../components/AssigneePicker.js';
 import { ContextSection } from '../components/ContextSection.js';
 import { LinkedRecordsSection } from '../components/LinkedRecordsSection.js';
+import { RemindersSection } from '../components/RemindersSection.js';
 import { RelatedTasksSection } from '../components/RelatedTasksSection.js';
 import { StatusBadge } from '../components/StatusBadge.js';
 import { SubtasksSection } from '../components/SubtasksSection.js';
@@ -71,7 +72,8 @@ function allowedTargetsOf(failure: unknown): readonly string[] | null {
  * the Task belongs to as its owner describes it, which a writer may change
  * (`components/ContextSection.tsx`) — and **the linked records** — the
  * Opportunities, Orders and Quote Requests the Task is about (User Story 6,
- * R-16); **the history**; and last the zone `task.detail.after`, which
+ * R-16) — and **the reminders** the reader set or is named in (User Story 7,
+ * R-17); **the history**; and last the zone `task.detail.after`, which
  * other modules fill and this one names none of.
  *
  * A Task the operator may not see answers exactly as one that does not exist
@@ -467,7 +469,7 @@ export function TaskDetail(): ReactNode {
           </CardContent>
         </Card>
 
-        {/* The side column beside the details: where the Task belongs, and what it is linked to. */}
+        {/* The side column beside the details: where the Task belongs, what it is linked to, its reminders. */}
         <div className="min-w-0 space-y-6">
           <Card>
             <CardContent className="pt-6">
@@ -482,6 +484,19 @@ export function TaskDetail(): ReactNode {
           <Card>
             <CardContent className="pt-6">
               <LinkedRecordsSection
+                task={task}
+                canChange={canWrite}
+                onChange={(message): void => {
+                  setNotice(message);
+                  setHistoryVersion((version) => version + 1);
+                  void load();
+                }}
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <RemindersSection
                 task={task}
                 canChange={canWrite}
                 onChange={(message): void => {

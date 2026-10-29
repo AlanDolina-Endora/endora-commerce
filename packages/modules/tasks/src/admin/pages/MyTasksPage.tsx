@@ -7,6 +7,7 @@ import { Alert, AlertDescription, Button, Card, CardContent, PageHeader } from '
 import { ResponsiveTable } from '@endora-commerce/admin-kit/components';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
+import { DigestControl } from '../components/DigestControl.js';
 import { TaskBoard } from '../components/TaskBoard.js';
 import { TaskFilters } from '../components/TaskFilters.js';
 import { ViewModeToggle } from '../components/ViewModeToggle.js';
@@ -38,7 +39,8 @@ const IMPLIED = new URLSearchParams([
  * (`listViewModes['tasks-mine']`) — with the Tasks screen's filters, less the
  * three it implies (assignee, open or closed, drafts). The list is the server's
  * answer of up to 500, in its order; the board is the Tasks board asked for
- * the same set, its closed lanes left empty.
+ * the same set, its closed lanes left empty. Above them, the caller's *Daily
+ * digest* control (`specs/165-task-management/` User Story 7).
  */
 export function MyTasksPage(): ReactNode {
   const t = useTranslation('tasks');
@@ -103,6 +105,11 @@ export function MyTasksPage(): ReactNode {
           </>
         }
       />
+
+      {/* The caller's own daily digest (User Story 7, FR-036): off by default, at an hour. */}
+      <div className="mb-4">
+        <DigestControl />
+      </div>
 
       <Card className="mb-4">
         <CardContent className="space-y-4 pt-6">
