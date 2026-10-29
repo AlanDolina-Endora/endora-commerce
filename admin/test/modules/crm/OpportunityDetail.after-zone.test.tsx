@@ -9,6 +9,7 @@ import { AppLanguageContext } from '@endora-commerce/admin-kit/i18n';
 import { renderWithI18n } from '../../helpers/render-with-i18n';
 import { adminSession, modulePresence, withSession } from '../../helpers/render-with-session';
 import { CRM_BUNDLE_EN, OPPORTUNITY_ID, ORDER_STATUS_GRAPH, WORKFLOW, detail, en } from './crm-fixtures';
+import { markup } from '../../helpers/react-ids';
 
 /**
  * `opportunity.detail.after` — the stack of panels an Opportunity's screen ends
@@ -89,14 +90,6 @@ async function renderDetail(options: {
     expect(screen.getByRole('region', { name: en('opportunity.section.status') })).not.toHaveAttribute('aria-busy', 'true'),
   );
   return container;
-}
-
-/**
- * The screen's markup with React's per-render ids taken out, so two renders
- * compare — wherever they stand: the stage bar builds ids of its own on them.
- */
-function markup(container: HTMLElement): string {
-  return container.innerHTML.replace(/:r[0-9a-z]+:|«r[0-9a-z]+»|_r_[0-9a-z]+_/g, '_');
 }
 
 const CRM_PRESENT = ['crm', 'orders', 'organizations', 'sales_channels'];
