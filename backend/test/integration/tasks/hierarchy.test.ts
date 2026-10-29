@@ -209,10 +209,17 @@ describe('tasks — sub-tasks and related Tasks (US5)', () => {
         const now = await read(survivor.id);
         expect(now.parent).toBeNull();
         const [entry] = (await history(survivor.id)).filter((e) => e.action === 'tasks.task.parent_change');
+        // The history serves a deleted parent as no Task at all — the same answer a
+        // hidden one gets, so the two cannot be told apart (T093 F3) — while the
+        // audit log keeps its id.
         expect(entry).toMatchObject({
-          before: { parentTaskId: parent.id },
+          before: { parentTaskId: null },
           after: { parentTaskId: null, reason: 'parent_deleted' },
         });
+        const [recorded] = (await h.auditLogService.query({ objectType: 'task', objectId: survivor.id })).filter(
+          (e) => e.action === 'tasks.task.parent_change',
+        );
+        expect(recorded?.stateBefore).toEqual({ parentTaskId: parent.id });
       }
       expect((await call('GET', `/${parent.id}`)).statusCode).toBe(404);
 
