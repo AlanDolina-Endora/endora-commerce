@@ -38,11 +38,14 @@ export interface QuickOrderBuildLineInput {
  * with the minimums flagged rather than refused (FR-030, US4 #15). It changes
  * nothing for target `cart` — a basket is judged the same whoever fills it
  * (US4 #1d). `language` names a refused product (the request's
- * `Accept-Language`).
+ * `Accept-Language`). `languageTag` (feature 163) is the request's first
+ * `Accept-Language` tag, which a buyer's quote lines' scope language is
+ * resolved from (`CreateForCustomerOptions.languageTag`).
  */
 export interface QuickOrderBuildOptions {
   actor?: 'operator';
   language?: string | undefined;
+  languageTag?: string | undefined;
 }
 
 type QuickOrderBuildRejection = NonNullable<QuickOrderBuildResponse['rejected']>[number];
@@ -148,14 +151,15 @@ export class QuickOrderBuildService {
     };
     // Feature 155 (FR-030, R12.2, threat F10) — only the operator's build
     // warns; a buyer's is judged by the request's own rules (FR-012).
+    // Feature 163 — the buyer's lines are asked about at the build's channel.
     const rfq =
       options.actor === 'operator'
         ? await this.rfq.createForCustomer(rfqCtx, request, { minimums: 'warn' })
-        : await this.rfq.createForCustomer(
-            rfqCtx,
-            request,
-            options.language ? { language: options.language } : undefined,
-          );
+        : await this.rfq.createForCustomer(rfqCtx, request, {
+            salesChannelId: ctx.salesChannelId,
+            ...(options.language ? { language: options.language } : {}),
+            ...(options.languageTag ? { languageTag: options.languageTag } : {}),
+          });
     return {
       target: 'quote_request',
       quoteRequestId: rfq.id,

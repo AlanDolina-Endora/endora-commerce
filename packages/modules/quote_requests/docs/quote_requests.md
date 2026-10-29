@@ -1004,6 +1004,29 @@ one e-mail this module does send is the explicit *Send PDF to customer* (see
 *Quote PDF*), delivered while the representative waits and recorded on the
 quote's History.
 
+## Archived products are never quote lines
+
+A product archived with the Catalog module's **Archive** action cannot be put
+on a quote request by any path; restore it first. What each path answers:
+
+- **A customer** — creating a request, editing a draft and resubmitting it,
+  and so converting a basket, a quick-order list or a shopping list into a
+  request, or cloning an order into one — gets `404 PRODUCT_NOT_FOUND`,
+  exactly what a product that does not exist gets, so nothing about the
+  product is disclosed.
+- **An operator** — `POST /api/v1/admin/quote-requests` (create on a
+  customer's behalf) and `PATCH /api/v1/admin/quote-requests/:id` (modify) —
+  gets `409 PRODUCT_ARCHIVED` ("Product is archived."), with the archived
+  products' ids in `details.productIds`, and nothing is written. A product id
+  that does not exist still answers `404 PRODUCT_NOT_FOUND`. A line that is
+  unavailable for any other reason — switched off in the request's sales
+  channel or language, outside its publication window or its audience — is
+  still accepted there with the `PRODUCT_UNAVAILABLE_IN_SCOPE` warning.
+- **Converting an approved quote** whose product was archived after approval
+  answers `409` before the customer's basket is touched.
+
+Price lists are not affected: an archived product can still be priced.
+
 ## Conversion to order
 
 `POST /api/v1/quote-requests/:id/convert-to-order` fills the customer's
@@ -1094,12 +1117,14 @@ products in two ways:
   **Active** tab: the catalogue in pages, with status tabs and their counts, a
   type filter and a search by SKU, slug or name. The selection survives page,
   page-size and filter changes, and **Add N** adds every ticked product as a
-  line of quantity 1 — at most 200 in one step. Draft and inactive products
-  may be added; grouped and bundle parents are listed with their reason and
-  cannot be ticked. A product already on the request can be added again, as a
+  line of quantity 1 — at most 200 in one step. Inactive products may be
+  added. Archived products are not offered: the browser has no Archived tab
+  and its **All** tab leaves them out. Grouped and bundle parents are listed
+  with their reason and cannot be ticked. A product already on the request can be added again, as a
   line of its own — for instance to put it in a second group.
 - **Quick add by name or SKU**, beside it, appends one product under the same
-  rules.
+  rules. An archived product is listed in its results, disabled, with the
+  reason *archived*, as on the order create screen.
 
 Both are disabled, each with a hint, for an operator without `catalog:read`.
 
@@ -1126,6 +1151,35 @@ marked, and **Create quote request** stays disabled until it is fixed or
 removed; every line on screen is sent. The running total counts the lines that
 have both a valid quantity and a price. A customer without an organization
 still shows the existing warning, since a quote request needs one.
+
+**The sales channel the request is raised on** is chosen under the customer,
+among the active sales channels of the customer's organization. When the
+organization has exactly one, it is preselected; when it has several, choose one —
+**Create quote request** stays disabled until you do. When the organization has no
+active sales channel, the screen says so and **Create quote request** stays disabled
+until the organization is assigned to one. The channel is sent as
+`salesChannelId`: the request is stored on it, its line names are taken in that
+channel's default language, and its availability is judged there. The agreed
+prices are prefilled on that channel too, and choosing another channel clears
+every price not typed by hand and resolves it again. Without the field the
+request is raised on the channel the admin request itself resolves to — the
+system default, unless the request names another with `X-Sales-Channel`. Either
+way the server checks the channel: one that is not one of the organization's
+active sales channels — unknown, assigned only to other organizations, or
+inactive — is refused with `422 RFQ_SALES_CHANNEL_NOT_ALLOWED` before anything
+is written, also when no channel was chosen and the fallback is not one of
+them. When the organization's channels cannot be read — the read fails or is
+refused, for instance on a network error — the screen says so with a **Retry**
+button, and **Create quote request** stays disabled until they have been read;
+while a retry is under way the button is inactive. Agreed prices are prefilled
+only once a channel is settled.
+
+When a line's product is not available to the customer on that channel —
+switched off there, outside its publication window or outside its audience —
+the request is still created and the answer names the line in `warnings` with
+`PRODUCT_UNAVAILABLE_IN_SCOPE`. The screen then stays open and lists those
+products under **Quote request created with warnings**, and **Open the quote
+request** goes on to it; the request cannot be sent a second time from there.
 
 ## Panels on the quote request screen
 

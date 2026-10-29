@@ -14,6 +14,7 @@ import {
   customFieldValuesSchema,
   customerAddOrderCommentRequestSchema,
   ERROR_CODES,
+  firstLanguageTag,
   isCustomFieldFilterUnavailableFailure,
   isCustomFieldValidationFailure,
   OrganizationCannotTransactError,
@@ -23,12 +24,14 @@ import {
   updateOrderSavedViewRequestSchema,
   updateOrderStatusRequestSchema,
   unitPriceHalfUp,
+  withChannelOrderRules,
 } from '@endora-commerce/contracts';
 import type {
   AdminOrderDetail,
   Order as OrderResponse,
   OrderPendingEffect,
   AssetReadPort,
+  CatalogProductAvailabilityPort,
   CatalogProductReadPort,
   CustomerAccountReadPort,
   CustomFieldListFilterPort,
@@ -49,7 +52,11 @@ import type { Command, CommandBus } from '@endora-commerce/platform/commands';
 import { orderTotalsMoney } from './services/order-money.js';
 import type { OrderService } from './services/order-service.js';
 import { assertMethodsOfferedInChannel } from './services/method-channel-gate.js';
-import { previewBelowMinimums, previewLineAvailability } from './services/preview-line-availability.js';
+import {
+  customerAudience,
+  previewBelowMinimums,
+  previewLineAvailability,
+} from './services/preview-line-availability.js';
 import { assertWithinAdminOrderItemBound } from './services/request-minimums.js';
 import type { OrderStatusGraphService } from './services/order-status-graph-service.js';
 import type { OrderTransitionService } from './services/order-transition-service.js';
@@ -149,6 +156,8 @@ export interface OrdersDeps {
    * returning rows from tables deactivation does not drop.
    */
   catalogProductRead: CatalogProductReadPort;
+  /** Feature 163 — the admin preview reports a line no longer available in the channel. */
+  catalogProductAvailability: Pick<CatalogProductAvailabilityPort, 'filterAvailable' | 'effectiveOrderRules'>;
   customerAccountRead: CustomerAccountReadPort;
   organizationDetails: OrganizationDetailsPort;
   /**
@@ -934,15 +943,27 @@ export async function registerOrderRoutes(
             inChannel: true,
           }).available,
       );
-      const inChannel = new Set(
+      const members =
         idsToCheck.length > 0
           ? await salesChannelMembership.filterEntityIdsInChannel(
               body.salesChannelId,
               'product',
               idsToCheck,
             )
-          : [],
-      );
+          : [];
+      // Feature 163 — a member that is not available in the channel now
+      // (switched off at the channel's default language — the operator's, N2 —,
+      // outside its window, or outside the channel's audience rule) is reported
+      // as not offered in the channel: the order placement would refuse it.
+      const availableHere =
+        members.length > 0
+          ? await deps.catalogProductAvailability.filterAvailable(members, {
+              channelId: body.salesChannelId,
+              languageCode: null,
+              audience: customerAudience(organizationId),
+            })
+          : new Set<string>();
+      const inChannel = new Set(members.filter((id) => availableHere.has(id)));
 
       // Steps 1–4 per line, first match wins; an orderable line keeps its price.
       type EvaluatedLine =
@@ -1031,8 +1052,18 @@ export async function registerOrderRoutes(
       // lines that passed steps 1–4 — a line with an earlier code counts toward
       // no total and never carries a minimum. Creating the order would refuse
       // a marked line, so it is priced like any other unavailable line.
+      // Feature 163 (FR-100) — judged on the order channel's minimum, not the global one.
+      const orderableIds = [...new Set(evaluated.flatMap((e) => (e.code === null ? [e.product.id] : [])))];
+      const channelRules =
+        orderableIds.length > 0
+          ? await deps.catalogProductAvailability.effectiveOrderRules(orderableIds, body.salesChannelId)
+          : new Map<string, { minOrderQuantity: number | null; returnable: boolean }>();
       const belowMinimum = previewBelowMinimums(
-        evaluated.map((e) => (e.code === null ? { product: e.product, quantity: e.item.quantity } : null)),
+        evaluated.map((e) =>
+          e.code === null
+            ? { product: withChannelOrderRules([e.product], channelRules)[0]!, quantity: e.item.quantity }
+            : null,
+        ),
       );
 
       const unavailableLine = (entry: EvaluatedLine) => ({
@@ -1413,10 +1444,17 @@ export async function registerOrderRoutes(
       const ctx = resolveCustomerContext(request);
       await orderService.getById(request.params.id, ctx); // authorize ownership
       // Feature 155 — the buyer's clone: no actor, so a minimum refuses it (US4 #5a).
-      const result = await deps.orderCloneToQuoteService.clone(request.params.id, {
-        customerAccountId: ctx.customerAccountId,
-        organizationId: ctx.organizationId,
-      });
+      // Feature 163 — its lines are judged at the request's channel and scope language.
+      const languageTag = firstLanguageTag(request.headers['accept-language']);
+      const result = await deps.orderCloneToQuoteService.clone(
+        request.params.id,
+        { customerAccountId: ctx.customerAccountId, organizationId: ctx.organizationId },
+        {
+          language: await request.responseLanguage(),
+          ...(languageTag ? { languageTag } : {}),
+          salesChannelId: getResolvedChannel(request).id,
+        },
+      );
       return { data: result };
     },
   );

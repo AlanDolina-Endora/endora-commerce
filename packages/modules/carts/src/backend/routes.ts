@@ -17,17 +17,26 @@ import {
   convertCartToQrSchema,
   ERROR_CODES,
   OrganizationCannotTransactError,
-  pickLocalized,
+  type CatalogProductAvailabilityPort,
+  type CatalogProductUrlKeyReadPort,
   type CatalogProductReadPort,
   type CatalogProductRecord,
   type PromotionApplication,
 } from '@endora-commerce/contracts';
-import type { CartActor, CartService } from './services/cart-service.js';
+import {
+  availableRecords,
+  basketScopeLanguage,
+  effectiveKeysAt,
+  firstLanguageTag,
+  withBasketOrderRules,
+} from './services/cart-availability.js';
+import { cartAudience, type CartActor, type CartService } from './services/cart-service.js';
 import type { CartUpsellService } from './services/cart-upsell-service.js';
 import type { CartCouponService } from './services/cart-coupon-service.js';
 import type { CartConversionService } from './services/cart-conversion-service.js';
 import type { CartPricingRecompute, RecomputeRefusal } from './services/cart-pricing-recompute.js';
 import { agreementOf } from './services/cart-line-pricing.js';
+import { productMetaOf, type ProductMeta } from './services/cart-line-meta.js';
 import { derivePrimaryCta } from './services/cart-state-machine.js';
 import {
   evaluateCartViewMinimums,
@@ -139,6 +148,15 @@ export interface CartsDeps {
    */
   catalogProducts: CatalogProductReadPort;
   /**
+   * Feature 163 — `catalog`'s availability answer, which the full view marks
+   * a line `unavailable` by (FR-006): a product switched off at the basket's
+   * (channel, language), outside its window or outside its audience reads as
+   * a product with no record.
+   */
+  catalogAvailability: Pick<CatalogProductAvailabilityPort, 'filterAvailable' | 'effectiveNames' | 'effectiveOrderRules'>;
+  /** Feature 163 (T113a, R28) — the effective URL key per channel language, for the lines' links. */
+  catalogUrlKeys: Pick<CatalogProductUrlKeyReadPort, 'effectiveKeys'>;
+  /**
    * Optional gate — when provided, signed-in customers whose Organization
    * is not `active` (pending_verification / blocked / rejected) cannot add
    * lines to the cart. Anonymous users are always permitted.
@@ -160,11 +178,15 @@ function cartActorOnRequestChannel(
 ): CartActor & { salesChannelId: string } {
   const actor = resolveCartActor(request);
   const salesChannelId = getResolvedChannel(request).id;
+  // Feature 163 — the request's language tag; the basket's scope language is
+  // it resolved against the channel's own languages.
+  const languageTag = firstLanguageTag(request.headers['accept-language']);
   return {
     ...(actor.customer ? { customer: { ...actor.customer, salesChannelId } } : {}),
     ...(actor.anonymousToken
       ? { anonymousToken: actor.anonymousToken, anonymousSalesChannelId: salesChannelId }
       : {}),
+    ...(languageTag !== undefined ? { languageTag } : {}),
     salesChannelId,
   };
 }
@@ -258,13 +280,44 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
     // FR-037 rules out: a cart that hides a below-minimum line because the
     // catalogue did not answer. A failed read now fails the view; a product row
     // that is simply gone is not a failure — its line reads `unavailable`.
-    const products = await loadCartProducts(deps.catalogProducts, items.map((it) => it.productId));
-    const productMeta = productMetaOf(products, preferredLanguage);
+    const records = await loadCartProducts(deps.catalogProducts, items.map((it) => it.productId));
+    // Feature 163 (FR-006) — a line whose product is no longer available here
+    // stays in the basket and reads `unavailable`; its name stays known.
+    const products = await availableRecords(deps.catalogAvailability, records, {
+      channelId: actor.salesChannelId,
+      languageCode: basketScopeLanguage(actor.salesChannelId, actor.languageTag),
+      audience: cartAudience(actor),
+    });
+    // Feature 163 (FR-017 d) — each line named as the storefront shows the
+    // product in this basket's (channel, language), not in the baseline alone.
+    const effectiveNames = await deps.catalogAvailability.effectiveNames(
+      records.map((p) => p.id),
+      {
+        channelId: actor.salesChannelId,
+        languageCode: basketScopeLanguage(actor.salesChannelId, actor.languageTag),
+      },
+    );
+    // Feature 163 (S1 = A) — an unavailable line keeps its name and SKU and
+    // loses its slug: its product page answers 404 here.
+    // Feature 163 (T113a, R28) — an available line links to its effective key here.
+    const productMeta = productMetaOf(
+      records,
+      preferredLanguage,
+      new Set(products.map((p) => p.id)),
+      effectiveNames,
+      await effectiveKeysAt(
+        deps.catalogUrlKeys,
+        products.map((p) => p.id),
+        actor.salesChannelId,
+        basketScopeLanguage(actor.salesChannelId, actor.languageTag),
+      ),
+    );
+    // Feature 163 (FR-100) — the minimums of the basket's channel, flagged and reported.
     const minimumViews = await evaluateCartViewMinimums(
       deps.catalogProducts,
       { sourceQuoteRequestId: cart.sourceQuoteRequestId ?? null },
       items.map(toCartMinimumItem),
-      products,
+      await withBasketOrderRules(deps.catalogAvailability, products, actor.salesChannelId),
     );
 
     // Feature 027 §R5 — re-pricing on read (FR-008), through the chain
@@ -611,7 +664,10 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
           isOrgAdmin: false,
         },
         body.note,
-        { language: await request.responseLanguage() },
+        {
+          language: await request.responseLanguage(),
+          ...(actor.languageTag !== undefined ? { languageTag: actor.languageTag } : {}),
+        },
       );
       return {
         data: {
@@ -681,11 +737,10 @@ export async function registerCartRoutes(app: FastifyInstance, deps: CartsDeps):
     if (!cart) return { data: [] };
     const parsed = cartUpsellsQuerySchema.parse(request.query ?? {});
     const limit = parsed.limit ?? 12;
-    const candidates = await deps.cartUpsellService.forCart(
-      cart.id,
-      limit,
-      productAudienceOf(request),
-    );
+    const candidates = await deps.cartUpsellService.forCart(cart.id, limit, productAudienceOf(request), {
+      channelId: actor.salesChannelId,
+      languageCode: basketScopeLanguage(actor.salesChannelId, actor.languageTag),
+    });
     return { data: candidates };
   });
 }
@@ -774,11 +829,6 @@ function serializeCartMini(cart: Cart, items: CartItem[]) {
  * unavailable at their stored price; the mutation answers pass neither and
  * return the stored `unitPrice`.
  */
-interface ProductMeta {
-  name: string;
-  slug: string;
-  sku: string | null;
-}
 
 function serializeCart(
   cart: Cart,
@@ -908,27 +958,6 @@ async function loadCartProducts(
 ): Promise<CatalogProductRecord[]> {
   if (productIds.length === 0) return [];
   return catalogProducts.findByIds(Array.from(new Set(productIds)));
-}
-
-/**
- * Per-product display metadata, the name resolved from the record's per-locale
- * `name` in the response's language, through the `pickLocalized` fallback chain.
- * A product without a record has no entry (the serializer treats it as an
- * unknown name and the storefront falls back to the productId).
- */
-function productMetaOf(
-  products: readonly CatalogProductRecord[],
-  preferredLanguage: string | undefined,
-): Map<string, ProductMeta> {
-  const meta = new Map<string, ProductMeta>();
-  for (const p of products) {
-    meta.set(p.id, {
-      name: pickLocalized(p.name, preferredLanguage),
-      slug: p.slug,
-      sku: p.sku,
-    });
-  }
-  return meta;
 }
 
 declare const crypto: { randomUUID: () => string };

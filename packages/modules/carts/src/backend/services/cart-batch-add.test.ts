@@ -3,21 +3,32 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import { describe, expect, it, vi } from 'vitest';
 import {
   ERROR_CODES,
+  isProductVisibleTo,
   type CatalogPackagingUnitRecord,
+  type CatalogProductAvailabilityPort,
+  type ProductAvailabilityScope,
   type CatalogProductReadPort,
   type CatalogProductRecord,
   type LinePricePort,
   type OrganizationDetailsPort,
   type ProductDisplayModePort,
 } from '@endora-commerce/contracts';
-import {
-  ModuleDisabledError,
-  SalesChannel,
-  type SalesChannelMembershipPort,
-} from '@endora-commerce/platform/kernel';
+import { ModuleDisabledError, SalesChannel } from '@endora-commerce/platform/kernel';
 import { Cart } from '../entities/cart.entity.js';
 import { CartItem } from '../entities/cart-item.entity.js';
 import { CART_MAX_LINES, CartService, type CustomerContext } from './cart-service.js';
+
+/**
+ * The request channel `basketScopeLanguage` resolves against — none (outside a request)
+ * unless a case sets one (feature 163, T138).
+ */
+const requestChannel = vi.hoisted(() => ({
+  current: null as { id: string; languages: string[]; defaultLanguage: string } | null,
+}));
+vi.mock('@endora-commerce/platform/kernel', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@endora-commerce/platform/kernel')>()),
+  currentSalesChannel: () => requestChannel.current,
+}));
 
 /**
  * Feature 155, Phase 7 (T048) — `CartService.addItems`, the one batch every batch
@@ -47,6 +58,7 @@ const B = 'prod-b'; // no minimum
 const C = 'prod-c'; // pieces minimum 10, Pallet of 64 with a minimum of 2 units
 const H = 'prod-h'; // minimum 10, restricted to another organisation — hidden
 const Q = 'prod-q'; // quote-only
+const D = 'prod-d'; // a member switched off — feature 163: not acquirable
 const UNKNOWN = 'prod-unknown';
 const PALLET = 'unit-pallet';
 const RED = 'var-red';
@@ -75,10 +87,19 @@ const PRODUCTS = new Map<string, CatalogProductRecord>([
   [C, product(C, { minOrderQuantity: 10, name: { en: 'Cement', pl: 'Cement PL' } })],
   [H, product(H, { minOrderQuantity: 10, allowedOrganizationIds: ['org-other'] })],
   [Q, product(Q)],
+  [D, product(D, { status: 'inactive' })],
 ]);
 
 const UNITS: CatalogPackagingUnitRecord[] = [
-  { id: PALLET, productId: C, name: 'Pallet', baseQuantity: 64, minOrderUnits: 2 } as CatalogPackagingUnitRecord,
+  {
+    id: PALLET,
+    productId: C,
+    name: 'Pallet',
+    // Feature 163 (FR-079) — the name per language; the line snapshots it in the basket language.
+    nameTranslations: { 'pl-PL': 'Paleta' },
+    baseQuantity: 64,
+    minOrderUnits: 2,
+  } as CatalogPackagingUnitRecord,
 ];
 
 // ── the rig ─────────────────────────────────────────────────────────────────
@@ -110,6 +131,10 @@ function rig(
     resolveLinePrice?: LinePricePort['resolveLinePrice'];
     /** Products each named channel publishes. */
     channels?: Record<string, string[]>;
+    /** Feature 163 (FR-100) — channel id → product id → that channel's minimum. */
+    channelMinimums?: Record<string, Record<string, number | null>>;
+    /** Feature 163 (N2) — channel id → its default language, as the channel accessor answers. */
+    channelDefaultLanguages?: Record<string, string>;
   } = {},
 ): Rig {
   const carts: Row[] = options.carts ?? [];
@@ -194,26 +219,63 @@ function rig(
     },
   };
   const organizations = { findById: async () => null } as unknown as OrganizationDetailsPort;
-  const membership = {
-    filterEntityIdsInChannel: async (channelId: string, _kind: string, ids: string[]) =>
-      ids.filter((id) => (options.channels?.[channelId] ?? []).includes(id)),
-  } as unknown as SalesChannelMembershipPort;
+  // Feature 163 — `catalog`'s availability answer, stubbed as the rule over the
+  // fixture: a member of the channel, globally `active`, visible to the buyer.
+  const availability = {
+    filterAvailable: vi.fn(async (ids: readonly string[], scope: ProductAvailabilityScope) =>
+      new Set(
+        ids.filter((id) => {
+          const p = products.get(id);
+          return (
+            p !== undefined &&
+            p.status === 'active' &&
+            isProductVisibleTo(p, scope.audience) &&
+            // The basket's own channel publishes every fixture product unless a
+            // case says otherwise.
+            (options.channels?.[scope.channelId] ?? (scope.channelId === CUSTOMER.salesChannelId ? [...products.keys()] : [])).includes(id)
+          );
+        }),
+      ),
+    ),
+    // No override in this rig: the caller's baseline pick names the product.
+    effectiveNames: vi.fn(async () => new Map<string, string>()),
+    // Feature 163 (FR-100) — the channel's minimum where a case names one, else the record's.
+    effectiveOrderRules: vi.fn(async (ids: readonly string[], channelId: string) => {
+      const byProduct = options.channelMinimums?.[channelId] ?? {};
+      return new Map(
+        ids.flatMap((id) => {
+          const p = products.get(id);
+          if (!p) return [];
+          const minOrderQuantity = id in byProduct ? (byProduct[id] ?? null) : p.minOrderQuantity;
+          return [[id, { minOrderQuantity, returnable: p.returnable }] as const];
+        }),
+      );
+    }),
+  } as unknown as CatalogProductAvailabilityPort;
   // Asked only when no price list holds the product (issue #236).
   const displayModes: ProductDisplayModePort = { resolveDisplayMode: async () => 'gross_only' };
   const audits: unknown[] = [];
   const auditService = { record: async (entry: unknown) => void audits.push(entry) };
+  const channelReads = {
+    getById: vi.fn(async (id: string) => {
+      const defaultLanguage = options.channelDefaultLanguages?.[id];
+      return defaultLanguage === undefined ? null : { id, defaultLanguage };
+    }),
+  };
 
   const service = new CartService(
     () => em,
     pricing,
     catalog as unknown as CatalogProductReadPort,
     organizations,
-    membership,
     displayModes,
+    availability,
     undefined,
     auditService as never,
+    undefined,
+    channelReads as never,
   );
-  return { service, carts, items, writes, catalog, audits };
+  return { service, carts, items, writes, catalog, audits, availability, channelReads };
 }
 
 function existingCart(overrides: Partial<Row> = {}): Row {
@@ -279,6 +341,52 @@ describe('addItems — resolution first (F1, FR-035)', () => {
     expect(r.items.map((i) => i.productId)).toEqual([B]);
   });
 
+  it('feature 163 (F1, FR-004) — a member product that is not available in the channel gets the same 404', async () => {
+    const r = rig({
+      carts: [existingCart()],
+      channels: { 'ch-x': [B, D] },
+    });
+    const result = await r.service.addItems(
+      ACTOR,
+      [
+        { productId: D, quantity: 1, salesChannelId: 'ch-x' },
+        { productId: B, quantity: 1, salesChannelId: 'ch-x' },
+      ],
+      { onLineError: 'report' },
+    );
+    expect(result.outcomes).toEqual([
+      { index: 0, status: 'failed', error: NOT_FOUND },
+      { index: 1, status: 'added' },
+    ]);
+    // An operator naming the channel is answered in the channel's default language (N2).
+    const scopes = (r.availability.filterAvailable as unknown as { mock: { calls: [string[], ProductAvailabilityScope][] } }).mock.calls.map(
+      ([, scope]) => scope,
+    );
+    expect(scopes.every((scope) => scope.channelId === 'ch-x' && scope.languageCode === null)).toBe(true);
+    expect(r.items.map((i) => i.productId)).toEqual([B]);
+  });
+
+  it('security review (checkpoint B) — a buyer add with no request scope is asked at the basket’s channel, never by audience alone', async () => {
+    const r = rig({ carts: [existingCart()], channels: { [CUSTOMER.salesChannelId]: [B] } });
+    const result = await r.service.addItems(
+      ACTOR,
+      [
+        { productId: D, quantity: 1 },
+        { productId: B, quantity: 1 },
+      ],
+      { onLineError: 'report' },
+    );
+    expect(result.outcomes).toEqual([
+      { index: 0, status: 'failed', error: NOT_FOUND },
+      { index: 1, status: 'added' },
+    ]);
+    const scopes = (r.availability.filterAvailable as unknown as { mock: { calls: [string[], ProductAvailabilityScope][] } }).mock.calls.map(
+      ([, scope]) => scope,
+    );
+    expect(scopes.length).toBeGreaterThan(0);
+    expect(scopes.every((scope) => scope.channelId === CUSTOMER.salesChannelId)).toBe(true);
+  });
+
   it('an unknown packaging unit is the unit 404 and its line counts toward no total', async () => {
     const r = rig({ carts: [existingCart()] });
     const result = await r.service.addItems(
@@ -340,6 +448,21 @@ describe('addItems — resolution first (F1, FR-035)', () => {
 });
 
 // ── 2. two passes with the cart ─────────────────────────────────────────────
+
+describe('addItems — the basket channel’s minimum (spec 163, FR-100)', () => {
+  it('a channel minimum of 1 lifts the global minimum; a channel minimum of 10 applies where the global has none', async () => {
+    const lifted = rig({ carts: [existingCart()], channelMinimums: { [CUSTOMER.salesChannelId]: { [A]: 1 } } });
+    const ok = await lifted.service.addItems(ACTOR, [{ productId: A, variantId: RED, quantity: 3 }], { onLineError: 'report' });
+    expect(ok.outcomes).toEqual([{ index: 0, status: 'added' }]);
+
+    const raised = rig({ carts: [existingCart()], channelMinimums: { [CUSTOMER.salesChannelId]: { [A]: 20 } } });
+    const refused = await raised.service.addItems(ACTOR, [{ productId: A, variantId: RED, quantity: 12 }], {
+      onLineError: 'report',
+    });
+    expect(refused.outcomes[0]).toMatchObject({ index: 0, status: 'below_minimum' });
+    expect(raised.items).toEqual([]);
+  });
+});
 
 describe('addItems — two passes with the cart (D1, FR-006a)', () => {
   it('split variants A-red 5 + A-blue 5 against a minimum of 10 are both added', async () => {
@@ -819,5 +942,73 @@ describe('addItems — bounded work (F4, R20)', () => {
     expect(result.outcomes.every((o) => o.status === 'added')).toBe(true);
     // One unit read for the whole batch, not one per line.
     expect(r.catalog.listPackagingUnitsByProductIds).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Feature 163 (FR-079, T138; owner decision 2026-10-26) — a line ordered by a packaging
+ * unit snapshots the unit's name in the basket's scope language (the request tag resolved
+ * against the basket's channel), else the global name. The minimum refusal keeps naming
+ * the global unit (feature 155's sentence, unchanged here).
+ */
+describe('CartService — the packaging-unit name snapshot in the basket language', () => {
+  const pallets = [{ productId: C, quantity: 2, packagingUnitId: PALLET }];
+
+  it('takes the translation at the request language on the basket channel', async () => {
+    requestChannel.current = { id: CUSTOMER.salesChannelId!, languages: ['en-US', 'pl-PL'], defaultLanguage: 'en-US' };
+    try {
+      const r = rig({ carts: [existingCart()] });
+      const result = await r.service.addItems({ ...ACTOR, languageTag: 'pl' }, pallets, { onLineError: 'report' });
+      expect(result.outcomes.map((o) => o.status)).toEqual(['added']);
+      expect(r.items.map((i) => i['packagingUnitName'])).toEqual(['Paleta']);
+    } finally {
+      requestChannel.current = null;
+    }
+  });
+
+  it('takes the global name in a language with no translation', async () => {
+    requestChannel.current = { id: CUSTOMER.salesChannelId!, languages: ['en-US', 'pl-PL'], defaultLanguage: 'en-US' };
+    try {
+      const r = rig({ carts: [existingCart()] });
+      await r.service.addItems({ ...ACTOR, languageTag: 'en-US' }, pallets, { onLineError: 'report' });
+      expect(r.items.map((i) => i['packagingUnitName'])).toEqual(['Pallet']);
+    } finally {
+      requestChannel.current = null;
+    }
+  });
+
+  it('takes the global name outside a request (no scope language)', async () => {
+    const r = rig({ carts: [existingCart()] });
+    await r.service.addItems({ ...ACTOR, languageTag: 'pl' }, pallets, { onLineError: 'report' });
+    expect(r.items.map((i) => i['packagingUnitName'])).toEqual(['Pallet']);
+  });
+});
+
+/**
+ * Feature 163, owner decision N2 = B (2026-10-26) — an operator naming the channel (the
+ * order-on-behalf and quote-seeded basket paths) has no request language: the unit name
+ * is snapshotted at that channel's default language, as the product name beside it is.
+ * The channel is read only when a packaging unit is named.
+ */
+describe('CartService — the packaging-unit name when an operator names the channel (N2)', () => {
+  const onBehalf = (channel: string) => [{ productId: C, quantity: 2, packagingUnitId: PALLET, salesChannelId: channel }];
+
+  it("takes the translation at the named channel's default language", async () => {
+    const r = rig({ carts: [existingCart()], channels: { 'ch-pl': [C] }, channelDefaultLanguages: { 'ch-pl': 'pl-PL' } });
+    const result = await r.service.addItems(ACTOR, onBehalf('ch-pl'), { onLineError: 'report' });
+    expect(result.outcomes.map((o) => o.status)).toEqual(['added']);
+    expect(r.items.map((i) => i['packagingUnitName'])).toEqual(['Paleta']);
+  });
+
+  it('takes the global name when the default language has no translation', async () => {
+    const r = rig({ carts: [existingCart()], channels: { 'ch-en': [C] }, channelDefaultLanguages: { 'ch-en': 'en-US' } });
+    await r.service.addItems(ACTOR, onBehalf('ch-en'), { onLineError: 'report' });
+    expect(r.items.map((i) => i['packagingUnitName'])).toEqual(['Pallet']);
+  });
+
+  it('does not read the channel for a line with no packaging unit', async () => {
+    const r = rig({ carts: [existingCart()], channels: { 'ch-pl': [A] }, channelDefaultLanguages: { 'ch-pl': 'pl-PL' } });
+    await r.service.addItems(ACTOR, [{ productId: A, quantity: 1, salesChannelId: 'ch-pl' }], { onLineError: 'report' });
+    expect(r.channelReads.getById).not.toHaveBeenCalled();
   });
 });

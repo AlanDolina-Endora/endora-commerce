@@ -131,6 +131,7 @@ const SUBJECTS: readonly Subject[] = [
     // arrived with issue #516: the sidebar's remaining screens (Principle XVI).
     actions: [
       'new-product',
+      'open-archived-products',
       'open-attachment-types',
       'open-attribute-sets',
       'open-attributes',
@@ -301,6 +302,24 @@ describe('batch 15 contributes no palette action while off (Constitution XVII it
       for (const keyword of keywords) {
         expect(action?.keywords, `${id}: ${keyword}`).toContain(keyword);
       }
+    }
+  });
+
+  it('the Archived products action opens its own read-gated route (feature 163, PAL-1 = B)', () => {
+    // Owner decision PAL-1 = B (2026-10-26): "Archived products" is a palette row
+    // of its own. A `targetRoute` carries no query string (`ModuleActionSchema`),
+    // so it targets a dedicated SPA route, `/catalog/products/archived`, which
+    // opens the product list on its Archived tab. That route is declared by the
+    // catalog admin layer **before** the editor's `/catalog/products/:id`; until
+    // it is, the pairing cases above match the editor's pattern (same code) and
+    // pass, so this case pins the action's own half.
+    const action = (
+      REGISTERED_MANIFESTS.find((entry) => entry.manifest.id === 'catalog')?.manifest.actions ?? []
+    ).find((entry) => entry.id === 'open-archived-products');
+    expect(action?.targetRoute).toBe('/catalog/products/archived');
+    expect(action?.requiredPermission).toBe('catalog:read');
+    for (const keyword of ['archived', 'restore', 'archiwum', 'zarchiwizowane']) {
+      expect(action?.keywords, keyword).toContain(keyword);
     }
   });
 

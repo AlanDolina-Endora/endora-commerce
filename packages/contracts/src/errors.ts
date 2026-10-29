@@ -80,6 +80,13 @@ export const ERROR_CODES = {
   // by the products import of `import_export`)
   PRICE_SET_IN_PRICE_BOOKS: 'PRICE_SET_IN_PRICE_BOOKS',
 
+  // Catalog 163 — product data scopes and URL keys (owned by `catalog`)
+  SCOPE_INVALID: 'SCOPE_INVALID',
+  SCOPE_INCOMPLETE: 'SCOPE_INCOMPLETE',
+  URL_KEY_TAKEN: 'URL_KEY_TAKEN',
+  URL_KEY_REDIRECT_TAKEOVER_REQUIRED: 'URL_KEY_REDIRECT_TAKEOVER_REQUIRED',
+  URL_REDIRECT_NOT_FOUND: 'URL_REDIRECT_NOT_FOUND',
+
   // Catalog 002 — Product Links (US4)
   SELF_LINK_NOT_ALLOWED: 'SELF_LINK_NOT_ALLOWED',
   LINK_ALREADY_EXISTS: 'LINK_ALREADY_EXISTS',
@@ -113,6 +120,11 @@ export const ERROR_CODES = {
   // holds a view on the quote request list whose name differs only by case or
   // surrounding spaces.
   RFQ_SAVED_VIEW_NAME_TAKEN: 'RFQ_SAVED_VIEW_NAME_TAKEN',
+  // Feature 163 (security review M1) — 422: the sales channel of an operator's
+  // quote request on a customer's behalf — the one named, or the one the admin
+  // request resolved when none is named (owner decision 2026-10-29 "A") — is not
+  // one of the Organization's active channels.
+  RFQ_SALES_CHANNEL_NOT_ALLOWED: 'RFQ_SALES_CHANNEL_NOT_ALLOWED',
   QUOTE_INCOMPLETE: 'QUOTE_INCOMPLETE',
   QUOTE_VALIDITY_ENDED: 'QUOTE_VALIDITY_ENDED',
   // Quote PDF by e-mail (`specs/153-quote-request-pdf-template/`, owner answer

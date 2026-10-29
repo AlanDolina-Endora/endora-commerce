@@ -627,6 +627,16 @@ export const adminCreateQuoteRequestSchema = z
     items: z.array(adminCreateQuoteRequestLineSchema).min(1),
     expiresInDays: z.number().int().nonnegative().optional(),
     /**
+     * Feature 163 (FR-018) — the sales channel the operator raises the request on:
+     * the channel it is stored on, its lines' names are snapshotted at (in that
+     * channel's default language, N2) and its `warnings` speak about. Absent: the
+     * channel the admin request itself resolved. Either way the channel must be one
+     * of the Organization's active channels, else `422 RFQ_SALES_CHANNEL_NOT_ALLOWED`
+     * before anything is written (owner decision 2026-10-29 "A": the server is the
+     * sole enforcer, so omitting the id does not skip the check).
+     */
+    salesChannelId: uuidSchema.optional(),
+    /**
      * Where the request is being created from — opaque to `quote_requests`,
      * which validates its shape and hands it on with `rfq.created_by_admin.v1`.
      * Not stored and not returned.
@@ -635,6 +645,22 @@ export const adminCreateQuoteRequestSchema = z
   })
   .superRefine((body, ctx) => refineLineGrouping(ctx, body));
 export type AdminCreateQuoteRequest = z.infer<typeof adminCreateQuoteRequestSchema>;
+
+/**
+ * Feature 163 (FR-018) — what `POST /api/v1/admin/quote-requests` reports about
+ * a line it accepted although the product is not available to the request's
+ * Organization at the request's channel, in that channel's default language
+ * (N2): switched off there, outside its publication window, or outside the
+ * channel's audience rule. An operator surface, so the line is accepted and
+ * named (a buyer seam answers one not-found instead). Additive: the response
+ * carries `warnings` only when there is one.
+ */
+export const ADMIN_QUOTE_REQUEST_WARNING_CODES = ['PRODUCT_UNAVAILABLE_IN_SCOPE'] as const;
+export const adminQuoteRequestWarningSchema = z.object({
+  productId: uuidSchema,
+  code: z.enum(ADMIN_QUOTE_REQUEST_WARNING_CODES),
+});
+export type AdminQuoteRequestWarning = z.infer<typeof adminQuoteRequestWarningSchema>;
 
 /** The name of the event that announces a Quote Request an administrator created. */
 export const RFQ_CREATED_BY_ADMIN_EVENT = 'rfq.created_by_admin.v1';
@@ -1010,9 +1036,26 @@ export interface CreateForCustomerOptions {
   /**
    * Feature 155 (D3/D4) — the language a refusal names a product in: the language the
    * caller's response is answered in (`request.responseLanguage()`). Absent, the record's
-   * own fallback chain.
+   * own fallback chain. A message language only: it never decides which (channel,
+   * language) a line is asked about — that is `languageTag`'s.
    */
   language?: string;
+  /**
+   * Feature 163 — the buyer request's language tag (the first `Accept-Language` tag,
+   * `firstLanguageTag`), which the scope language L of every line is resolved from
+   * against the channel's own languages (`scopeLanguageOf`), as the basket's is. Absent:
+   * the channel's default language. Distinct from `language`, which falls back to a
+   * bundle language the channel may switch a product off in. In-process only.
+   */
+  languageTag?: string;
+  /**
+   * Feature 163 — the sales channel the buyer's route resolved, named explicitly so
+   * a buyer's lines are always asked about at a channel (`catalogProductAvailabilityPort`)
+   * and never by audience alone. Absent only for a caller outside a request (a worker, a
+   * fixture), which reads the request scope and, finding none, falls back to the audience
+   * rule. In-process only, like `minimums`.
+   */
+  salesChannelId?: string;
 }
 
 export interface RfqCustomerPort {

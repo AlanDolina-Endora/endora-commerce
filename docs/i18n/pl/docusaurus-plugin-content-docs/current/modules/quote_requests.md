@@ -906,6 +906,27 @@ pozostają w statusie `queued`. Są zapisem, z którego korzystałby proces dor�
 który ten moduł wysyła, to jawna akcja *Wyślij PDF do klienta* (zob. *PDF oferty*), doręczana, gdy
 handlowiec czeka, i zapisywana w historii oferty.
 
+## Produkty zarchiwizowane nigdy nie są pozycjami zapytania
+
+Produktu zarchiwizowanego akcją **Archiwizuj** modułu Catalog nie da się umieścić w zapytaniu
+ofertowym żadną drogą; najpierw trzeba go przywrócić. Odpowiedź każdej z dróg:
+
+- **Klient** — utworzenie zapytania, edycja szkicu i ponowne złożenie, a więc także zamiana
+  koszyka, listy szybkiego zamówienia lub listy zakupowej na zapytanie oraz klonowanie zamówienia
+  — dostaje `404 PRODUCT_NOT_FOUND`, dokładnie to, co produkt nieistniejący, więc nic o produkcie
+  nie zostaje ujawnione.
+- **Administrator** — `POST /api/v1/admin/quote-requests` (utworzenie w imieniu klienta) i
+  `PATCH /api/v1/admin/quote-requests/:id` (modyfikacja) — dostaje `409 PRODUCT_ARCHIVED`
+  („Produkt jest zarchiwizowany.”) z identyfikatorami zarchiwizowanych produktów w
+  `details.productIds` i nic nie zostaje zapisane. Identyfikator produktu, który nie istnieje,
+  nadal daje `404 PRODUCT_NOT_FOUND`. Pozycja niedostępna z innego powodu — wyłączona w kanale
+  sprzedaży lub języku zapytania, poza oknem publikacji lub poza grupą odbiorców — jest tam nadal
+  przyjmowana z ostrzeżeniem `PRODUCT_UNAVAILABLE_IN_SCOPE`.
+- **Zamiana zaakceptowanej oferty na zamówienie**, gdy jej produkt zarchiwizowano po akceptacji,
+  kończy się odpowiedzią `409`, zanim koszyk klienta zostanie zmieniony.
+
+Cenniki to nie dotyczy: produkt zarchiwizowany nadal może mieć cenę w cenniku.
+
 ## Zamiana na zamówienie
 
 `POST /api/v1/quote-requests/:id/convert-to-order` wypełnia koszyk klienta pozycjami zapytania
@@ -992,10 +1013,13 @@ sposoby:
   zakładce **Aktywne**: katalog podzielony na strony, z zakładkami statusów i ich licznikami,
   filtrem typu i wyszukiwaniem po SKU, slugu lub nazwie. Zaznaczenie przetrwa zmianę strony,
   rozmiaru strony i filtrów, a **Dodaj N** dodaje każdy zaznaczony produkt jako pozycję o ilości 1
-  — najwyżej 200 naraz. Produkty robocze i nieaktywne można dodać; produkty nadrzędne typu grouped
-  i bundle są widoczne z powodem i nie da się ich zaznaczyć. Produkt, który już jest w zapytaniu,
+  — najwyżej 200 naraz. Produkty nieaktywne można dodać. Produkty zarchiwizowane nie są oferowane:
+  przeglądarka nie ma zakładki Zarchiwizowane, a zakładka **Wszystkie** je pomija. Produkty
+  nadrzędne typu grouped i bundle są widoczne z powodem i nie da się ich zaznaczyć. Produkt, który już jest w zapytaniu,
   można dodać ponownie jako osobną pozycję — na przykład, by umieścić go w drugiej grupie.
 - **Szybkie dodawanie po nazwie lub SKU**, obok, dopisuje jeden produkt według tych samych zasad.
+  Produkt zarchiwizowany pojawia się w wynikach jako nieaktywny, z powodem *zarchiwizowany*, tak
+  jak na ekranie tworzenia zamówienia.
 
 Bez uprawnienia `catalog:read` obie te opcje są nieaktywne i każda pokazuje podpowiedź.
 
@@ -1020,6 +1044,32 @@ zapytanie ofertowe** pozostaje nieaktywne, dopóki nie zostanie poprawiona albo 
 jest każda pozycja widoczna na ekranie. Suma bieżąca liczy pozycje, które mają i poprawną ilość, i
 cenę. Klient bez organizacji nadal wywołuje dotychczasowe ostrzeżenie, bo zapytanie ofertowe jej
 wymaga.
+
+**Kanał sprzedaży, w którym powstaje zapytanie,** wybiera się pod klientem, spośród aktywnych
+kanałów sprzedaży organizacji klienta. Gdy organizacja ma dokładnie jeden, jest on wybrany z góry;
+gdy ma kilka, wybierz jeden — do tego czasu **Utwórz zapytanie ofertowe** pozostaje nieaktywne.
+Gdy organizacja nie ma żadnego aktywnego kanału sprzedaży, ekran to komunikuje, a **Utwórz
+zapytanie ofertowe** pozostaje nieaktywne, dopóki organizacja nie zostanie przypisana do jednego z nich.
+Kanał jest wysyłany jako `salesChannelId`: zapytanie jest w nim zapisywane, nazwy pozycji są brane
+w domyślnym języku tego kanału, a dostępność produktów jest oceniana właśnie tam. W tym kanale
+podpowiadane są też uzgodnione ceny, a wybór innego kanału czyści każdą cenę, która nie została
+wpisana ręcznie, i wyznacza ją ponownie. Bez tego pola zapytanie
+powstaje w kanale, który rozpoznało samo żądanie panelu administracyjnego — w kanale domyślnym
+systemu, chyba że żądanie wskazuje inny nagłówkiem `X-Sales-Channel`. W obu przypadkach serwer
+sprawdza kanał: kanał, który nie należy do aktywnych kanałów sprzedaży organizacji — nieznany,
+przypisany tylko innym organizacjom albo nieaktywny — jest odrzucany z
+`422 RFQ_SALES_CHANNEL_NOT_ALLOWED`, zanim cokolwiek zostanie zapisane, także wtedy, gdy nie wybrano
+żadnego kanału, a kanał zastępczy do nich nie należy. Gdy nie da się odczytać kanałów organizacji —
+odczyt się nie powiedzie albo zostanie odrzucony, na przykład przy błędzie sieci — ekran to
+komunikuje i pokazuje przycisk **Ponów**, a **Utwórz zapytanie ofertowe** pozostaje nieaktywne,
+dopóki kanały nie zostaną odczytane; w trakcie ponawiania przycisk jest nieaktywny. Uzgodnione ceny
+są podpowiadane dopiero wtedy, gdy kanał jest już ustalony.
+
+Gdy produkt z pozycji nie jest dostępny dla klienta w tym kanale — jest w nim wyłączony, poza oknem
+publikacji albo poza swoją grupą odbiorców — zapytanie i tak powstaje, a odpowiedź wymienia tę
+pozycję w `warnings` z kodem `PRODUCT_UNAVAILABLE_IN_SCOPE`. Ekran pozostaje wtedy otwarty i
+wymienia te produkty pod nagłówkiem **Zapytanie ofertowe utworzone z ostrzeżeniami**, a **Otwórz
+zapytanie ofertowe** przechodzi do niego; z tego miejsca zapytania nie da się wysłać drugi raz.
 
 ## Panele na ekranie zapytania ofertowego
 

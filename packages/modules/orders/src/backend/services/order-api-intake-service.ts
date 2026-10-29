@@ -2,16 +2,19 @@ import { createHash } from 'node:crypto';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type { Redis } from 'ioredis';
 import {
+  ANONYMOUS_PRODUCT_AUDIENCE,
   ERROR_CODES,
   type AddressServicePort,
   type ApiPlaceOrderRequest,
   type CartWritePort,
+  type CatalogProductAvailabilityPort,
   type CatalogProductReadPort,
   type CatalogProductRecord,
   type LinePricePort,
   type LinePricesPort,
   type OrganizationDetailsPort,
   type OrganizationRecord,
+  type ProductAudience,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
@@ -60,6 +63,13 @@ export interface OrderApiIntakeDeps {
    */
   salesChannelMembership?: SalesChannelMembershipPort | undefined;
   /**
+   * Feature 163 (owner decision W5 = A) — `catalog`'s availability answer at
+   * the key's channel (its default language) for the caller: effective status,
+   * publication window and the channel's audience rule. Required: an absent
+   * gate would be an intake that answers without one.
+   */
+  catalogAvailability: Pick<CatalogProductAvailabilityPort, 'filterAvailable'>;
+  /**
    * The SAME resolver cart pricing uses.
    *
    * Required since issue #124. "Absent" used to select the `defaultPrice`
@@ -93,7 +103,15 @@ export class OrderApiIntakeService {
     binding: ApiKeyOrderBinding,
     idempotencyKey: string | undefined,
     body: ApiPlaceOrderRequest,
-    options: { language?: string | undefined } = {},
+    options: {
+      language?: string | undefined;
+      /**
+       * Feature 163 (W5) — the caller's audience, from the request's resolved
+       * actor (`productAudienceOf`). Absent: the anonymous audience, the
+       * fail-closed end.
+       */
+      audience?: ProductAudience | undefined;
+    } = {},
   ): Promise<IntakeResult> {
     // Feature 155 (FR-038, owner ruling 2026-10-16) — first, before the
     // idempotency record, the lock or any line is resolved: a request no basket
@@ -150,7 +168,7 @@ export class OrderApiIntakeService {
       }
 
       try {
-        const order = await this.#placeGuarded(binding, body, options.language);
+        const order = await this.#placeGuarded(binding, body, options.language, options.audience);
         await this.#settleIntent(intent.id, { status: 'succeeded', orderId: order.id });
         await this.#auditPlacement(binding, order);
         return { order, replayed: false };
@@ -172,6 +190,7 @@ export class OrderApiIntakeService {
     binding: ApiKeyOrderBinding,
     body: ApiPlaceOrderRequest,
     language: string | undefined,
+    audience: ProductAudience | undefined,
   ): Promise<Order> {
     const em = this.deps.emFactory();
     const channel = await em.findOne(SalesChannel, { id: binding.salesChannelId });
@@ -200,11 +219,10 @@ export class OrderApiIntakeService {
 
     // Step 4 — SKU → product + bound-channel assortment + resolvable price.
     // Refusals are whole-order 422 with per-line issues; nothing persists.
+    // Feature 163 — the SKU read applies no status of its own: the effective
+    // status at the channel is the availability rule's (step 4b).
     const skus = Array.from(new Set(body.lines.map((l) => l.sku)));
-    const products = await this.deps.catalogProductRead.findBySkus(skus, {
-      liveOnly: true,
-      activeOnly: true,
-    });
+    const products = await this.deps.catalogProductRead.findBySkus(skus, { liveOnly: true });
     const productBySku = new Map(products.map((p) => [p.sku, p]));
     const inChannel = new Set<string>();
     for (const product of products) {
@@ -233,7 +251,7 @@ export class OrderApiIntakeService {
     for (const [index, line] of body.lines.entries()) {
       const product = assorted.get(index);
       if (!product) {
-        // Unknown / inactive / unpublished are indistinguishable — no leak.
+        // Unknown / unpublished are indistinguishable — no leak.
         issues.push({
           path: `lines.${index}.sku`,
           issue: ERROR_CODES.SKU_NOT_IN_ASSORTMENT,
@@ -258,6 +276,26 @@ export class OrderApiIntakeService {
         'One or more order lines were refused.',
         issues,
       );
+    }
+
+    // Step 4b — feature 163 (owner decision W5 = A): every resolved line's
+    // product must be available at the key's channel (its default language —
+    // an API order carries no storefront language) to the caller, now. A
+    // product that is not — switched off there, outside its window or outside
+    // the channel's audience — answers exactly what a product hidden from the
+    // bound Organization always answered here (feature 155, F1 / US4 #16): the
+    // basket's `404 PRODUCT_NOT_FOUND`, no name, no minimum, nothing placed.
+    // It is asked after the per-line 422 so that answer keeps its precedence.
+    const available = await this.deps.catalogAvailability.filterAvailable(
+      [...new Set(resolvedLines.map((line) => line.productId))],
+      {
+        channelId: binding.salesChannelId,
+        languageCode: null,
+        audience: audience ?? ANONYMOUS_PRODUCT_AUDIENCE,
+      },
+    );
+    if (resolvedLines.some((line) => !available.has(line.productId))) {
+      throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'Product not found.');
     }
 
     const customerCtx = {

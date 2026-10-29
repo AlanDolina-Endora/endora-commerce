@@ -15,6 +15,8 @@ function lookupOf(opts: {
   products?: ProductLike[];
   variantsBySku?: VariantBySku[];
   variantsByParent?: Array<VariantLike & { parentProductId: string }>;
+  /** Feature 163 (FR-100) — channel id → product id → the channel's minimum. */
+  channelMinimums?: Record<string, Record<string, number | null>>;
 }): QuickOrderCatalogLookup {
   const products = opts.products ?? [];
   const variantsBySku = opts.variantsBySku ?? [];
@@ -24,6 +26,10 @@ function lookupOf(opts: {
     findVariantsBySku: async (skus) => variantsBySku.filter((v) => skus.includes(v.sku)),
     findVariantsByParent: async (ids) =>
       variantsByParent.filter((v) => ids.includes(v.parentProductId)),
+    channelMinimums: async (ids, _audience, salesChannelId) => {
+      const byProduct = (salesChannelId && opts.channelMinimums?.[salesChannelId]) || {};
+      return new Map(ids.filter((id) => id in byProduct).map((id) => [id, byProduct[id] ?? null]));
+    },
   };
 }
 
@@ -42,7 +48,7 @@ describe('QuickOrderImportPipeline', () => {
   it('recognizes valid rows and rejects unknown / archived / bad-qty / missing-sku rows', async () => {
     const pipeline = new QuickOrderImportPipeline(
       lookupOf({
-        products: [ACTIVE('p1', 'ABC'), { id: 'p2', sku: 'OLD', status: 'inactive', deletedAt: null }],
+        products: [ACTIVE('p1', 'ABC'), { id: 'p2', sku: 'OLD', status: 'active', deletedAt: null, archivedAt: new Date() }],
       }),
     );
     const csv = ['sku,quantity', 'ABC,2', 'NOPE,1', 'OLD,1', 'ABC,0', ',3'].join('\n');
@@ -52,6 +58,25 @@ describe('QuickOrderImportPipeline', () => {
     expect(result.recognized[0]).toMatchObject({ productId: 'p1', variantId: null, quantity: 2 });
     const reasons = result.rejected.map((r) => r.reason).sort();
     expect(reasons).toEqual(['product_archived', 'product_not_found', 'quantity_invalid', 'sku_missing']);
+  });
+
+  it('reads "archived" from archivedAt, never from the status (spec 163, FR-010, FR-019)', async () => {
+    const pipeline = new QuickOrderImportPipeline(
+      lookupOf({
+        products: [
+          { id: 'a1', sku: 'ARCH-ON', status: 'active', deletedAt: null, archivedAt: new Date() },
+          { id: 'a2', sku: 'ARCH-OFF', status: 'inactive', deletedAt: null, archivedAt: new Date() },
+          // Switched off but not archived: the pipeline does not judge the status —
+          // on a channel the lookup's availability filter answers it not-found (P6).
+          { id: 'i1', sku: 'OFF', status: 'inactive', deletedAt: null, archivedAt: null },
+        ],
+      }),
+    );
+    const csv = ['sku,quantity', 'ARCH-ON,1', 'ARCH-OFF,1', 'OFF,1'].join('\n');
+    const result = await pipeline.run(parseCsvRows(csv), { maxRows: 100, audience: AUDIENCE });
+
+    expect(result.rejected.map((r) => r.reason)).toEqual(['product_archived', 'product_archived']);
+    expect(result.recognized.map((r) => r.productId)).toEqual(['i1']);
   });
 
   it('rejects every data row as malformed when the header is unusable', async () => {
@@ -212,6 +237,23 @@ describe('QuickOrderImportPipeline', () => {
       const byReason = new Map(result.rejected.map((r) => [r.reason, r]));
       expect(byReason.get('variant_not_resolved')).toMatchObject({ line: 3 });
       expect(byReason.get('below_minimum')).toMatchObject({ line: 2, minimum: 10, productTotal: 4 });
+    });
+
+    it('judges the minimum of the buyer’s channel, not the global one (spec 163, FR-100)', async () => {
+      const lookup = lookupOf({
+        products: [A(null), D],
+        channelMinimums: { b2b: { pA: 10 }, b2c: { pA: 1 } },
+      });
+      const pipeline = new QuickOrderImportPipeline(lookup);
+      const csv = 'sku,quantity\nA,5';
+      const inB2b = await pipeline.run(parseCsvRows(csv), { audience: BUYER, salesChannelId: 'b2b' });
+      expect(inB2b.rejected).toEqual([{ line: 2, raw: 'A,5', reason: 'below_minimum', minimum: 10, productTotal: 5 }]);
+      const inB2c = await pipeline.run(parseCsvRows(csv), { audience: BUYER, salesChannelId: 'b2c' });
+      expect(inB2c.rejected).toEqual([]);
+      // A channel that overrides nothing keeps the global minimum.
+      const global10 = new QuickOrderImportPipeline(lookupOf({ products: [A(10)], channelMinimums: { b2c: { pA: 1 } } }));
+      expect((await global10.run(parseCsvRows(csv), { audience: BUYER, salesChannelId: 'b2b' })).rejected).toHaveLength(1);
+      expect((await global10.run(parseCsvRows(csv), { audience: BUYER, salesChannelId: 'b2c' })).rejected).toEqual([]);
     });
 
     it('ignores a product with no minimum, a minimum of 1, and a stored minimum on an ineligible type', async () => {

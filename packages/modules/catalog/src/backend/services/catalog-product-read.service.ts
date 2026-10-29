@@ -19,6 +19,7 @@ import { ProductLink } from '../entities/product-link.entity.js';
 import { ProductPackagingUnit } from '../entities/product-packaging-unit.entity.js';
 import { ProductValueOverride } from '../entities/product-value-override.entity.js';
 import { ProductVariant } from '../entities/product-variant.entity.js';
+import { uuidArrayLiteral } from './sql-id-arrays.js';
 
 /**
  * The row-level read model `catalog` publishes (feature 075, Phase P).
@@ -371,15 +372,6 @@ function productFilter(
   return {};
 }
 
-/**
- * A Postgres array literal of ids for one bound parameter. `em.execute` formats
- * a JavaScript array as a list of values, not one array, so the literal is
- * built here: every element double-quoted, `\` and `"` escaped.
- */
-function uuidArrayLiteral(ids: readonly string[]): string {
-  return `{${ids.map((id) => `"${id.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`).join(',')}}`;
-}
-
 function toPricingRef(row: { id: string; attribute_values: Record<string, unknown> | null }): CatalogProductPricingRef {
   return { id: row.id, attributeValues: row.attribute_values ?? {} };
 }
@@ -412,6 +404,8 @@ export function toCatalogProductRecord(product: Product): CatalogProductRecord {
     fulfilmentStrategyWarehouseOrder: product.fulfilmentStrategyWarehouseOrder ?? null,
     minOrderQuantity: product.minOrderQuantity ?? null,
     returnable: product.returnable,
+    publishFrom: product.publishFrom ?? null,
+    publishUntil: product.publishUntil ?? null,
   };
 }
 
@@ -442,6 +436,8 @@ export function toCatalogPackagingUnitRecord(
     createdAt: unit.createdAt,
     updatedAt: unit.updatedAt,
     minOrderUnits: unit.minOrderUnits ?? null,
+    // Feature 163 (FR-079) — the basket and quote-request snapshots take the name in the line's language.
+    nameTranslations: { ...(unit.nameTranslations ?? {}) },
   };
 }
 

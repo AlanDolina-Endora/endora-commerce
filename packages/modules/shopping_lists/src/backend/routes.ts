@@ -5,6 +5,7 @@ import {
   createShoppingListRequestSchema,
   renameShoppingListRequestSchema,
   updateShoppingListItemRequestSchema,
+  firstLanguageTag,
 } from '@endora-commerce/contracts';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { getResolvedChannel } from '@endora-commerce/platform/kernel';
@@ -143,6 +144,7 @@ export async function registerShoppingListRoutes(
         ...(body.variantId ? { variantId: body.variantId } : {}),
         quantity: body.quantity,
         ...(body.note ? { note: body.note } : {}),
+        ...languageTagOf(request),
       });
       const { list, items } = await service.getByIdWithItems(ctx, request.params.id);
       reply.status(201);
@@ -208,8 +210,11 @@ export async function registerShoppingListRoutes(
     async (request) => {
       const ctx = resolveCustomerContext(request);
       const body = convertShoppingListRequestSchema.parse(request.body ?? {});
+      // Feature 163 — the lines are judged at the request's channel and scope language.
       const result = await service.convertToRfq(ctx, request.params.id, body.itemIds, {
         language: await request.responseLanguage(),
+        ...languageTagOf(request),
+        salesChannelId: getResolvedChannel(request).id,
       });
       return { data: result };
     },
@@ -236,4 +241,10 @@ function serializeWithItems(list: ShoppingList, items: ShoppingListItem[]): Reco
     createdAt: list.createdAt.toISOString(),
     updatedAt: list.updatedAt.toISOString(),
   };
+}
+
+/** Feature 163 — the request's first `Accept-Language` tag, as `{ languageTag }` when present. */
+function languageTagOf(request: FastifyRequest): { languageTag?: string } {
+  const tag = firstLanguageTag(request.headers['accept-language']);
+  return tag ? { languageTag: tag } : {};
 }

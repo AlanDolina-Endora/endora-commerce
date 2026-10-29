@@ -7,6 +7,8 @@ import type {
   CartQueryPort,
   CartReadPort,
   CartWritePort,
+  CatalogProductAvailabilityPort,
+  CatalogProductUrlKeyReadPort,
   CatalogProductReadPort,
   CustomerAccountReadPort,
   LinePricesPort,
@@ -26,6 +28,7 @@ import { lazyPort } from '@endora-commerce/platform/kernel';
 import type { OrganizationReadPort } from '@endora-commerce/platform/kernel';
 import type { RequireAdminFactory, RequireCustomerGuard } from '@endora-commerce/platform/kernel';
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
+import type { SalesChannelResolutionPort } from '@endora-commerce/platform/kernel';
 import type { SettingsReadPort } from '@endora-commerce/platform/kernel';
 import { abandonmentSettingsReaders } from './services/cart-abandonment-settings.js';
 import { CartQueryService } from './services/cart-query-service.js';
@@ -200,6 +203,7 @@ export function registerModule(ctx: ModuleContext): void {
             lazyPort<CustomerAccountReadPort>(ctx, 'customerAccountReadPort'),
             lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
             lazyPort<OrderQuoteSourcePort>(ctx, 'orderQuoteSourcePort'),
+            lazyPort<CatalogProductAvailabilityPort>(ctx, 'catalogProductAvailabilityPort'),
           ),
       )
       .singleton(),
@@ -242,11 +246,13 @@ export function registerModule(ctx: ModuleContext): void {
             lazyPort<LinePricesPort>(ctx, 'pricingService'),
             lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
             lazyPort<OrganizationDetailsPort>(ctx, 'organizationDetailsPort'),
-            lazyPort<SalesChannelMembershipPort>(ctx, 'salesChannelMembershipPort'),
             lazyPort<ProductDisplayModePort>(ctx, 'productDisplayModePort'),
+            lazyPort<CatalogProductAvailabilityPort>(ctx, 'catalogProductAvailabilityPort'),
             cartApprovalService,
             cartAuditService,
             cartRecomputeCache,
+            // Feature 163 (N2) — a named channel's default language, for the unit name.
+            lazyPort<SalesChannelResolutionPort>(ctx, 'salesChannelResolutionPort'),
           ),
       )
       .singleton(),
@@ -341,9 +347,14 @@ export function registerModule(ctx: ModuleContext): void {
       requireCustomer,
       cartService,
       catalogProducts: lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
+      catalogAvailability: lazyPort<CatalogProductAvailabilityPort>(ctx, 'catalogProductAvailabilityPort'),
+      // Feature 163 (T113a, R28) — basket and up-sell links use the effective key.
+      catalogUrlKeys: lazyPort<CatalogProductUrlKeyReadPort>(ctx, 'catalogProductUrlKeyReadPort'),
       cartUpsellService: new CartUpsellService(
         emFactory,
         lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
+        lazyPort<CatalogProductAvailabilityPort>(ctx, 'catalogProductAvailabilityPort'),
+        lazyPort<CatalogProductUrlKeyReadPort>(ctx, 'catalogProductUrlKeyReadPort'),
       ),
       cartCouponService: new CartCouponService(
         emFactory,

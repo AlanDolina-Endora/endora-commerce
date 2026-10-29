@@ -5,6 +5,7 @@ import { ApiError, apiClient } from '@endora-commerce/admin-kit/lib';
 import {
   Alert,
   AlertDescription,
+  AlertTitle,
   Button,
   Card,
   CardContent,
@@ -21,7 +22,9 @@ import {
   type ComboboxOption,
 } from '@endora-commerce/admin-kit/ui';
 import {
+  adminLanguageToLocale,
   LineGroupsEditor,
+  pickCategoryDisplayName,
   ProductBrowserDialog,
   ProductBrowserTrigger,
   ProductPicker,
@@ -30,11 +33,17 @@ import {
   type ProductBrowserItem,
   type ProductBrowserRules,
 } from '@endora-commerce/admin-kit/components';
-import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { useTranslation, useTranslationContext } from '@endora-commerce/admin-kit/i18n';
 import { createPricePrefillQueue, type PricePrefillQueue } from '../lib/price-prefill-queue';
 import { SectionSummary, sectionTotals, useQuoteLineGroupLabels, useSectionSummaryText } from '../line-groups.js';
 import { quoteNet } from '../quote-totals.js';
-import { lineAmountHalfUp, unitPriceDisplayText } from '@endora-commerce/contracts';
+import {
+  lineAmountHalfUp,
+  unitPriceDisplayText,
+  type AdminQuoteRequestWarning,
+  type OrganizationSalesChannelOption,
+  type OrganizationSalesChannelsResponse,
+} from '@endora-commerce/contracts';
 
 /**
  * Admin "create a Quote Request on behalf of a customer" (feature 008 US4).
@@ -114,6 +123,28 @@ function readOpenedWith(params: URLSearchParams): OpenedWith {
     // A path of this application only: never a scheme, a host or `//`.
     returnTo: /^\/(?![/\\])/.test(returnTo) ? returnTo : null,
   };
+}
+
+/**
+ * Feature 163 (FR-018, T155 §1.5c, security review M1) — the channels an
+ * operator may raise the customer's request on: exactly the set the API accepts
+ * (`createOnBehalf` refuses anything else with `422 RFQ_SALES_CHANNEL_NOT_ALLOWED`),
+ * the Organization's own active channels. Never another active channel, nor the
+ * system default: an Organization with no active channel of its own gets an
+ * empty list, and the screen says so and sends nothing. The preselection is the
+ * only choice when there is one, else none — the operator chooses.
+ */
+function channelChoices(
+  assignment: Pick<OrganizationSalesChannelsResponse['data'], 'assignedSalesChannelIds' | 'options'>,
+): { options: OrganizationSalesChannelOption[]; preselected: string } {
+  const assigned = new Set(assignment.assignedSalesChannelIds);
+  const options = assignment.options.filter((c) => c.active && assigned.has(c.id));
+  return { options, preselected: options.length === 1 ? options[0]!.id : '' };
+}
+
+/** The channel's name in the admin language, picked as every admin surface picks a name map. */
+function channelLabel(c: OrganizationSalesChannelOption, locale: string): string {
+  return pickCategoryDisplayName(c.name, c.code, locale);
 }
 
 function customerLabel(c: AdminCustomerListItem): string {
@@ -208,10 +239,16 @@ function CustomerPicker(props: {
   );
 }
 
-/** The quote request's selectability rules for the picker and the quick search (Clarifications). */
+/**
+ * The quote request's selectability rules for the picker and the quick search (Clarifications).
+ * An archived product cannot be quoted (feature 163, owner decision P-3 → A): the browser offers
+ * no Archived tab, and the quick search lists archived products refused with the reason, as the
+ * order's does (owner decision RFQ-c → B).
+ */
 const RFQ_PRODUCT_RULES: ProductBrowserRules = {
   initialStatus: 'active',
   blockedTypes: ['grouped', 'bundle'],
+  blockArchived: true,
 };
 
 /** Feature 159 (research N-31) — nothing is "already added": a product may be a line twice. */
@@ -240,6 +277,7 @@ function productLine(item: ProductBrowserItem, groupKey: string | null, key: str
 
 export function RfqCreatePage(): ReactNode {
   const t = useTranslation('core');
+  const locale = adminLanguageToLocale(useTranslationContext().language);
   const tGroups = useTranslation('quote_requests');
   const groupLabels = useQuoteLineGroupLabels();
   const summaryText = useSectionSummaryText();
@@ -267,6 +305,70 @@ export function RfqCreatePage(): ReactNode {
       alive = false;
     };
   }, [openedWith.customerAccountId]);
+
+  // Feature 163 (T155 §1.5c) — the channel the request is raised on, chosen
+  // among the customer's Organization's active channels. Empty options: the
+  // Organization has no active channel, and nothing is sent. While they are
+  // being read nothing can be sent either: until the answer is in, the screen
+  // cannot tell an Organization whose channels it will offer from one it cannot.
+  // When the read fails or is refused (a network error, a server error) the
+  // screen says so with a retry and nothing is sent: the server checks the
+  // channel even when none is named (owner decision 2026-10-29 "A"), so a blind
+  // request would only be refused, or land on a channel nobody chose. The alert
+  // stays while a retry is in flight, its button inert.
+  const [channelOptions, setChannelOptions] = useState<OrganizationSalesChannelOption[] | null>(null);
+  const [channelsLoading, setChannelsLoading] = useState(false);
+  const [channelsFailed, setChannelsFailed] = useState(false);
+  const [channelsAttempt, setChannelsAttempt] = useState(0);
+  const [salesChannelId, setSalesChannelId] = useState('');
+  // The Organization the options and the choice were read for: until the new
+  // customer's channels are in, the previous customer's channel is no channel.
+  const [channelsFor, setChannelsFor] = useState('');
+  const organizationId = customer?.organizationId ?? '';
+  const chosenChannelId = organizationId !== '' && channelsFor === organizationId ? salesChannelId : '';
+  const channelRef = useRef(chosenChannelId);
+  useEffect(() => {
+    channelRef.current = chosenChannelId;
+  });
+  const channelsReadFor = useRef('');
+  useEffect(() => {
+    // A retry keeps the failure on screen until it is answered; a new Organization starts afresh.
+    if (channelsReadFor.current !== organizationId) {
+      channelsReadFor.current = organizationId;
+      setChannelsFailed(false);
+    }
+    setChannelOptions(null);
+    setSalesChannelId('');
+    setChannelsFor('');
+    setChannelsLoading(Boolean(organizationId));
+    if (!organizationId) return undefined;
+    let alive = true;
+    void apiClient
+      .get<OrganizationSalesChannelsResponse>(`/api/v1/admin/organizations/${organizationId}/sales-channels`)
+      .then((res) => {
+        if (!alive) return;
+        if (!Array.isArray(res.data?.options)) {
+          setChannelsFailed(true);
+          return;
+        }
+        const { options, preselected } = channelChoices(res.data);
+        setChannelsFailed(false);
+        setChannelOptions(options);
+        setSalesChannelId(preselected);
+        setChannelsFor(organizationId);
+      })
+      .catch(() => {
+        if (alive) setChannelsFailed(true);
+      })
+      .finally(() => {
+        if (alive) setChannelsLoading(false);
+      });
+    return (): void => {
+      alive = false;
+    };
+  }, [organizationId, channelsAttempt]);
+  // After a create the answer warned about: the request exists, the operator reads the warning.
+  const [created, setCreated] = useState<{ id: string; warnings: AdminQuoteRequestWarning[] } | null>(null);
   const [lines, setLines] = useState<LineRow[]>([]);
   const [browserOpen, setBrowserOpen] = useState(false);
   // Feature 159 — the new quote's groups, and where the browser's products go:
@@ -306,6 +408,7 @@ export function RfqCreatePage(): ReactNode {
         const res = await apiClient.post<{ data: Array<{ price: { amount: string } | null }> }>(
           '/api/v1/admin/price-books/resolve',
           {
+            ...(q.salesChannelId ? { salesChannelId: q.salesChannelId } : {}),
             buyer: { organizationId: q.organizationId, customerAccountId: q.customerId },
             lines: [{ key: 'line', productId: q.productId, quantity: q.quantity }],
           },
@@ -341,7 +444,9 @@ export function RfqCreatePage(): ReactNode {
       const queue = queueRef.current;
       if (!queue) return;
       const quantity = parsePositiveInt(row.quantityInput);
-      if (row.priceSource === 'manual' || quantity === null || !cust?.organizationId) {
+      // No channel settled yet, no price: a request is never sent without one
+      // (owner decision 2026-10-29 "A"), so a channel-less price would answer nothing.
+      if (row.priceSource === 'manual' || quantity === null || !cust?.organizationId || channelRef.current === '') {
         queue.forget(row.key);
         markResolving(row.key, false);
         return;
@@ -352,6 +457,8 @@ export function RfqCreatePage(): ReactNode {
         quantity,
         customerId: cust.id,
         organizationId: cust.organizationId,
+        // Feature 163 — priced on the channel the request is raised on.
+        salesChannelId: channelRef.current,
       });
       markResolving(row.key, true);
     },
@@ -361,6 +468,7 @@ export function RfqCreatePage(): ReactNode {
   // A customer change (including the one the page was opened with) clears every
   // price not typed by hand and asks again for the new customer — a previous
   // customer's price never stays on as if it were this one's (research R-11).
+  // A channel change does the same (feature 163): a price answers one channel.
   const linesRef = useRef(lines);
   useEffect(() => {
     linesRef.current = lines;
@@ -368,7 +476,7 @@ export function RfqCreatePage(): ReactNode {
   const pricedForRef = useRef<string | null>(null);
   useEffect(() => {
     // Identity and organization, not the object: re-reading the same customer is no change.
-    const key = `${customer?.id ?? ''}:${customer?.organizationId ?? ''}`;
+    const key = `${customer?.id ?? ''}:${customer?.organizationId ?? ''}:${chosenChannelId}`;
     if (pricedForRef.current === key) return;
     pricedForRef.current = key;
     setLines((prev) =>
@@ -379,7 +487,7 @@ export function RfqCreatePage(): ReactNode {
         : prev,
     );
     for (const row of linesRef.current) prefill(row, customer);
-  }, [customer, prefill]);
+  }, [customer, chosenChannelId, prefill]);
 
   /**
    * Append products as lines, in the order given — a product already a line
@@ -456,7 +564,8 @@ export function RfqCreatePage(): ReactNode {
   );
   // Feature 159 — every group needs a name before the request can be created.
   const groupsNamed = groups.every((group) => group.name.trim() !== '');
-  const canSubmit = hasOrg && lines.length > 0 && allLinesComplete && groupsNamed && !busy;
+  const channelChosen = !channelsLoading && !channelsFailed && channelOptions !== null && chosenChannelId !== '';
+  const canSubmit = hasOrg && lines.length > 0 && allLinesComplete && groupsNamed && channelChosen && !busy && !created;
   // In display order: each group's lines, then the ungrouped ones.
   const knownGroups = new Set(groups.map((group) => group.key));
   const orderedLines = [
@@ -464,15 +573,25 @@ export function RfqCreatePage(): ReactNode {
     ...parsedLines.filter((l) => l.row.groupKey === null || !knownGroups.has(l.row.groupKey)),
   ];
 
+  /** Where the screen goes once the request exists. */
+  const leaveFor = (id: string): void => {
+    if (openedWith.returnTo) {
+      navigate(openedWith.returnTo, { state: { createdDocument: { id } } });
+    } else {
+      navigate(`/quote-requests/${id}`);
+    }
+  };
+
   const submit = async (): Promise<void> => {
-    if (!customer?.organizationId || !allLinesComplete || !groupsNamed) return;
+    if (!customer?.organizationId || !allLinesComplete || !groupsNamed || !channelChosen || created) return;
     setBusy(true);
     setError(null);
     try {
       const trimmedExpiry = expiresInDays.trim();
-      const res = await apiClient.post<{ data: { id: string } }>('/api/v1/admin/quote-requests', {
+      const res = await apiClient.post<{ data: { id: string }; warnings?: AdminQuoteRequestWarning[] }>('/api/v1/admin/quote-requests', {
         organizationId: customer.organizationId,
         customerAccountId: customer.id,
+        salesChannelId: chosenChannelId,
         ...(headerNote.trim() ? { headerNote: headerNote.trim() } : {}),
         ...(trimmedExpiry !== '' ? { expiresInDays: Number(trimmedExpiry) } : {}),
         // Sent only when there is a group: a request without one is unchanged.
@@ -487,10 +606,12 @@ export function RfqCreatePage(): ReactNode {
         })),
         ...(openedWith.origin ? { origin: openedWith.origin } : {}),
       });
-      if (openedWith.returnTo) {
-        navigate(openedWith.returnTo, { state: { createdDocument: { id: res.data.id } } });
+      // Feature 163 (FR-018) — accepted, but some lines are not available to
+      // the customer on the chosen channel: named here before the operator leaves.
+      if (res.warnings && res.warnings.length > 0) {
+        setCreated({ id: res.data.id, warnings: res.warnings });
       } else {
-        navigate(`/quote-requests/${res.data.id}`);
+        leaveFor(res.data.id);
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.envelope.error.message : t('rfqCreate.error'));
@@ -533,6 +654,42 @@ export function RfqCreatePage(): ReactNode {
             <Alert variant="destructive">
               <AlertDescription>{t('rfqCreate.noOrgWarning')}</AlertDescription>
             </Alert>
+          ) : null}
+          {channelsFailed ? (
+            // Not read, so nothing to offer and nothing sent: said, with a way back.
+            <Alert variant="destructive">
+              <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                <span>{t('rfqCreate.channelsLoadError')}</span>
+                <Button
+                  className="min-h-11 sm:min-h-8"
+                  variant="outline"
+                  size="sm"
+                  disabled={channelsLoading}
+                  onClick={(): void => setChannelsAttempt((n) => n + 1)}
+                >
+                  {t('common.action.retry')}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : channelOptions !== null && channelOptions.length === 0 ? (
+            // Nothing the API would accept (security review M1): said, never papered over.
+            <Alert variant="destructive">
+              <AlertDescription>{t('rfqCreate.noChannelWarning')}</AlertDescription>
+            </Alert>
+          ) : channelOptions !== null ? (
+            <div className="space-y-1 pt-2">
+              <Label htmlFor="salesChannelId">{t('rfqCreate.field.salesChannel')}</Label>
+              <Combobox<string>
+                id="salesChannelId"
+                ariaLabel={t('rfqCreate.field.salesChannel')}
+                options={channelOptions.map((c) => ({ value: c.id, label: channelLabel(c, locale), description: c.code }))}
+                value={salesChannelId === '' ? null : salesChannelId}
+                onChange={(next): void => setSalesChannelId(next ?? '')}
+                placeholder={t('rfqCreate.placeholder.salesChannel')}
+                emptyMessage={t('rfqCreate.empty.salesChannels')}
+              />
+              <p className="text-xs text-muted-foreground">{t('rfqCreate.hint.salesChannel')}</p>
+            </div>
           ) : null}
         </CardContent>
       </Card>
@@ -746,10 +903,35 @@ export function RfqCreatePage(): ReactNode {
         </CardContent>
       </Card>
 
+      {created ? (
+        <Alert variant="warning" className="mb-4">
+          <AlertTitle>{t('rfqCreate.warnings.title')}</AlertTitle>
+          <AlertDescription>
+            <p>{t('rfqCreate.warnings.description')}</p>
+            <ul className="mt-2 list-disc pl-5">
+              {created.warnings.map((warning) => (
+                <li key={warning.productId}>
+                  {lines.find((row) => row.productId === warning.productId)?.name ?? warning.productId}
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {!channelChosen && !created && (channelOptions?.length ?? 0) > 0 ? (
+        // The disabled action says why (the order create screen's gate hint).
+        <p className="mb-2 text-right text-sm text-muted-foreground">{t('rfqCreate.gate.missingChannel')}</p>
+      ) : null}
+
       <div className="flex justify-end">
-        <Button disabled={!canSubmit} onClick={(): void => void submit()}>
-          {busy ? t('rfqCreate.submitting') : t('rfqCreate.submit')}
-        </Button>
+        {created ? (
+          <Button onClick={(): void => leaveFor(created.id)}>{t('rfqCreate.warnings.open')}</Button>
+        ) : (
+          <Button disabled={!canSubmit} onClick={(): void => void submit()}>
+            {busy ? t('rfqCreate.submitting') : t('rfqCreate.submit')}
+          </Button>
+        )}
       </div>
     </div>
   );

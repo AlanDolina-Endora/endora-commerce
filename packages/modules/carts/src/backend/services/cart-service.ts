@@ -3,8 +3,8 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ANONYMOUS_PRODUCT_AUDIENCE,
   ERROR_CODES,
+  effectivePackagingUnitName,
   isOrderMinimumEligibleType,
-  isProductVisibleTo,
   minimumRefusal,
   pickLocalized,
   type CartBatchLineInput,
@@ -17,14 +17,16 @@ import { Cart } from '../entities/cart.entity.js';
 import { CartItem } from '../entities/cart-item.entity.js';
 import type {
   CatalogPackagingUnitRecord,
+  CatalogProductAvailabilityPort,
   CatalogProductReadPort,
   CatalogProductRecord,
   LinePricesPort,
   ProductDisplayModePort,
   OrganizationDetailsPort,
 } from '@endora-commerce/contracts';
-import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
-import { outOfRequestChannel, rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
+import { rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
+import type { SalesChannelResolutionPort } from '@endora-commerce/platform/kernel';
+import { basketScopeLanguage, withBasketOrderRules } from './cart-availability.js';
 import type { CartApprovalService } from './cart-approval-service.js';
 import type { CartAuditService } from './cart-audit-service.js';
 import type { CartRecomputeCache } from './cart-recompute-cache.js';
@@ -86,6 +88,13 @@ export interface CartActor {
   customer?: CustomerContext;
   anonymousToken?: string;
   anonymousSalesChannelId?: string;
+  /**
+   * Feature 163 — the request's first `Accept-Language` tag. The basket's
+   * scope language L is this tag resolved against the channel's languages
+   * (`basketScopeLanguage`). A preference, never an authority: it chooses a
+   * language the channel offers and nothing else.
+   */
+  languageTag?: string;
 }
 
 /**
@@ -115,6 +124,12 @@ export interface CartLineInput {
 interface ResolvedCartLine {
   product: CatalogProductRecord;
   packagingUnit: CatalogPackagingUnitRecord | null;
+  /**
+   * Feature 163 (FR-079, T138) — the unit's name the line snapshots: its name in the
+   * basket's scope language (an operator-named channel's default language, N2), else
+   * its global name. `null` without a unit.
+   */
+  packagingUnitName: string | null;
   /** Base pieces. */
   effectiveQuantity: number;
 }
@@ -156,22 +171,30 @@ export class CartService {
     /** `organizations`' read model — the buying org the price resolves against. */
     private readonly organizations: OrganizationDetailsPort,
     /**
-     * The sanctioned bridge accessor (Constitution XII), for the assortment
-     * gate `addItem` owes (issue #259). Required, like `catalogProducts`: an
-     * optional one would make "this rig did not wire it" and "this channel
-     * publishes the product" the same answer, which is the fail-open shape the
-     * whole issue is about.
-     */
-    private readonly channelMembership: SalesChannelMembershipPort,
-    /**
      * `price_lists`' display mode on its own (issue #236) — what `addItem`
      * refuses a product sold on request only by when no price list holds it.
-     * Required for the reason `channelMembership` is.
+     * Required for the reason `availability` is.
      */
     private readonly displayModes: ProductDisplayModePort,
+    /**
+     * Feature 163 — `catalog`'s one answer to "may this shopper acquire this
+     * product here, now" (FR-004): membership, effective status at (channel,
+     * L), window and effective audience in one call — membership through the
+     * sanctioned bridge accessor (Constitution XII) inside it. Required: an
+     * optional one would make "this rig did not wire it" and "this channel
+     * offers the product" the same answer, which is the fail-open shape issue
+     * #259 is about.
+     */
+    private readonly availability: CatalogProductAvailabilityPort,
     private readonly approvalService?: CartApprovalService,
     private readonly auditService?: CartAuditService,
     private readonly recomputeCache?: CartRecomputeCache,
+    /**
+     * Feature 163, owner decision N2 = B — the kernel's channel accessor, read for one
+     * fact: the default language of a channel an operator names, where a packaging
+     * unit's name is snapshotted. Absent (some rigs) = the global name.
+     */
+    private readonly channelReads?: Pick<SalesChannelResolutionPort, 'getById'>,
   ) {
     this.#linePricing = new CartLinePricing(
       this.pricingService,
@@ -299,6 +322,15 @@ export class CartService {
   }
 
   /** The channel of the basket `actor` addresses. */
+  /** Feature 163 (FR-100) — one product record with the basket channel's order rules; `null` stays `null`. */
+  async #withChannelRules(
+    product: CatalogProductRecord | null,
+    channelId: string | null | undefined,
+  ): Promise<CatalogProductRecord | null> {
+    if (product === null) return null;
+    return (await withBasketOrderRules(this.availability, [product], channelId))[0]!;
+  }
+
   #basketChannelOf(actor: CartActor): string {
     const channel = actor.customer?.salesChannelId ?? actor.anonymousSalesChannelId;
     if (!channel) {
@@ -350,7 +382,8 @@ export class CartService {
         quantity: effectiveQuantity,
       },
       productId: product.id,
-      product,
+      // Feature 163 (FR-100) — judged on the basket channel's minimum.
+      product: (await withBasketOrderRules(this.availability, [product], cart.salesChannelId))[0]!,
       language: options.language,
     });
 
@@ -458,8 +491,8 @@ export class CartService {
     let rejections: Map<number, CartBatchRejection>;
     if (options.replaceExisting) {
       // Step 2 — the request alone: the basket it replaces counts toward nothing.
-      rejections = await this.#judgeBatch({ sourceQuoteRequestId: null }, [], resolvedLines);
-      this.#throwIfBelowMinimum(rejections, resolvedLines, options);
+      rejections = await this.#judgeBatch({ sourceQuoteRequestId: null }, [], resolvedLines, this.#basketChannelOf(actor));
+      await this.#throwIfBelowMinimum(actor, rejections, resolvedLines, options);
       // Round B (item 3) — the write step's own refusals (no price, quote-only)
       // are judged here too, before the basket is cleared, so a request refused
       // for them also leaves the basket as it was.
@@ -481,8 +514,9 @@ export class CartService {
         cart,
         (await em.find(CartItem, { cartId: cart.id })).map(toCartMinimumItem),
         resolvedLines,
+        cart.salesChannelId,
       );
-      this.#throwIfBelowMinimum(rejections, resolvedLines, options);
+      await this.#throwIfBelowMinimum(actor, rejections, resolvedLines, options);
     }
 
     // Step 3 — the accepted lines, in input order. Kept apart, each line is
@@ -491,12 +525,23 @@ export class CartService {
     // fall back to their random ids.
     const kept = options.keepRepeatedLines === true;
     const seedBase = Date.now();
+    // Feature 163 (FR-017 d) — a below-minimum outcome names the product as the
+    // storefront shows it in this basket's (channel, language).
+    const outcomeNames =
+      rejections.size > 0 ? await this.#effectiveNamesFor(actor, resolvedLines) : new Map<string, string>();
     let added = 0;
     let failure: unknown = null;
     for (const { index, input, resolved } of resolvedLines) {
       const rejection = rejections.get(index);
       if (rejection) {
-        outcomes.set(index, belowMinimumOutcome(index, rejection, resolved.product, options.language));
+        outcomes.set(
+          index,
+          belowMinimumOutcome(
+            index,
+            rejection,
+            outcomeNames.get(resolved.product.id) ?? pickLocalized(resolved.product.name, options.language),
+          ),
+        );
         continue;
       }
       try {
@@ -595,9 +640,14 @@ export class CartService {
     cart: Pick<Cart, 'sourceQuoteRequestId'>,
     basket: readonly CartMinimumItem[],
     resolvedLines: ReadonlyArray<{ index: number; input: CartBatchLineInput; resolved: ResolvedCartLine }>,
+    /** Feature 163 (FR-100) — the basket's channel, whose minimums the batch is judged on. */
+    channelId: string | null | undefined,
   ): Promise<Map<number, CartBatchRejection>> {
     if (resolvedLines.length === 0) return new Map();
-    const products = new Map(resolvedLines.map(({ resolved }) => [resolved.product.id, resolved.product]));
+    const vetted = new Map(resolvedLines.map(({ resolved }) => [resolved.product.id, resolved.product]));
+    const products = new Map(
+      (await withBasketOrderRules(this.availability, [...vetted.values()], channelId)).map((p) => [p.id, p]),
+    );
     const eligibleIds = [...products.values()]
       .filter((product) => isOrderMinimumEligibleType(product.type))
       .map((product) => product.id);
@@ -623,21 +673,45 @@ export class CartService {
    * rejected line in `details.lines` by its batch `index`, each product named in
    * `options.language`. The figures (`total`, `units`) are the judgement's own.
    */
-  #throwIfBelowMinimum(
+  async #throwIfBelowMinimum(
+    actor: CartActor,
     rejections: ReadonlyMap<number, CartBatchRejection>,
-    resolvedLines: ReadonlyArray<{ index: number; resolved: ResolvedCartLine }>,
+    resolvedLines: ReadonlyArray<{ index: number; resolved: ResolvedCartLine; input: CartBatchLineInput }>,
     options: { onBelowMinimum?: 'report' | 'throw'; language?: string },
-  ): void {
+  ): Promise<void> {
     if (options.onBelowMinimum !== 'throw' || rejections.size === 0) return;
     const violations = [...rejections.entries()]
       .sort(([a], [b]) => a - b)
       .map(([index, rejection]) => ({ ...rejection, key: String(index) }));
+    // Feature 163 (FR-017 d) — the names the storefront shows in this basket.
+    const effective = await this.#effectiveNamesFor(actor, resolvedLines);
     const names = new Map(
-      resolvedLines.map(({ resolved }) => [resolved.product.id, pickLocalized(resolved.product.name, options.language)]),
+      resolvedLines.map(({ resolved }) => [
+        resolved.product.id,
+        effective.get(resolved.product.id) ?? pickLocalized(resolved.product.name, options.language),
+      ]),
     );
     const refusal = minimumRefusal(violations, names, 'index');
     if (refusal === null) return;
     throw new HttpError(422, ERROR_CODES[refusal.code], refusal.message, refusal.details);
+  }
+
+  /**
+   * Feature 163 (FR-017 d) — the effective names of a batch's products at the
+   * basket's (channel, language): `catalog`'s answer, the walk a storefront card
+   * shows. An operator naming the channel is answered in its default language (N2).
+   */
+  async #effectiveNamesFor(
+    actor: CartActor,
+    resolvedLines: ReadonlyArray<{ resolved: ResolvedCartLine; input: CartBatchLineInput }>,
+  ): Promise<Map<string, string>> {
+    const named = resolvedLines.find(({ input }) => input.salesChannelId)?.input.salesChannelId;
+    if (resolvedLines.length === 0) return new Map();
+    const channelId = named ?? this.#basketChannelOf(actor);
+    return this.availability.effectiveNames(
+      [...new Set(resolvedLines.map(({ resolved }) => resolved.product.id))],
+      { channelId, languageCode: named ? null : basketScopeLanguage(channelId, actor.languageTag) },
+    );
   }
 
   /**
@@ -657,7 +731,7 @@ export class CartService {
     // command-coverage-ignore: the ephemeral cart's own line write; its typed
     // `line_added` audit row is recorded by the public caller (`addItem`,
     // `addItems`) through `#recordLineAdded` once the write has succeeded.
-    const { product, packagingUnit, effectiveQuantity } = resolved;
+    const { product, packagingUnit, packagingUnitName, effectiveQuantity } = resolved;
     // If the same product+variant+packaging-unit is already in the cart, bump
     // quantity. A packaging-unit line and a single-piece line of the same
     // product stay distinct (different `packagingUnitId`).
@@ -720,7 +794,7 @@ export class CartService {
       ...(packagingUnit
         ? {
             packagingUnitId: packagingUnit.id,
-            packagingUnitName: packagingUnit.name,
+            packagingUnitName: packagingUnitName ?? packagingUnit.name,
             packagingUnitBaseQuantity: packagingUnit.baseQuantity,
           }
         : {}),
@@ -783,44 +857,37 @@ export class CartService {
       );
     }
     const product = await this.catalogProducts.findById(input.productId);
-    // Issue #227 — a product this shopper may not see is a product they may not
-    // put in a cart. The read port is the row-level one and applies no policy of
-    // its own, deliberately: an order line has to resolve its product long after
-    // the operator restricted it. That makes enforcement the caller's, and this
-    // caller is holding a `productId` the buyer chose.
+    // Issue #227 / #259 / feature 163 — a product this shopper may not acquire
+    // here, now, is a product they may not put in a cart. The read port is the
+    // row-level one and applies no policy of its own, deliberately: an order
+    // line has to resolve its product long after the operator restricted it.
+    // That makes enforcement the caller's, and this caller is holding a
+    // `productId` the buyer chose.
     //
-    // 404 and not 403, matching the product detail: a caller who may not see the
-    // row may not learn it exists, and the two answers are indistinguishable to
-    // an honest client because they are the same answer.
-    if (!product || !isProductVisibleTo(product, cartAudience(actor))) {
-      throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'Product not found.');
-    }
-    // Issue #259 — the second filter the predicate above says it is not. The
-    // channel is a property of the request, so it is read off the request scope
-    // and never re-resolved here; outside a request there is no channel to be
-    // out of and `outOfRequestChannel` answers `false`.
-    //
-    // The same 404 as the two lines above, deliberately: "sold on another
-    // channel", "restricted to another organisation" and "does not exist" have
-    // to be one answer, or the pair of them is an enumeration oracle over an
-    // operator's private assortment — the defect issue #174 found in the
-    // type-ahead next door.
-    //
-    // The one exception is a caller that names the channel itself: an
-    // administrator creating an order on a customer's behalf chooses the
-    // order's channel in the request body, and the request scope of an admin
-    // call resolves to the system default, which is not that channel. Buyer
-    // routes never pass `salesChannelId`.
-    const outOfChannel = input.salesChannelId
-      ? !(
-          await this.channelMembership.filterEntityIdsInChannel(input.salesChannelId, 'product', [
-            product.id,
-          ])
-        ).includes(product.id)
-      : await outOfRequestChannel(this.channelMembership, product.id);
-    if (outOfChannel) {
-      throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'Product not found.');
-    }
+    // 404 and not 403, matching the product detail: "does not exist", "sold on
+    // another channel", "restricted to another organisation", "switched off in
+    // this language" and "outside its publication window" have to be one
+    // answer, or the set of them is an enumeration oracle over an operator's
+    // private assortment — the defect issue #174 found in the type-ahead.
+    const notFound = (): HttpError =>
+      new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'Product not found.');
+    if (!product) throw notFound();
+    // The channel is the basket's: the one the route resolved and handed over
+    // on the actor (`#basketChannelOf`, which refuses an actor naming none), so
+    // there is no audience-only answer for a basket — every add is asked at a
+    // channel (security review, checkpoint B). The one exception is a caller
+    // that names the channel itself: an administrator creating an order on a
+    // customer's behalf chooses the order's channel in the request body (buyer
+    // routes never pass `salesChannelId`), and is answered in that channel's
+    // default language (N2).
+    const channelId = input.salesChannelId ?? this.#basketChannelOf(actor);
+    const scopeLanguage = input.salesChannelId ? null : basketScopeLanguage(channelId, actor.languageTag);
+    const available = await this.availability.filterAvailable([product.id], {
+      channelId,
+      languageCode: scopeLanguage,
+      audience: cartAudience(actor),
+    });
+    if (!available.has(product.id)) throw notFound();
 
     // Feature 043 — ordering by a packaging unit (e.g. a pallet): the line is
     // measured in base pieces (`baseQuantity × units`) and snapshots the unit
@@ -846,7 +913,23 @@ export class CartService {
     const effectiveQuantity = packagingUnit
       ? packagingUnit.baseQuantity * input.quantity
       : input.quantity;
-    return { product, packagingUnit, effectiveQuantity };
+    // Feature 163 (FR-079, T138; owner decision 2026-10-26) — the snapshot takes the
+    // unit's name in the basket's language; a placed line keeps it, never re-resolved.
+    // An operator naming the channel has no request language: the name is taken at
+    // that channel's default language (owner decision N2 = B), as the product name
+    // beside it is. The channel is read only when a unit is named.
+    const unitLanguage =
+      packagingUnit && input.salesChannelId
+        ? await this.#channelDefaultLanguage(input.salesChannelId)
+        : scopeLanguage;
+    const packagingUnitName = packagingUnit ? effectivePackagingUnitName(packagingUnit, unitLanguage) : null;
+    return { product, packagingUnit, packagingUnitName, effectiveQuantity };
+  }
+
+  /** N2 — a named channel's default language, `null` (the global name) when unknown. */
+  async #channelDefaultLanguage(channelId: string): Promise<string | null> {
+    if (!this.channelReads) return null;
+    return (await this.channelReads.getById(channelId))?.defaultLanguage ?? null;
   }
 
   /**
@@ -914,7 +997,8 @@ export class CartService {
         items: (await em.find(CartItem, { cartId: cart.id })).map(toCartMinimumItem),
         change: { kind: 'edit', itemId: item.id, quantity },
         productId: item.productId,
-        product: await this.catalogProducts.findById(item.productId),
+        // Feature 163 (FR-100) — judged on the basket channel's minimum.
+        product: await this.#withChannelRules(await this.catalogProducts.findById(item.productId), cart.salesChannelId),
         language: options.language,
       });
     }
@@ -1282,7 +1366,7 @@ export class CartService {
  * accounts of feature 026 have none, and they are exactly the caller
  * `logged_in_only` distinguishes from the public.
  */
-function cartAudience(actor: CartActor): ProductAudience {
+export function cartAudience(actor: CartActor): ProductAudience {
   if (!actor.customer) return ANONYMOUS_PRODUCT_AUDIENCE;
   return { organizationId: actor.customer.organizationId, authenticated: true };
 }
@@ -1318,14 +1402,13 @@ function failedOutcome(index: number, err: HttpError): CartBatchLineOutcome {
 function belowMinimumOutcome(
   index: number,
   rejection: CartBatchRejection,
-  product: CatalogProductRecord,
-  language: string | undefined,
+  productName: string,
 ): CartBatchLineOutcome {
   return {
     index,
     status: 'below_minimum',
     productId: rejection.productId,
-    productName: pickLocalized(product.name, language),
+    productName,
     kind: rejection.kind,
     minimum: rejection.minimum,
     ...(rejection.kind === 'packaging_unit' ? { packagingUnitName: rejection.packagingUnitName } : {}),
