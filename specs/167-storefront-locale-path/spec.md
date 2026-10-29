@@ -81,6 +81,15 @@ page in another language, and every URL the platform emits names its language.
   PDF download. The former `/orders/<id>/invoices/<id>/pdf` storefront address, which no route
   served, is retired.
 
+- **OR-15 — A current key of another channel language redirects whatever `seo`'s state**
+  (2026-10-29). 163's FR-111 hides a product's **redirect rows** (former keys) while `seo` is off,
+  so such a key answers exactly what a key of no product answers. FR-024's step is not a redirect
+  row: it reads the product's **current** keys of the channel's other languages, which `catalog`
+  owns. So a key that is both a former key of the path language and a current key of another
+  channel language (`/pl/p/new`, `new` being the product's current en-US key) answers 307 to the
+  product's key in the path language even while `seo` is off; with `seo` on, the former-key 308
+  answers first, as before. No redirect row is read for the 307.
+
 ## Clarifications
 
 ### Session 2026-10-29 (architect; decisions derived from the rulings — see `research.md`)
