@@ -55,7 +55,12 @@ export function instantDateLabel(iso: string, language: string): string | null {
 
 const SIZE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte'] as const;
 
-/** A file size as a person reads it — `512 B`, `2.5 MB` — in the language on screen (Projects' helper). */
+/**
+ * A file size as a person reads it — *193 bytes*, *2.5 MB* — in the language on
+ * screen (Projects' helper). Under a kilobyte the unit is spelled out, which
+ * gives it its plural (*193 bajty*, *5 bajtów*); the short form of `byte` is
+ * *byte* in English, which the walk found as *193 byte* (165 T095).
+ */
 export function fileSizeLabel(bytes: number, language: string): string {
   let value = Math.max(0, bytes);
   let unit = 0;
@@ -66,7 +71,7 @@ export function fileSizeLabel(bytes: number, language: string): string {
   return new Intl.NumberFormat(language, {
     style: 'unit',
     unit: SIZE_UNITS[unit] as string,
-    unitDisplay: 'short',
+    unitDisplay: unit === 0 ? 'long' : 'short',
     maximumFractionDigits: unit === 0 ? 0 : 1,
   }).format(value);
 }

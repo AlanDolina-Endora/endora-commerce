@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   calendarDateLabel,
+  fileSizeLabel,
   instantDateLabel,
   momentLabel,
 } from '../../../../packages/modules/tasks/src/admin/lib/labels';
@@ -35,5 +36,14 @@ describe('tasks — date labels', () => {
     const iso = '2026-10-30T09:00:00.000Z';
     expect(instantDateLabel(iso, 'en')).toBe(medium('en').format(new Date(iso)));
     expect(instantDateLabel('not a date', 'en')).toBeNull();
+  });
+
+  it('writes a file size with its plural under a kilobyte and the unit symbol above (T095: "193 byte")', () => {
+    expect(fileSizeLabel(1, 'en')).toBe('1 byte');
+    expect(fileSizeLabel(193, 'en')).toBe('193 bytes');
+    expect(fileSizeLabel(193, 'pl')).toBe('193 bajty');
+    expect(fileSizeLabel(5, 'pl')).toBe('5 bajtów');
+    expect(fileSizeLabel(2560, 'en')).toBe('2.5 kB');
+    expect(fileSizeLabel(5 * 1024 * 1024, 'pl')).toBe('5 MB');
   });
 });
