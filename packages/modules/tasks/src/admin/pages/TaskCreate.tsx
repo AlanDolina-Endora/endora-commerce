@@ -5,7 +5,17 @@ import type { CreateTaskBody, TaskContext, TaskDetail, TaskLinkTarget } from '@e
 import { TASK_LINK_KINDS, TASK_TITLE_MAX } from '@endora-commerce/contracts';
 import { CustomFieldValuesPanel } from '@endora-commerce/admin-kit/components';
 import { useAuth } from '@endora-commerce/admin-kit/lib';
-import { Alert, AlertDescription, Button, Card, CardContent, Input, Label, PageHeader } from '@endora-commerce/admin-kit/ui';
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  Checkbox,
+  Input,
+  Label,
+  PageHeader,
+} from '@endora-commerce/admin-kit/ui';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 import { AssigneePicker, type ChosenAssignee } from '../components/AssigneePicker.js';
@@ -55,6 +65,13 @@ function contextFromParam(value: string | null): TaskContext | null {
  * Request's *Tasks* panel — creates the Task linked to that record, and
  * `?context=<type>:<id>[:<group>]` creates it in that record and group
  * (User Story 6). The form says so; the server validates both.
+ *
+ * *Save as draft* creates the Task as its caller's draft — nobody else sees
+ * it or is told until it is published on its screen — and the **Private**
+ * switch keeps it to its caller and the holders of *See private tasks*
+ * (User Story 8). While the switch is on, the Task can be assigned only to the
+ * caller, so the picker of other people gives way to that one choice; a Task
+ * started inside a record is never private, so it offers no switch.
  */
 export function TaskCreate(): ReactNode {
   const t = useTranslation('tasks');
@@ -67,11 +84,12 @@ export function TaskCreate(): ReactNode {
   const link = linkFromParam(searchParams.get('link'));
   const context = contextFromParam(searchParams.get('context'));
   const [parent, setParent] = useState<TaskDetail | null>(null);
-  const ids = { title: useId(), assignee: useId() };
+  const ids = { title: useId(), assignee: useId(), private: useId(), draftHint: useId() };
   const [title, setTitle] = useState('');
   const [fields, setFields] = useState<TaskFieldValues>(() => taskFieldValuesOf());
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>({});
   const [assignees, setAssignees] = useState<ChosenAssignee[]>([]);
+  const [isPrivate, setPrivate] = useState(false);
   const [missingTitle, setMissingTitle] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +109,7 @@ export function TaskCreate(): ReactNode {
     };
   }, [parentTaskId]);
 
-  const submit = async (event: FormEvent): Promise<void> => {
+  const submit = async (event: Pick<FormEvent, 'preventDefault'>, asDraft = false): Promise<void> => {
     event.preventDefault();
     if (title.trim() === '') {
       setMissingTitle(true);
@@ -110,6 +128,8 @@ export function TaskCreate(): ReactNode {
       ...(parentTaskId ? { parentTaskId } : {}),
       ...(link ? { links: [link] } : {}),
       ...(context ? { context } : {}),
+      ...(isPrivate ? { private: true } : {}),
+      ...(asDraft ? { draft: true } : {}),
     };
     setBusy(true);
     setError(null);
@@ -178,16 +198,25 @@ export function TaskCreate(): ReactNode {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label htmlFor={ids.assignee}>{t('field.assignee')}</Label>
-                <AssigneePicker
-                  id={ids.assignee}
-                  value={assignees}
-                  onChange={setAssignees}
-                  ariaDescribedBy={`${ids.assignee}-hint`}
-                />
-                <p id={`${ids.assignee}-hint`} className="text-xs text-muted-foreground">
-                  {t('field.assigneeHint')}
-                </p>
+                <Label htmlFor={isPrivate ? undefined : ids.assignee}>{t('field.assignee')}</Label>
+                {isPrivate ? (
+                  <p className="text-sm">
+                    {assignees.length > 0 ? `${assignees.map((chosen) => chosen.name).join(', ')} · ` : null}
+                    <span className="text-muted-foreground">{t('create.privateAssignee')}</span>
+                  </p>
+                ) : (
+                  <>
+                    <AssigneePicker
+                      id={ids.assignee}
+                      value={assignees}
+                      onChange={setAssignees}
+                      ariaDescribedBy={`${ids.assignee}-hint`}
+                    />
+                    <p id={`${ids.assignee}-hint`} className="text-xs text-muted-foreground">
+                      {t('field.assigneeHint')}
+                    </p>
+                  </>
+                )}
                 {me && !assignees.some((chosen) => chosen.id === me.id) ? (
                   <Button
                     type="button"
@@ -202,6 +231,30 @@ export function TaskCreate(): ReactNode {
                 ) : null}
               </div>
             </div>
+
+            {/* A Task started inside a record is never private (FR-038): no switch there. */}
+            {context ? null : (
+              <div className="space-y-1">
+                <label htmlFor={ids.private} className="flex min-h-11 items-center gap-2 text-sm font-medium sm:min-h-9">
+                  <Checkbox
+                    id={ids.private}
+                    role="switch"
+                    checked={isPrivate}
+                    aria-describedby={`${ids.private}-hint`}
+                    onChange={(event): void => {
+                      const on = event.target.checked;
+                      setPrivate(on);
+                      // A private Task is its caller's alone: everyone else leaves the assignees.
+                      if (on) setAssignees((chosen) => chosen.filter((person) => person.id === me?.id));
+                    }}
+                  />
+                  {t('create.private')}
+                </label>
+                <p id={`${ids.private}-hint`} className="text-xs text-muted-foreground">
+                  {t('create.privateHint')}
+                </p>
+              </div>
+            )}
 
             {/* The `task` custom fields, sent with the Task (R-8); their definitions are `custom_fields:read`'s. */}
             {hasPermission('custom_fields:read') ? (
@@ -223,6 +276,19 @@ export function TaskCreate(): ReactNode {
               <Button type="submit" className="min-h-11 sm:min-h-9" disabled={busy} aria-busy={busy}>
                 {busy ? t('create.submitting') : t('create.submit')}
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 sm:min-h-9"
+                disabled={busy}
+                aria-describedby={ids.draftHint}
+                onClick={(event): void => void submit(event, true)}
+              >
+                {t('create.saveDraft')}
+              </Button>
+              <p id={ids.draftHint} className="basis-full text-xs text-muted-foreground">
+                {t('create.draftHint')}
+              </p>
             </div>
           </form>
         </CardContent>

@@ -127,6 +127,11 @@ export const tasksApi = {
     return data(apiClient.patch<{ data: TaskDetail }>(`${BASE}/${id}`, body));
   },
 
+  /** Publishes the caller's own draft, one-way (FR-037); answers the Task as it is now. */
+  publishTask(id: string): Promise<TaskDetail> {
+    return data(apiClient.post<{ data: TaskDetail }>(`${BASE}/${id}/publish`, {}));
+  },
+
   /** A move through the workflow, from the status the caller saw (409 when the Task left it). */
   changeStatus(id: string, from: string, to: string): Promise<TaskStatusChangeResult> {
     return data(apiClient.post<{ data: TaskStatusChangeResult }>(`${BASE}/${id}/status`, { from, to }));

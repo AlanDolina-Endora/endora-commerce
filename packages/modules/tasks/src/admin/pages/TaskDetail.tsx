@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Pencil, Trash2, UserCheck } from 'lucide-react';
+import { Pencil, Send, Trash2, UserCheck } from 'lucide-react';
 import {
   TASK_TITLE_MAX,
   type RecordHistoryEntry,
@@ -12,9 +12,11 @@ import { ApiError, formatDateTime, useAuth } from '@endora-commerce/admin-kit/li
 import {
   Alert,
   AlertDescription,
+  Badge,
   Button,
   Card,
   CardContent,
+  Checkbox,
   Input,
   Label,
   PageHeader,
@@ -104,6 +106,9 @@ export function TaskDetail(): ReactNode {
   // A Task of a record is the record owner's to delete (`canChangeTasks`, T147):
   // no Delete the server would refuse.
   const mayDelete = task === null || task.context === null || task.context.canChangeTasks;
+  // Someone else's private Task is deleted by a holder of `tasks:see_private` without `tasks:write` (FR-041).
+  const mayDeletePrivate = task !== null && task.private && hasPermission('tasks:see_private');
+  const privateId = useId();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [writeError, setWriteError] = useState<string | null>(null);
@@ -237,6 +242,25 @@ export function TaskDetail(): ReactNode {
     }
   };
 
+  /** The caller's own draft becomes a normal Task — one way (FR-037). */
+  const publish = async (): Promise<void> => {
+    setBusy(true);
+    setWriteError(null);
+    setNotice('');
+    try {
+      setTask(await tasksApi.publishTask(id));
+      setNotice(t('detail.published'));
+      setHistoryVersion((version) => version + 1);
+    } catch (failure) {
+      setWriteError(errorMessage(failure, t('detail.saveError')));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const mine = me !== null && task.createdBy?.id === me.id;
+  const someoneElsesPrivate = task.private && !mine;
+
   const assignToMe = (): Promise<boolean> =>
     me ? write({ addAssigneeIds: [me.id] }, () => t('detail.saved')) : Promise.resolve(false);
 
@@ -266,6 +290,8 @@ export function TaskDetail(): ReactNode {
           <span className="flex flex-wrap items-center gap-2 [overflow-wrap:anywhere]">
             <span>{task.title}</span>
             <StatusBadge status={task.status} />
+            {task.draft ? <Badge variant="outline">{t('detail.draftBadge')}</Badge> : null}
+            {task.private ? <Badge variant="secondary">{t('detail.privateBadge')}</Badge> : null}
           </span>
         }
         description={<span>{task.number}</span>}
@@ -278,6 +304,27 @@ export function TaskDetail(): ReactNode {
         </Alert>
       ) : null}
 
+      {task.draft ? (
+        <Alert className="mb-4">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>{t('detail.draftHint')}</span>
+            {task.permissions.canPublish ? (
+              <Button
+                type="button"
+                size="sm"
+                className="min-h-11 sm:min-h-8"
+                disabled={busy}
+                aria-busy={busy}
+                onClick={(): void => void publish()}
+              >
+                <Send aria-hidden="true" />
+                {t('detail.publish')}
+              </Button>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="min-w-0 lg:col-span-2">
           <CardContent className="pt-6">
@@ -286,20 +333,22 @@ export function TaskDetail(): ReactNode {
                 <h2 id={detailsHeadingId} className="text-base font-semibold">
                   {t('detail.details')}
                 </h2>
-                {canWrite && !editing ? (
+                {(canWrite || mayDeletePrivate) && !editing ? (
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="min-h-11 sm:min-h-8"
-                      disabled={busy}
-                      onClick={(): void => setEditing(true)}
-                    >
-                      <Pencil aria-hidden="true" />
-                      {t('detail.edit')}
-                    </Button>
-                    {mayDelete ? (
+                    {canWrite ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="min-h-11 sm:min-h-8"
+                        disabled={busy}
+                        onClick={(): void => setEditing(true)}
+                      >
+                        <Pencil aria-hidden="true" />
+                        {t('detail.edit')}
+                      </Button>
+                    ) : null}
+                    {mayDelete && task.permissions.canDelete ? (
                       <Button
                         type="button"
                         variant="ghost"
@@ -336,8 +385,34 @@ export function TaskDetail(): ReactNode {
                   </Select>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">{t('detail.readOnly')}</p>
+                <p className="text-sm text-muted-foreground">
+                  {someoneElsesPrivate
+                    ? t('detail.privateReadOnly', { name: task.createdBy?.name ?? '' })
+                    : t('detail.readOnly')}
+                </p>
               )}
+
+              {/* Only its Creator says whether a Task is private, and a Task of a record never is (FR-038). */}
+              {canWrite && mine && task.context === null && !editing ? (
+                <div className="space-y-1">
+                  <label htmlFor={privateId} className="flex min-h-11 items-center gap-2 text-sm font-medium sm:min-h-9">
+                    <Checkbox
+                      id={privateId}
+                      role="switch"
+                      checked={task.private}
+                      disabled={busy}
+                      aria-describedby={`${privateId}-hint`}
+                      onChange={(event): void =>
+                        void write({ private: event.target.checked }, () => t('detail.saved'))
+                      }
+                    />
+                    {t('detail.private')}
+                  </label>
+                  <p id={`${privateId}-hint`} className="text-xs text-muted-foreground">
+                    {t('detail.privateHint')}
+                  </p>
+                </div>
+              ) : null}
 
               {editing ? (
                 <TaskEditForm
@@ -687,16 +762,23 @@ function TaskEditForm(props: TaskEditFormProps): ReactNode {
         disabled={busy}
       />
       <div className="space-y-1">
-        <Label htmlFor={ids.assignee}>{t('field.assignee')}</Label>
-        <AssigneePicker
-          id={ids.assignee}
-          value={assignees}
-          onChange={setAssignees}
-          ariaDescribedBy={`${ids.assignee}-hint`}
-        />
-        <p id={`${ids.assignee}-hint`} className="text-xs text-muted-foreground">
-          {t('field.assigneeHint')}
-        </p>
+        <Label htmlFor={task.private ? undefined : ids.assignee}>{t('field.assignee')}</Label>
+        {task.private ? (
+          // A private Task is its Creator's alone (FR-038): no picker of other people.
+          <p className="text-sm text-muted-foreground">{t('create.privateAssignee')}</p>
+        ) : (
+          <>
+            <AssigneePicker
+              id={ids.assignee}
+              value={assignees}
+              onChange={setAssignees}
+              ariaDescribedBy={`${ids.assignee}-hint`}
+            />
+            <p id={`${ids.assignee}-hint`} className="text-xs text-muted-foreground">
+              {t('field.assigneeHint')}
+            </p>
+          </>
+        )}
       </div>
       <div className="flex flex-wrap gap-2 border-t pt-3">
         <Button type="button" className="min-h-11 sm:min-h-9" disabled={busy} aria-busy={busy} onClick={save}>
