@@ -344,6 +344,9 @@ export const manifest = defineModuleManifest({
   i18n: { bundlesDir: 'i18n' },
   // `docs/tasks.md` at the package root: users' and developers' page.
   docs: { dir: 'docs' },
-  // `false` is a decision, absent would be "nobody has decided".
+  // `false` is a decision, absent would be "nobody has decided": the demo Tasks
+  // name `admin_users`' rows, so they are steps of the demo composition
+  // (`@endora-commerce/demo-composition`, `tasks.ts` and `projects.ts`), not
+  // this module's demo body (`specs/165-task-management/` research R-23).
   demo: false,
 });

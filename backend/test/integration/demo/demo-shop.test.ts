@@ -368,8 +368,19 @@ const SEED_DELTA: Readonly<Record<string, number>> = {
   // 13 — their Tasks: one per Stage Task of every Stage each Project entered,
   //      and an assignee row for each Task whose Role one Member holds
   //      (`specs/165-task-management/` research R-2 — no longer a column).
-  tasks: 12,
-  task_assignees: 10,
+  //      Each carries its Stage Task definition's id as its `source_key`
+  //      (`specs/165-task-management/` research R-19), as a materialisation does.
+  // 14 — ten Tasks of no Project (`specs/165-task-management/` research R-23):
+  //      a parent with three sub-tasks, a private Task and a draft; nine
+  //      assignee rows, two tags on three Tasks, two comments, and the four
+  //      references their texts and one description carry. No link: the demo
+  //      has no Order.
+  tasks: 22,
+  task_assignees: 19,
+  task_tags: 2,
+  task_tag_assignments: 3,
+  task_comments: 2,
+  task_references: 4,
 };
 
 /**
@@ -740,6 +751,37 @@ describe('T226 — `endora demo seed` builds this shop', () => {
       expect(tasks).toHaveLength(12);
       expect(new Set(tasks.map((row) => row.creator))).toEqual(new Set(['admin@demo.local']));
       expect(tasks.every((row) => row.in_stage)).toBe(true);
+    });
+
+    it('keys every Stage Task by its definition, so a retried materialisation adds none', async () => {
+      // `specs/165-task-management/` T088: the source key is what makes
+      // Stage Task creation idempotent (research R-19); a demo Task without one
+      // would be created a second time by the Stage's retry.
+      const rows = await query<{ keyed: boolean }>(
+        shop,
+        `select exists (select 1 from project_stage_tasks d
+                         where d.stage_id = t.context_group_id and d.id::text = t.source_key
+                           and d.title = t.title) as keyed
+           from tasks t
+          where t.context_type = 'project'`,
+      );
+      expect(rows).toHaveLength(12);
+      expect(rows.every((row) => row.keyed)).toBe(true);
+    });
+
+    it('seeds ten Tasks of no Project: one parent of three, one private and one draft, all published but the draft', async () => {
+      const rows = await query<{ children: number; is_private: boolean; is_draft: boolean; published: boolean }>(
+        shop,
+        `select (select count(*)::int from tasks c where c.parent_task_id = t.id) as children,
+                t.is_private, t.is_draft, t.published_at is not null as published
+           from tasks t
+          where t.context_type is null`,
+      );
+      expect(rows).toHaveLength(10);
+      expect(rows.filter((row) => row.children > 0).map((row) => row.children)).toEqual([3]);
+      expect(rows.filter((row) => row.is_private)).toHaveLength(1);
+      expect(rows.filter((row) => row.is_draft)).toHaveLength(1);
+      expect(rows.every((row) => row.published === !row.is_draft)).toBe(true);
     });
 
     it('gives the whole sales pipeline to the demo organisation, two to a status', async () => {

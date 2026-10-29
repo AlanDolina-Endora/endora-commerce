@@ -717,13 +717,20 @@ export const demoProjectTasksStep: CompositionStep = {
         const createdAt = ago(entered.daysAgo);
         const closedAfter = Math.max(1, entered.daysAgo - definition.dueOffsetDays);
         const stageId = demoProjectStageId(project.id, stage.key);
+        // The Stage's own copy of the definition: its id is the Task's source
+        // key, as a materialisation writes it (`specs/165-task-management/`
+        // research R-19) — without it the Stage's retry would make the Task again.
+        const [copy] = (await tx.execute(
+          `select id from project_stage_tasks where stage_id = ? and position = ?`,
+          [stageId, stage.tasks.indexOf(definition)],
+        )) as Array<{ id: string }>;
         // A Task is published when it is created (`specs/165-task-management/`
         // research R-3); its assignees are rows of `task_assignees` (R-2).
         await tx.execute(
           `insert into tasks
              (id, number, title, description, status, due_on, completed_at, created_by_admin_user_id,
-              context_type, context_id, context_group_id, published_at, created_at, updated_at)
-           values (?, ?, ?, ?, ?, ?, ?, ?, 'project', ?, ?, ?, ?, ?)`,
+              context_type, context_id, context_group_id, source_key, published_at, created_at, updated_at)
+           values (?, ?, ?, ?, ?, ?, ?, ?, 'project', ?, ?, ?, ?, ?, ?)`,
           [
             task.id,
             await nextTaskNumber(tx),
@@ -735,6 +742,7 @@ export const demoProjectTasksStep: CompositionStep = {
             admin,
             project.id,
             stageId,
+            copy?.id ?? null,
             createdAt,
             createdAt,
             task.status === 'todo' ? createdAt : ago(closedAfter),
