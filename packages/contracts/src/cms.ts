@@ -19,6 +19,23 @@ const cmsCodeRe = /^[a-z0-9][a-z0-9._-]{0,178}[a-z0-9]$/;
 const cmsSlugRe = /^[a-z0-9](?:[a-z0-9/_-]{0,178}[a-z0-9])?$/;
 
 export const cmsPageStatusSchema = z.enum(['draft', 'published', 'archived']);
+
+/**
+ * One language's own name, slug and description of a CMS page
+ * (`specs/163-page-builder-marketing-pages/` R24, issue #521). Every field is
+ * optional: an absent or blank one inherits the page's own field, which stays
+ * the default for every language that does not override it.
+ */
+export const cmsPageTranslationSchema = z.object({
+  name: z.string().max(200).optional(),
+  slug: z.string().regex(cmsSlugRe).max(180).optional(),
+  description: z.string().optional(),
+});
+export type CmsPageTranslation = z.infer<typeof cmsPageTranslationSchema>;
+
+/** The per-language overrides of a CMS page, by BCP-47 language code (R24). */
+export const cmsPageTranslationsSchema = z.record(z.string().min(2), cmsPageTranslationSchema);
+export type CmsPageTranslations = z.infer<typeof cmsPageTranslationsSchema>;
 export type CmsPageStatus = z.infer<typeof cmsPageStatusSchema>;
 
 export const cmsContentEnvelopeSchema = z.object({
@@ -63,6 +80,11 @@ export const cmsPageSummarySchema = z.object({
    * changes address. The resulting path is `cmsPagePublicPaths`'s answer.
    */
   parentPathInUrl: z.boolean(),
+  /**
+   * R24: the page's name, slug and description per language. `{}` — every
+   * language inherits the fields above, which is every page stored before it.
+   */
+  translations: cmsPageTranslationsSchema,
 });
 export type CmsPageSummary = z.infer<typeof cmsPageSummarySchema>;
 
@@ -121,6 +143,11 @@ export const createCmsPageRequestSchema = z.object({
   shareImageAssetId: uuidSchema.nullable().optional(),
   /** R19D (T281): serve the page under its parent's path. Absent = `false`. */
   parentPathInUrl: z.boolean().optional(),
+  /**
+   * R24: per-language name, slug and description. Absent leaves the stored
+   * map; present replaces it whole. A key must be one of the page's languages.
+   */
+  translations: cmsPageTranslationsSchema.optional(),
 });
 export type CreateCmsPageRequest = z.infer<typeof createCmsPageRequestSchema>;
 
@@ -582,6 +609,21 @@ export const cmsResolvedPageSchema = z.object({
    * served at its `slug`; every answer composed since carries it.
    */
   path: z.string().optional(),
+  /**
+   * R24: the page's canonical URL in the served language — `cmsPageUrl` of
+   * `path`, so `?lang=` rides along for a language other than the channel's
+   * default. Built by the backend; the storefront redirects to it when it was
+   * asked under another address and composes no CMS URL of its own.
+   * Optional only for an answer cached before the field existed.
+   */
+  url: z.string().optional(),
+  /**
+   * R24: one URL per language the page can be served in (`languages`), each
+   * at that language's own path — the `hreflang` alternates. Optional on the
+   * same terms as `url`.
+   */
+  alternates: z.array(z.object({ language: z.string(), url: z.string() })).optional(),
+  /** The page name in the served language (R24: its override, else the page's). */
   name: z.string(),
   language: z.string(),
   meta: z.object({
@@ -663,6 +705,10 @@ export const cmsPageIndexEntrySchema = z.object({
    * backend falls back to `slug`.
    */
   path: z.string().optional(),
+  /** R24: the URL in the channel's default language — `cmsPageUrl` of `path`. */
+  url: z.string().optional(),
+  /** R24: the URL of every language the page is served in, the default one included. */
+  alternates: z.array(z.object({ language: z.string(), url: z.string() })).optional(),
   updatedAt: isoDateTimeSchema,
 });
 export type CmsPageIndexEntry = z.infer<typeof cmsPageIndexEntrySchema>;
@@ -783,6 +829,67 @@ export function cmsPagePublicPaths(nodes: Iterable<CmsPagePathNode>): Map<string
   const paths = new Map<string, string>();
   for (const node of byId.values()) paths.set(node.id, visit(node).path);
   return paths;
+}
+
+/** What `cmsLocalizedPage` reads of a page: its own fields and its overrides. */
+export interface CmsLocalizablePage {
+  name: string;
+  slug: string;
+  description?: string | null;
+  languages: readonly string[];
+  /** Absent on a page read before R24. */
+  translations?: CmsPageTranslations | null;
+}
+
+/**
+ * A page's name, slug and description in one language
+ * (`specs/163-page-builder-marketing-pages/` R24, issue #521): each field the
+ * language overrides, else the page's own. A blank override inherits, and so
+ * does every override of a language the page does not declare — removing a
+ * language from a page keeps its overrides stored but stops them counting, so
+ * adding it back restores them.
+ *
+ * **It lives here because three programs ask the question and must agree**: the
+ * backend resolving and refusing a path, the page editor previewing the
+ * address, and the storefront through what the backend answers.
+ */
+export function cmsLocalizedPage(
+  page: CmsLocalizablePage,
+  language: string,
+): { name: string; slug: string; description: string | null } {
+  const own = page.languages.includes(language) ? page.translations?.[language] : undefined;
+  const pick = (value: string | undefined): string | undefined =>
+    value !== undefined && value.trim().length > 0 ? value : undefined;
+  return {
+    name: pick(own?.name) ?? page.name,
+    slug: pick(own?.slug) ?? page.slug,
+    description: pick(own?.description) ?? page.description ?? null,
+  };
+}
+
+export interface CmsPageUrlInput {
+  /** The page's public path in the language, with or without slashes. */
+  path: string;
+  /** The language the URL is for — already resolved against the page and channel. */
+  languageCode: string;
+  /** The channel's default content language. */
+  channelDefaultLanguage: string;
+}
+
+/**
+ * The storefront URL of a CMS page: `/<path>`, plus `?lang=<L>` when L is not
+ * the channel's default language (R24) — the rule `productPath` states for a
+ * product, for the same reason: a page's slug may be different in every
+ * language, and the language a non-default URL is for has to travel with it.
+ *
+ * The backend calls it for every CMS URL it answers — the resolved page's
+ * canonical and alternates, the channel index — so a later language path
+ * prefix changes this one function.
+ */
+export function cmsPageUrl(input: CmsPageUrlInput): string {
+  const base = `/${trimSlashes(input.path)}`;
+  if (input.languageCode === input.channelDefaultLanguage) return base;
+  return `${base}?lang=${encodeURIComponent(input.languageCode)}`;
 }
 
 // ---------------------------------------------------------------------------

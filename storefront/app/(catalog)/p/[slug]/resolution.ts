@@ -78,11 +78,5 @@ export function alternateLanguages(paths: ProductPagePaths): Record<string, stri
   return Object.fromEntries(paths.alternates.map((alternate) => [alternate.languageCode, alternate.path]));
 }
 
-/**
- * The language a product link asked for (`?lang=<L>`, FR-071): a non-default
- * language travels with every URL the platform emits. Only a well-formed BCP-47
- * tag is passed on; the backend resolves it against the channel's languages.
- */
-export function requestedLanguage(lang: string | string[] | undefined): string | null {
-  return typeof lang === 'string' && /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i.test(lang) ? lang : null;
-}
+/** The language a product link asked for (`?lang=<L>`, FR-071) — shared with the CMS page since R24. */
+export { requestedLanguage } from '../../../../lib/i18n/requested-language';

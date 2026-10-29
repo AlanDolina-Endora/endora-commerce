@@ -207,13 +207,28 @@ async function cmsPageEntries(ctx: Ctx): Promise<MetadataRoute.Sitemap> {
     const homeSlug = normalizeCmsUrlPath(homepage.cmsPageSlug ?? '');
     // R19D: a page's address is its public path; `?? page.slug` covers a
     // backend that predates the field.
+    // R24: a page in several languages is one entry per language URL, each
+    // naming the others as alternates; the `path` fallback covers a backend
+    // that predates the field.
     return index.pages
       .filter((page) => homeSlug === '' || normalizeCmsUrlPath(page.slug) !== homeSlug)
-      .map((page) => ({
-        url: absoluteUrl(`/${normalizeCmsUrlPath(page.path ?? page.slug)}`),
-        lastModified: new Date(page.updatedAt),
-        changeFrequency: 'monthly' as const,
-      }));
+      .flatMap((page) => {
+        const alternates = page.alternates ?? [];
+        const urls =
+          alternates.length > 0
+            ? alternates.map((alternate) => absoluteUrl(alternate.url))
+            : [absoluteUrl(`/${normalizeCmsUrlPath(page.path ?? page.slug)}`)];
+        const languages =
+          alternates.length > 1
+            ? Object.fromEntries(alternates.map((alternate) => [alternate.language, absoluteUrl(alternate.url)]))
+            : null;
+        return urls.map((url) => ({
+          url,
+          lastModified: new Date(page.updatedAt),
+          changeFrequency: 'monthly' as const,
+          ...(languages ? { alternates: { languages } } : {}),
+        }));
+      });
   } catch {
     return [];
   }

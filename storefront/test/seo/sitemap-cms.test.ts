@@ -116,6 +116,29 @@ describe('the sitemap tells crawlers the CMS pages exist', () => {
     expect(urls).not.toContain(`${ORIGIN}/doradztwo`);
   });
 
+  it('advertises every language URL of a page, each with the others as alternates (163 R24)', async () => {
+    getCmsPageIndex.mockResolvedValue({
+      pages: [
+        {
+          slug: 'about-us',
+          path: 'about-us',
+          url: '/about-us',
+          alternates: [
+            { language: 'en-US', url: '/about-us' },
+            { language: 'pl-PL', url: '/o-nas?lang=pl-PL' },
+          ],
+          updatedAt: '2026-09-01T10:00:00.000Z',
+        },
+      ],
+    });
+    const { default: sitemap } = await import('../../app/sitemap');
+    const entries = (await sitemap()).filter((entry) => /about-us|o-nas/.test(entry.url));
+
+    expect(entries.map((entry) => entry.url)).toEqual([`${ORIGIN}/about-us`, `${ORIGIN}/o-nas?lang=pl-PL`]);
+    const languages = { 'en-US': `${ORIGIN}/about-us`, 'pl-PL': `${ORIGIN}/o-nas?lang=pl-PL` };
+    for (const entry of entries) expect(entry.alternates).toEqual({ languages });
+  });
+
   it('is short rather than a 500 when the backend cannot answer (US3.3)', async () => {
     getCmsPageIndex.mockRejectedValue(new Error('connect ECONNREFUSED'));
 
