@@ -147,6 +147,8 @@ describe('TasksPage — the list', () => {
     renderTasks(<TasksPage />, { path: '/tasks', pattern: '/tasks' });
     const link = await screen.findByRole('link', { name: 'TSK-000001' });
     expect(link.getAttribute('href')).toBe(`/tasks/${TASK_ID}`);
+    // The number never breaks at its hyphen into "TSK-" / "000001" (T095).
+    expect(link).toHaveClass('whitespace-nowrap');
     expect(screen.getByText('Order the racking')).toBeTruthy();
     expect(screen.getAllByText(STATUS.todo.name).length).toBeGreaterThan(0);
     expect(screen.getByText('Anna Nowak')).toBeTruthy();

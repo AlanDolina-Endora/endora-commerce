@@ -108,6 +108,7 @@ describe('MyTasksPage', () => {
       .filter((text) => text?.startsWith('TSK-'));
     expect(numbers).toEqual(['TSK-000002', 'TSK-000001', 'TSK-000003']);
     expect(screen.getByRole('link', { name: 'TSK-000001' }).getAttribute('href')).toBe(`/tasks/${TASK_ID}`);
+    expect(screen.getByRole('link', { name: 'TSK-000001' })).toHaveClass('whitespace-nowrap');
     const row = screen.getByText('Sign the handover').closest('tr') as HTMLElement;
     expect(within(row).getByText(en('list.overdue'))).toBeTruthy();
   });

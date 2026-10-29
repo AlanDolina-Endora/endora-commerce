@@ -36,7 +36,11 @@ export function useTaskColumns(): ResponsiveColumn<TaskSummary>[] {
       header: t('list.col.number'),
       primary: true,
       render: (row) => (
-        <Link to={`/tasks/${row.id}`} className="font-medium text-primary underline-offset-4 hover:underline">
+        // `whitespace-nowrap`: the number would otherwise break at its hyphen (T095).
+        <Link
+          to={`/tasks/${row.id}`}
+          className="whitespace-nowrap font-medium text-primary underline-offset-4 hover:underline"
+        >
           {row.number}
         </Link>
       ),
