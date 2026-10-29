@@ -81,6 +81,8 @@ export interface CommentThreadProps<C extends RecordComment = RecordComment> {
    * it a deleted entry leaves the list, as a CRM or Project note does.
    */
   keepDeleted?: boolean;
+  /** An entry's time in words; `formatDateTime` when the record has no format of its own. */
+  formatTime?: (iso: string) => string;
 }
 
 /**
@@ -226,7 +228,7 @@ export function CommentThread<C extends RecordComment = RecordComment>(props: Co
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                     <span className="text-sm font-medium text-foreground">{item.author.name}</span>
-                    <time dateTime={item.createdAt}>{formatDateTime(item.createdAt)}</time>
+                    <time dateTime={item.createdAt}>{(props.formatTime ?? formatDateTime)(item.createdAt)}</time>
                     {item.editedAt && !deleted ? (
                       <Badge variant="outline" className="font-normal">
                         {t('comments.edited')}

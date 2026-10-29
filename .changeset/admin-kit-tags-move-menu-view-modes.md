@@ -12,3 +12,4 @@ Additive (`specs/165-task-management/`):
 - `MultiSelect` and `TagMultiSelect` take `ariaLabelledBy`: the trigger is named by a visible label's id rather than a second copy of it in `ariaLabel`. `TagMultiSelect` takes one of the two.
 - `StatusTransitionGraph` names the statuses in its *From* / *To* form and in the selected move through `statusLabel`, as its graph already did, instead of showing their codes; the options' values stay the codes. Every workflow screen built on it (orders, returns, CRM, Projects' stages, Tasks) shows names there now.
 - `ReferenceField`'s suggestion list keeps a suggestion's label (a record's number, a person's name) at its width and truncates the description (a title) instead: a long title no longer squeezes the number down to `TSK-…` or out of sight.
+- `RecordHistory` and `CommentThread` take `formatTime`, optional: an entry's time in the record's own format. Without it both write it with `formatDateTime`, as before.

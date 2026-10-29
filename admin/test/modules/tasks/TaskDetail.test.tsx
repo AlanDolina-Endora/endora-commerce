@@ -346,6 +346,13 @@ describe('TaskDetail — history and the zone', () => {
         new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(dueAt)),
       ),
     ).toBeTruthy();
+    // The entry's own time too.
+    expect(
+      within(history).getByText(
+        new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date('2026-10-20T10:00:00.000Z')),
+        { exact: false },
+      ),
+    ).toBeTruthy();
   });
 
   it('mounts the task.detail.after zone with the Task id, naming no contributor', () => {

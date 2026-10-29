@@ -109,6 +109,8 @@ describe('TaskDetail — comments (US4)', () => {
     expect(items[1]).toHaveTextContent('Thanks!');
     expect(items[2]).toHaveTextContent(core('comments.removedEntry'));
     expect(within(section).getByText(en('comments.hint'))).toBeInTheDocument();
+    // A comment's time is written as every date on the Tasks screens is (T095).
+    expect(within(items[0]!).getByText(new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date('2026-10-21T10:00:00.000Z')))).toBeInTheDocument();
   });
 
   it('offers Edit and Delete only on the reader’s own comments', async () => {

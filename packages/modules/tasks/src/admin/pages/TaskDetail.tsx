@@ -900,6 +900,7 @@ function TaskHistory(props: {
       changes={(entry) => shownHistoryChanges(recordHistoryChanges(entry))}
       fieldLabel={(field) => t(`history.field.${field}`)}
       renderValue={renderValue}
+      formatTime={(iso): string => momentLabel(iso, language)}
     />
   );
 }

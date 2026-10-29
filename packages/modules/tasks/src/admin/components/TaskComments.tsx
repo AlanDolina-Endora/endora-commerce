@@ -1,8 +1,9 @@
 import { useId, useMemo, type ReactNode } from 'react';
 import type { TaskComment } from '@endora-commerce/contracts';
 import { CommentThread, type CommentThreadApi, type RecordComment } from '@endora-commerce/admin-kit/components';
-import { useTranslation } from '@endora-commerce/admin-kit/i18n';
+import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
+import { momentLabel } from '../lib/labels.js';
 import { useTaskReferences } from '../lib/references.js';
 
 /** A Task's comment as the kit's thread reads one: a note, its author named even once removed. */
@@ -38,6 +39,7 @@ export function TaskComments(props: {
   const { taskId, canComment, onChange } = props;
   const t = useTranslation('tasks');
   const tCore = useTranslation('core');
+  const { language } = useAppLanguage();
   const headingId = useId();
   const { kinds, lookups } = useTaskReferences(taskId);
   const formerAuthor = tCore('history.actor.deleted');
@@ -61,6 +63,7 @@ export function TaskComments(props: {
       <CommentThread
         kind="note"
         keepDeleted
+        formatTime={(iso): string => momentLabel(iso, language)}
         api={api}
         canWrite={canComment}
         referenceKinds={kinds}
