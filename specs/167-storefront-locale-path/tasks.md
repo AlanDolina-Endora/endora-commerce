@@ -88,8 +88,8 @@ US1 and US2 ship together: the middleware that makes the path win is the one tha
 - [X] T040 [US2] Implement the third resolution step in `packages/modules/catalog/src/backend/services/url-key-resolution.service.ts` (research R-9) to pass T027
 - [X] T041 [US2] Implement `storefront/app/(catalog)/p/[slug]/resolution.ts` and `page.tsx`: honour `permanent`; drop `requestedLanguage` and `langOverride`; drop the `<div lang>` workaround now that `<html lang>` is the page language (T028)
 - [X] T042 [US1] Route-coverage test `storefront/test/i18n/route-coverage.test.ts` (SC-001): derive every page route from the `app/` tree (as `check:storefront-indexability` does) and assert each renders in the path language under `/pl` and `/en` with a cookie and `Accept-Language` pointing elsewhere *(done at the middleware seam — 53 routes derived from `app/`; the render's reading of the forwarded language is T023's)*
-- [ ] T043 [US2] Conformance `storefront/test/conformance/locale-path.spec.ts` (Playwright) — the url-shape §9 matrix and US2's pre-feature URL list in both setting states, at most two redirects to a 200 (SC-002) *(2026-10-29: written and type-checked, reading the channel's state from the backend so one spec covers both setting states; **not run** — no stack was up in the implementing session)*
-- [ ] T044 [US1] Conformance crawl in the same spec: zero root-relative internal links without the current prefix on home, category, product, search, CMS, blog, cart, checkout, account (SC-003) *(written in the same spec for home, catalogue, cart, search and sign-in; **not run**, as T043)*
+- [X] T043 [US2] Conformance `storefront/test/conformance/locale-path.spec.ts` (Playwright) — the url-shape §9 matrix and US2's pre-feature URL list in both setting states, at most two redirects to a 200 (SC-002) *(run 2026-10-29 against a local stack on throwaway Postgres/Redis/Meilisearch containers and the demo seed: 21/21 with the setting on and 21/21 with it off)*
+- [X] T044 [US1] Conformance crawl in the same spec: zero root-relative internal links without the current prefix on home, category, product, search, CMS, blog, cart, checkout, account (SC-003) *(run with T043; the crawl found the megamenu department links unprefixed — fixed, with a regression test)*
 
 **Checkpoint**: MVP — every page is language-addressed; every old link lands correctly.
 
@@ -161,17 +161,17 @@ US1 and US2 ship together: the middleware that makes the path win is the one tha
 - [X] T081 [P] Upgrade note in `docs/docs/upgrading-an-instance.md` and its Polish counterpart: existing channels are left **off** by the upgrade so their default-language URLs do not move (OR-10), new channels start **on**, how and where to switch a channel on and what then happens (every URL under a prefix, old links 307 by `?lang=` → cookie → `Accept-Language`), non-default languages gain prefixes either way (`?lang=` links 308), CMS pages that may be shadowed, third-party `productPath` callers
 - [X] T082 [P] Storefront developer note in `storefront/README.md`: the helpers, the lint rule and its message, language-neutral paths
 - [X] T083 Changeset `.changeset/167-storefront-locale-path.md` — `minor` (0.x, D-225) for `@endora-commerce/contracts` (new exports; `productPath` old → new call; `permanent`, `xDefault`, channel fields) whose body carries the upgrade note's operator sentence: existing channels stay unprefixed, switch *Prefix the default language in URLs* on per channel to adopt prefixes (OR-10), and the platform, sales_channels, catalog, seo, product_feeds, cms, cms-components, organizations, customers, newsletter, comparisons, mfa, invoices packages whose published output changes; `pnpm --filter backend run check:release-intent -- --since origin/master`
-- [ ] T084 Regenerate if anything generated moved: `pnpm --filter backend run composer:generate`, `manifests:generate`, `pnpm install --lockfile-only` (no dependency change expected — the lockfile must not move)
+- [X] T084 Regenerate if anything generated moved: `pnpm --filter backend run composer:generate`, `manifests:generate`, `pnpm install --lockfile-only` (no dependency change expected — the lockfile must not move)
 
 ---
 
 ## Phase 10: Verification
 
-- [ ] T085 Trap sweep (AGENTS.md): `command grep -rn "channelDefaultLanguage\|?lang=\|requestedLanguage\|langOverride" backend/test storefront/test packages --include='*.ts' --include='*.tsx'` — no stale expectation or caller left in the contract/integration trees `test:unit:fast` does not reach
-- [ ] T086 `pnpm run build:packages && pnpm -r run typecheck && pnpm -r run lint && pnpm run check:naming && pnpm run check:language`
-- [ ] T087 Targeted backend runs: `backend/test/contract/sales_channels`, `.../catalog`, `.../cms`, `.../product_feeds`, `backend/test/integration/sales_channels`; then `pnpm --filter '!backend' run test` (contracts, platform, cms-components, storefront, module packages)
-- [ ] T088 Walk `quickstart.md` on a local stack in both setting states
-- [ ] T089 Confirm the T004 spike left nothing in the tree (`git status`)
+- [X] T085 Trap sweep (AGENTS.md): `command grep -rn "channelDefaultLanguage\|?lang=\|requestedLanguage\|langOverride" backend/test storefront/test packages --include='*.ts' --include='*.tsx'` — no stale expectation or caller left in the contract/integration trees `test:unit:fast` does not reach
+- [X] T086 `pnpm run build:packages && pnpm -r run typecheck && pnpm -r run lint && pnpm run check:naming && pnpm run check:language`
+- [X] T087 Targeted backend runs: `backend/test/contract/sales_channels`, `.../catalog`, `.../cms`, `.../product_feeds`, `backend/test/integration/sales_channels`; then `pnpm --filter '!backend' run test` (contracts, platform, cms-components, storefront, module packages)
+- [X] T088 Walk `quickstart.md` on a local stack in both setting states *(every redirect row, `<html lang>`, canonical/alternates/x-default, both sitemaps, the closed store in both states and the outage notice checked by curl; the CMS 409 and the verification link were checked by their contract/unit tests rather than by hand)*
+- [X] T089 Confirm the T004 spike left nothing in the tree (`git status`)
 
 ---
 
