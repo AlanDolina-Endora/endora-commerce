@@ -34,6 +34,8 @@ function fixture(options: { missing?: boolean; defaultValue?: unknown; globalVal
     emFactory: () => em,
     publicApiBaseUrl: 'https://api.example.test',
     requireAdmin: () => async () => undefined,
+    isModulePresent: () => true,
+    permissions: () => ({ listPermissions: async () => [] }),
   });
   return { handle, asset, folder, flush, options };
 }

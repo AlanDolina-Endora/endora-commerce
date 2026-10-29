@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
+  type AssetReadPort,
   type AssetReference,
   type AssetReferenceDescriptor,
   type AssetReferenceHit,
@@ -180,5 +181,14 @@ describe('AssetReferenceDescriptor (feature 166)', () => {
     };
     // @ts-expect-error -- `readerRestriction` is readonly.
     restricted.readerRestriction = undefined;
+  });
+});
+
+describe('AssetReadPort.visibleToCaller (feature 166)', () => {
+  it('is a required method answering a set of the visible ids', () => {
+    expectTypeOf<AssetReadPort['visibleToCaller']>().toEqualTypeOf<
+      (assetIds: readonly string[]) => Promise<ReadonlySet<string>>
+    >();
+    expectTypeOf<undefined>().not.toExtend<AssetReadPort['visibleToCaller']>();
   });
 });

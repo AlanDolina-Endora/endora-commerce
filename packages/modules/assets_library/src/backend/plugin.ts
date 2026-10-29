@@ -11,7 +11,9 @@ import { AssetReferenceRegistry } from './services/reference-registry.js';
 import { HmacSigner } from './services/hmac.js';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
-import type { AdminUserReadPort } from '@endora-commerce/contracts';
+import type { AdminUserReadPort, PermissionReadPort } from '@endora-commerce/contracts';
+import { getTenantContext } from '@endora-commerce/platform/tenancy';
+import { AssetVisibility } from './services/asset-visibility.js';
 import type { PlatformLogger } from '@endora-commerce/platform/kernel';
 import {
   createAssetRetentionSweeper,
@@ -61,10 +63,25 @@ export interface AssetsLibraryModuleOptions {
   adminUserReadPort?: Pick<AdminUserReadPort, 'findById'>;
   /** Where the retention sweep writes its one line per tick. */
   log?: Pick<PlatformLogger, 'info'>;
+  /**
+   * Whether a module is effectively present — `effectiveState.isPresent`, read
+   * per evaluation. Required: an asset whose only references belong to a
+   * switched-off owner is hidden, and the owner is never asked
+   * (`specs/166-asset-reference-visibility/` research R-4).
+   */
+  isModulePresent: (moduleId: string) => boolean;
+  /**
+   * `admin_roles`' permission read, resolved per call. Required: it is how a
+   * holder of the platform wildcard is told from a reader whose files follow
+   * the records that use them (research R-3).
+   */
+  permissions: () => Pick<PermissionReadPort, 'listPermissions'>;
 }
 
 export interface AssetsLibraryModuleHandle {
   service: AssetsLibraryService;
+  /** Which assets the ambient caller may see (feature 166) — the one evaluator. */
+  visibility: AssetVisibility;
   folders: FoldersService;
   referenceRegistry: AssetReferenceRegistry;
   adapters: AdapterRegistry;
@@ -113,6 +130,12 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
     },
   });
   const referenceRegistry = new AssetReferenceRegistry();
+  const visibility = new AssetVisibility({
+    registry: referenceRegistry,
+    isPresent: options.isModulePresent,
+    permissions: options.permissions,
+    tenantContext: getTenantContext,
+  });
   const service = new AssetsLibraryService({
     emFactory: options.emFactory,
     adapters,
@@ -163,6 +186,7 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
         adapters,
         emFactory: options.emFactory,
         requireAdmin,
+        visibility,
       });
     });
     await registerAssetsLibraryPublicRoutes(app, {
@@ -188,6 +212,7 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
     plugin,
     handle: {
       service,
+      visibility,
       folders,
       referenceRegistry,
       adapters,

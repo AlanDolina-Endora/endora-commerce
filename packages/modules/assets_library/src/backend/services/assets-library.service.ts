@@ -18,6 +18,7 @@ import {
   type AssetPermalinkReleaseReason,
 } from '../entities/asset-permalink-release.entity.js';
 import { HttpError } from '@endora-commerce/platform/http';
+import { assetNotFound } from './asset-visibility.js';
 import type { AdapterRegistry } from './storage/adapter-registry.js';
 import type { AssetReferenceRegistry } from './reference-registry.js';
 import { UploadPipeline, type UploadInput, type UploadPolicy } from './upload-pipeline.js';
@@ -155,7 +156,7 @@ export class AssetsLibraryService {
         objectId: assetId,
         run: async ({ em }) => {
           const a = await em.findOne(Asset, { id: assetId }, { lockMode: LockMode.PESSIMISTIC_WRITE });
-          if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+          if (!a) throw assetNotFound(assetId);
           refuseSoftDeleted(a);
           const old = a.permalink ?? null;
           if (old === permalink) {
@@ -224,7 +225,7 @@ export class AssetsLibraryService {
       objectId: assetId,
       run: async ({ em }) => {
         const a = await em.findOne(Asset, { id: assetId }, { lockMode: LockMode.PESSIMISTIC_WRITE });
-        if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+        if (!a) throw assetNotFound(assetId);
         refuseSoftDeleted(a);
         const old = a.permalink ?? null;
         if (old === null) return { result: a, before: null, after: null, skipAudit: true };
@@ -310,7 +311,7 @@ export class AssetsLibraryService {
   async resolveEmbedUrl(assetId: string): Promise<string> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     const resolved = await this.resolveUrl(assetId);
     return versionedAssetUrl(resolved.url, a.contentVersion, a.storageBackend);
   }
@@ -321,7 +322,7 @@ export class AssetsLibraryService {
   ): Promise<{ url: string; expiresAt: Date | null }> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     const adapter = await this.deps.adapters.getForBackend(
       a.storageBackend as 'local' | 's3' | 'gcs' | 'legacy',
     );
@@ -335,7 +336,7 @@ export class AssetsLibraryService {
   async getAsset(assetId: string): Promise<AssetDetail> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     return this.detail(a);
   }
 
@@ -413,7 +414,7 @@ export class AssetsLibraryService {
         { id: assetId },
         locking ? { lockMode: LockMode.PESSIMISTIC_WRITE } : {},
       );
-      if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+      if (!a) throw assetNotFound(assetId);
 
       if (patch.filename !== undefined) a.filename = patch.filename;
       if (patch.label !== undefined) a.label = patch.label;
@@ -469,7 +470,7 @@ export class AssetsLibraryService {
   async softDelete(assetId: string): Promise<{ deletedAt: Date; purgeAfterAt: Date }> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     const retentionDays = this.deps.loadRetentionDays ? await this.deps.loadRetentionDays() : 30;
     const purgeAfter = (deletedAt: Date) =>
       new Date(deletedAt.getTime() + retentionDays * 24 * 60 * 60 * 1000);
@@ -504,7 +505,7 @@ export class AssetsLibraryService {
   async restore(assetId: string): Promise<AssetDetail> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     a.deletedAt = null;
     a.purgeAfterAt = null;
     a.pendingCleanup = false;
@@ -516,7 +517,7 @@ export class AssetsLibraryService {
   async move(assetId: string, folderId: string | null): Promise<AssetDetail> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     a.folderId = folderId;
     this.#audit(em, 'asset.move', a.id, null, { folderId });
     await em.flush();

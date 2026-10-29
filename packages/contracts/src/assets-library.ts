@@ -451,6 +451,21 @@ export interface AssetReadPort {
   resolvePublicUrls(assetIds: readonly string[]): Promise<Map<string, string>>;
 
   /**
+   * Which of these assets the **ambient caller** may see in the asset library
+   * (`specs/166-asset-reference-visibility/`): an asset no reader-restricted
+   * record uses, or one at least one of whose records the caller may see. The
+   * system actor and a holder of the platform wildcard `*` see every id that
+   * exists. An id that does not exist, or is not a uuid, is absent — the same
+   * as a hidden one.
+   *
+   * Ask it before any other refusal that would describe the asset (its
+   * visibility, its type), so a hidden asset and a missing one get one answer.
+   * The other methods of this port are unfiltered: they serve modules that
+   * decide by their own record's rules.
+   */
+  visibleToCaller(assetIds: readonly string[]): Promise<ReadonlySet<string>>;
+
+  /**
    * The **bytes** of one asset, buffered, with the MIME type they were stored
    * under — or nothing.
    *

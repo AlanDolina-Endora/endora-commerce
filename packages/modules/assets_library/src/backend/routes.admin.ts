@@ -36,6 +36,7 @@ import { Asset } from './entities/asset.entity.js';
 import type { AssetsLibraryService } from './services/assets-library.service.js';
 import type { FoldersService } from './services/folders.service.js';
 import type { AdapterRegistry } from './services/storage/adapter-registry.js';
+import type { AssetVisibility } from './services/asset-visibility.js';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 
 export interface AdminRoutesDeps {
@@ -44,6 +45,38 @@ export interface AdminRoutesDeps {
   adapters: AdapterRegistry;
   emFactory: () => EntityManager;
   requireAdmin: RequireAdminFactory;
+  /** Which assets the caller may see (`specs/166-asset-reference-visibility/`). */
+  visibility: Pick<AssetVisibility, 'assertVisible'>;
+}
+
+const VISIBLE_ASSET_GUARD = Symbol('requireVisibleAsset');
+
+/** Whether a pre-handler is the by-id visibility guard — what the structural test looks for. */
+export function isVisibleAssetGuard(handler: unknown): boolean {
+  return typeof handler === 'function' && (handler as unknown as Record<symbol, unknown>)[VISIBLE_ASSET_GUARD] === true;
+}
+
+/**
+ * `requireVisibleAsset` — the by-id guard (`specs/166-asset-reference-visibility/`
+ * research R-7, contracts/admin-api.md §1).
+ *
+ * Every route naming an asset by `:id` places it **after** its permission
+ * gate: an asset the caller may not see answers exactly as a missing one
+ * (status, code, message), before the handler reads a body or a multipart
+ * stream — so a hidden asset's replace stages no bytes. The restricted owners
+ * are asked whether or not the row exists, so a hidden id and a missing id
+ * issue the same first reads. `routes.admin.guard.test.ts` fails a route that
+ * takes an asset id without it.
+ */
+function createRequireVisibleAsset(
+  visibility: AdminRoutesDeps['visibility'],
+): (req: FastifyRequest, reply: FastifyReply) => Promise<void> {
+  const guard = async (req: FastifyRequest): Promise<void> => {
+    const { id } = req.params as { id: string };
+    await visibility.assertVisible(id);
+  };
+  (guard as unknown as Record<symbol, unknown>)[VISIBLE_ASSET_GUARD] = true;
+  return guard;
 }
 
 /**
@@ -62,6 +95,7 @@ export async function registerAssetsLibraryAdminRoutes(
   deps: AdminRoutesDeps,
 ): Promise<void> {
   const { service, folders, adapters, emFactory, requireAdmin } = deps;
+  const requireVisibleAsset = createRequireVisibleAsset(deps.visibility);
 
   // — POST /assets (multipart upload) -----------------------------------------
   app.post(
@@ -135,7 +169,7 @@ export async function registerAssetsLibraryAdminRoutes(
   // (specs/156-asset-stable-url/contracts/admin-api.md §2).
   app.post<{ Params: { id: string } }>(
     '/api/v1/admin/assets/:id/replace',
-    { preHandler: requireAdmin('assets.write') },
+    { preHandler: [requireAdmin('assets.write'), requireVisibleAsset] },
     async (req, reply) => {
       if (!req.isMultipart()) {
         throw new HttpError(
@@ -210,7 +244,7 @@ export async function registerAssetsLibraryAdminRoutes(
   // file it brings back (specs/156-asset-stable-url/contracts/admin-api.md §2).
   app.post<{ Params: { id: string } }>(
     '/api/v1/admin/assets/:id/previous-version/restore',
-    { preHandler: requireAdmin('assets.write') },
+    { preHandler: [requireAdmin('assets.write'), requireVisibleAsset] },
     async (req) => {
       const body = restorePreviousAssetVersionRequestSchema.parse(req.body);
       const detail = await service.restorePreviousVersion({
@@ -227,7 +261,7 @@ export async function registerAssetsLibraryAdminRoutes(
   // schema only bounds it (specs/156-asset-stable-url/contracts/admin-api.md §2).
   app.put<{ Params: { id: string } }>(
     '/api/v1/admin/assets/:id/permalink',
-    { preHandler: requireAdmin('assets.write') },
+    { preHandler: [requireAdmin('assets.write'), requireVisibleAsset] },
     async (req) => {
       const body = setAssetPermalinkRequestSchema.parse(req.body);
       const detail = await service.setPermalink(req.params.id, {
@@ -240,7 +274,7 @@ export async function registerAssetsLibraryAdminRoutes(
 
   app.delete<{ Params: { id: string } }>(
     '/api/v1/admin/assets/:id/permalink',
-    { preHandler: requireAdmin('assets.write') },
+    { preHandler: [requireAdmin('assets.write'), requireVisibleAsset] },
     async (req) => {
       const detail = await service.removePermalink(req.params.id);
       return { data: detail };
@@ -271,7 +305,7 @@ export async function registerAssetsLibraryAdminRoutes(
   // — GET /assets/:id --------------------------------------------------------
   app.get<{ Params: { id: string } }>(
     '/api/v1/admin/assets/:id',
-    { preHandler: requireAdmin('assets.read') },
+    { preHandler: [requireAdmin('assets.read'), requireVisibleAsset] },
     async (req) => {
       const detail = await service.getAsset(req.params.id);
       return { data: detail };
@@ -281,7 +315,7 @@ export async function registerAssetsLibraryAdminRoutes(
   // — GET /assets/:id/url ----------------------------------------------------
   app.get<{ Params: { id: string } }>(
     '/api/v1/admin/assets/:id/url',
-    { preHandler: requireAdmin('assets.read') },
+    { preHandler: [requireAdmin('assets.read'), requireVisibleAsset] },
     async (req) => {
       const resolved = await service.resolveUrl(req.params.id);
       return {
@@ -296,7 +330,7 @@ export async function registerAssetsLibraryAdminRoutes(
   // — DELETE /assets/:id (soft-delete + reference protection) ---------------
   app.delete<{ Params: { id: string } }>(
     '/api/v1/admin/assets/:id',
-    { preHandler: requireAdmin('assets.write') },
+    { preHandler: [requireAdmin('assets.write'), requireVisibleAsset] },
     async (req) => {
       const out = await service.softDelete(req.params.id);
       return {
@@ -311,7 +345,7 @@ export async function registerAssetsLibraryAdminRoutes(
   // — POST /assets/:id/restore ----------------------------------------------
   app.post<{ Params: { id: string } }>(
     '/api/v1/admin/assets/:id/restore',
-    { preHandler: requireAdmin('assets.write') },
+    { preHandler: [requireAdmin('assets.write'), requireVisibleAsset] },
     async (req) => {
       const detail = await service.restore(req.params.id);
       return { data: detail };
@@ -321,7 +355,7 @@ export async function registerAssetsLibraryAdminRoutes(
   // — POST /assets/:id/move --------------------------------------------------
   app.post<{ Params: { id: string } }>(
     '/api/v1/admin/assets/:id/move',
-    { preHandler: requireAdmin('assets.write') },
+    { preHandler: [requireAdmin('assets.write'), requireVisibleAsset] },
     async (req) => {
       const body = moveAssetRequestSchema.parse(req.body);
       const detail = await service.move(req.params.id, body.folderId ?? null);
@@ -435,7 +469,7 @@ export async function registerAssetsLibraryAdminRoutes(
   // — PATCH /assets/:id ------------------------------------------------------
   app.patch<{ Params: { id: string } }>(
     '/api/v1/admin/assets/:id',
-    { preHandler: requireAdmin('assets.write') },
+    { preHandler: [requireAdmin('assets.write'), requireVisibleAsset] },
     async (req) => {
       const patch = patchAssetRequestSchema.parse(req.body);
       const detail = await service.patchAsset(req.params.id, {
