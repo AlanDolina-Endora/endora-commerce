@@ -1204,7 +1204,7 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
   - Generated artefacts: no drift after `composer:generate` (module map committed), `manifests:generate`, `pnpm install --lockfile-only`, OpenAPI baseline.
   - Read sizes: no check refused a band; nothing re-recorded (`check-estate.md`).
   - Issues opened in this phase: #508 (non-blocking UX findings), #509 (catalog listing recording, red on master). Issue #480's body updated with the amendments, rulings and progress.
-  - **Left open for the owner:** T093 (an independent review of the visibility path — the implementing agent's own check is recorded under it, no finding) and T095 (the manual browser walk of `quickstart.md` §2 on the demo shop).
+  - **Left open for the owner:** T095 (the manual browser walk of `quickstart.md` §2 on the demo shop). T093 was done afterwards by an independent read-only reviewer — see its entry (F3 fixed; F1 filed as #513).
 
 ---
 
