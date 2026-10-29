@@ -11,6 +11,7 @@ import {
   taskDetail,
   workflow,
 } from './tasks-fixtures';
+import { markup } from '../../helpers/react-ids';
 
 /**
  * `task.detail.after` — the stack of panels a Task's screen ends with
@@ -77,17 +78,6 @@ async function renderDetail(options: {
   await screen.findByText(en('history.empty'));
   await screen.findByText(en('comments.empty'));
   return container;
-}
-
-/**
- * The screen's markup with React's per-render ids taken out, so two renders
- * compare — also where a component derives an id from one (`<id>-body`).
- */
-function markup(container: HTMLElement): string {
-  return container.innerHTML.replace(
-    /(id|for|aria-[a-z]+)="(:r[0-9a-z]+:|«r[0-9a-z]+»|_r_[0-9a-z]+_)([^"]*)"/g,
-    '$1="_$3"',
-  );
 }
 
 beforeEach(() => {
