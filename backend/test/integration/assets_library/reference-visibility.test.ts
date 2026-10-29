@@ -245,6 +245,12 @@ describe('assets library — reference visibility (feature 166)', () => {
 
   afterAll(async () => {
     const conn = h.em().getConnection();
+    const any = (ids: readonly string[]) => `{${ids.join(',')}}`;
+    await conn.execute(`delete from gallery_items where id = any(?::uuid[])`, [any(contentRows.galleryItems)]);
+    await conn.execute(`delete from categories where id = any(?::uuid[])`, [any(contentRows.categories)]);
+    await conn.execute(`delete from cms_pages where id = any(?::uuid[])`, [any(contentRows.cmsPages)]);
+    await conn.execute(`delete from blog_posts where id = any(?::uuid[])`, [any(contentRows.blogPosts)]);
+    await conn.execute(`delete from megamenus where id = any(?::uuid[])`, [any(contentRows.megamenus)]);
     await conn.execute(`delete from "tasks" where "id" = any(?::uuid[])`, [`{${Object.values(tasks).join(',')}}`]);
     await deleteProjects(h, [projectP1]);
     await removeCrmAssets(h.em(), assetIds);
@@ -253,39 +259,87 @@ describe('assets library — reference visibility (feature 166)', () => {
     await teardownBackendServer(h);
   });
 
-  describe('US1 — files of records I cannot see stay hidden in the library', () => {
-    /** Restricted files each reader may not see, the soft-deleted one included. */
-    const hiddenListFor = (who: 'A' | 'B' | 'S' | 'N'): string[] => {
-      switch (who) {
-        case 'A':
-          return [];
-        case 'S':
-          return [files.draftTask, files.projectTask, files.project];
-        case 'B':
-          return [
-            files.privateTask,
-            files.imageHidden,
-            files.deletedHidden,
-            files.draftTask,
-            files.projectTask,
-            files.project,
-            files.opportunity,
-          ];
-        case 'N':
-          return [
-            files.privateTask,
-            files.imageHidden,
-            files.deletedHidden,
-            files.draftTask,
-            files.projectTask,
-            files.project,
-            files.opportunity,
-            files.openTask,
-          ];
-      }
-    };
-    const reader = (who: 'A' | 'B' | 'S' | 'N'): Person => ({ A, B, S, N })[who];
+  /** Restricted files each reader may not see, the soft-deleted one included. */
+  const hiddenListFor = (who: 'A' | 'B' | 'S' | 'N'): string[] => {
+    switch (who) {
+      case 'A':
+        return [];
+      case 'S':
+        return [files.draftTask, files.projectTask, files.project];
+      case 'B':
+        return [
+          files.privateTask,
+          files.imageHidden,
+          files.deletedHidden,
+          files.draftTask,
+          files.projectTask,
+          files.project,
+          files.opportunity,
+        ];
+      case 'N':
+        return [
+          files.privateTask,
+          files.imageHidden,
+          files.deletedHidden,
+          files.draftTask,
+          files.projectTask,
+          files.project,
+          files.opportunity,
+          files.openTask,
+        ];
+    }
+  };
+  const reader = (who: 'A' | 'B' | 'S' | 'N'): Person => ({ A, B, S, N })[who];
 
+  /** `contracts/admin-api.md` §1 rows 2–5, 7–11, 13: every by-id route. */
+  const BY_ID_ROUTES: ReadonlyArray<{
+    row: number;
+    name: string;
+    send: (id: string, cookies: Record<string, string>) => Promise<LightMyRequestResponse>;
+  }> = [
+    {
+      row: 2,
+      name: 'POST /assets/:id/replace',
+      send: (id, cookies) => {
+        const { body, contentType } = multipartBody([
+          { name: 'file', filename: 'replacement.png', mime: 'image/png', value: TINY_PNG },
+        ]);
+        return inject('POST', `/api/v1/admin/assets/${id}/replace`, cookies, body, { 'content-type': contentType });
+      },
+    },
+    {
+      row: 3,
+      name: 'POST /assets/:id/previous-version/restore',
+      send: (id, cookies) =>
+        inject('POST', `/api/v1/admin/assets/${id}/previous-version/restore`, cookies, {
+          expectedContentVersion: 'v1',
+          expectedPreviousContentVersion: 'v0',
+        }),
+    },
+    {
+      row: 4,
+      name: 'PUT /assets/:id/permalink',
+      send: (id, cookies) =>
+        inject('PUT', `/api/v1/admin/assets/${id}/permalink`, cookies, { permalink: `rv-${run}/by-id.pdf` }),
+    },
+    { row: 5, name: 'DELETE /assets/:id/permalink', send: (id, cookies) => inject('DELETE', `/api/v1/admin/assets/${id}/permalink`, cookies) },
+    { row: 7, name: 'GET /assets/:id', send: (id, cookies) => inject('GET', `/api/v1/admin/assets/${id}`, cookies) },
+    { row: 8, name: 'GET /assets/:id/url', send: (id, cookies) => inject('GET', `/api/v1/admin/assets/${id}/url`, cookies) },
+    { row: 9, name: 'DELETE /assets/:id', send: (id, cookies) => inject('DELETE', `/api/v1/admin/assets/${id}`, cookies) },
+    { row: 10, name: 'POST /assets/:id/restore', send: (id, cookies) => inject('POST', `/api/v1/admin/assets/${id}/restore`, cookies) },
+    {
+      row: 11,
+      name: 'POST /assets/:id/move',
+      send: (id, cookies) => inject('POST', `/api/v1/admin/assets/${id}/move`, cookies, { folderId: null }),
+    },
+    {
+      row: 13,
+      name: 'PATCH /assets/:id',
+      send: (id, cookies) => inject('PATCH', `/api/v1/admin/assets/${id}`, cookies, { label: 'renamed' }),
+    },
+  ];
+
+  describe('US1 — files of records I cannot see stay hidden in the library', () => {
     it('the control: W lists every seeded file in the root folder', async () => {
       const all = await listAll(W, {}, 100);
       for (const id of Object.values(files).filter((id) => id !== files.deletedHidden)) {
@@ -327,54 +381,6 @@ describe('assets library — reference visibility (feature 166)', () => {
       expect(forB).toEqual(without(forW, [files.imageHidden]));
       expect(forB).toContain(files.imageUnused);
     });
-
-    /** `contracts/admin-api.md` §1 rows 2–5, 7–11, 13: every by-id route. */
-    const BY_ID_ROUTES: ReadonlyArray<{
-      row: number;
-      name: string;
-      send: (id: string, cookies: Record<string, string>) => Promise<LightMyRequestResponse>;
-    }> = [
-      {
-        row: 2,
-        name: 'POST /assets/:id/replace',
-        send: (id, cookies) => {
-          const { body, contentType } = multipartBody([
-            { name: 'file', filename: 'replacement.png', mime: 'image/png', value: TINY_PNG },
-          ]);
-          return inject('POST', `/api/v1/admin/assets/${id}/replace`, cookies, body, { 'content-type': contentType });
-        },
-      },
-      {
-        row: 3,
-        name: 'POST /assets/:id/previous-version/restore',
-        send: (id, cookies) =>
-          inject('POST', `/api/v1/admin/assets/${id}/previous-version/restore`, cookies, {
-            expectedContentVersion: 'v1',
-            expectedPreviousContentVersion: 'v0',
-          }),
-      },
-      {
-        row: 4,
-        name: 'PUT /assets/:id/permalink',
-        send: (id, cookies) =>
-          inject('PUT', `/api/v1/admin/assets/${id}/permalink`, cookies, { permalink: `rv-${run}/by-id.pdf` }),
-      },
-      { row: 5, name: 'DELETE /assets/:id/permalink', send: (id, cookies) => inject('DELETE', `/api/v1/admin/assets/${id}/permalink`, cookies) },
-      { row: 7, name: 'GET /assets/:id', send: (id, cookies) => inject('GET', `/api/v1/admin/assets/${id}`, cookies) },
-      { row: 8, name: 'GET /assets/:id/url', send: (id, cookies) => inject('GET', `/api/v1/admin/assets/${id}/url`, cookies) },
-      { row: 9, name: 'DELETE /assets/:id', send: (id, cookies) => inject('DELETE', `/api/v1/admin/assets/${id}`, cookies) },
-      { row: 10, name: 'POST /assets/:id/restore', send: (id, cookies) => inject('POST', `/api/v1/admin/assets/${id}/restore`, cookies) },
-      {
-        row: 11,
-        name: 'POST /assets/:id/move',
-        send: (id, cookies) => inject('POST', `/api/v1/admin/assets/${id}/move`, cookies, { folderId: null }),
-      },
-      {
-        row: 13,
-        name: 'PATCH /assets/:id',
-        send: (id, cookies) => inject('PATCH', `/api/v1/admin/assets/${id}`, cookies, { label: 'renamed' }),
-      },
-    ];
 
     /** The answer with the asked id and the request id taken out: what must be equal byte for byte. */
     function normalised(response: LightMyRequestResponse, id: string): unknown {
@@ -480,6 +486,281 @@ describe('assets library — reference visibility (feature 166)', () => {
       await seeAndUse(S.cookies, files.privateTask, 'S privateTask');
       await seeAndUse(S.cookies, files.opportunity, 'S opportunity');
       expect(await listAll(S.cookies, { q: `rv-${run}-privateTask` }, 10)).toEqual([files.privateTask]);
+    });
+  });
+
+  /**
+   * US2 and US3 seed their files through the upload route (real bytes, so a
+   * replace and a previous-version restore work) and reference them through
+   * the unrestricted contributors' own tables. Their names do not start with
+   * `rv-<run>`, so US1's `q=` cases never see them; they are created after
+   * US1's cases have run, so US1's root lists never see them either.
+   */
+  const contentRows = {
+    galleryItems: [] as string[],
+    categories: [] as string[],
+    cmsPages: [] as string[],
+    blogPosts: [] as string[],
+    megamenus: [] as string[],
+  };
+
+  async function uploadPng(filename: string, folderId: string | null = null): Promise<string> {
+    const { body, contentType } = multipartBody([
+      ...(folderId ? [{ name: 'folderId', value: folderId }] : []),
+      { name: 'file', filename, mime: 'image/png', value: TINY_PNG },
+    ]);
+    const response = await inject('POST', '/api/v1/admin/assets', W, body, { 'content-type': contentType });
+    expect(response.statusCode, response.body).toBe(201);
+    const id = (response.json() as { data: { id: string } }).data.id;
+    assetIds.push(id);
+    return id;
+  }
+
+  async function createProduct(label: string): Promise<string> {
+    const response = await inject('POST', '/api/v1/admin/catalog/products', W, {
+      sku: `RV-${run}-${label}-${randomUUID().slice(0, 6)}`,
+      type: 'simple',
+      name: { 'en-US': `RV ${run} ${label}` },
+      description: { 'en-US': 'desc' },
+      categoryIds: [],
+      attributeValues: {},
+      visibility: 'public',
+    });
+    expect(response.statusCode, response.body).toBe(201);
+    return (response.json() as { data: { id: string } }).data.id;
+  }
+
+  /** One reference of an unrestricted kind, written in the contributor's own table. */
+  async function useUnrestricted(
+    kind: 'product_gallery' | 'category_content' | 'cms_body_embed' | 'blog_post_main_image' | 'megamenu_item_target',
+    assetId: string,
+    productId: string,
+  ): Promise<void> {
+    const conn = h.em().getConnection();
+    const id = randomUUID();
+    const embed = (assetIdValue: string) =>
+      JSON.stringify({
+        schema_version: 1,
+        languages: { 'en-US': { root: { props: {} }, content: [{ type: 'LibraryImage', props: { assetId: assetIdValue } }] } },
+      });
+    switch (kind) {
+      case 'product_gallery':
+        await conn.execute(
+          `insert into gallery_items (id, product_id, asset_id, position, created_at, updated_at) values (?, ?, ?, ?, now(), now())`,
+          [id, productId, assetId, contentRows.galleryItems.length],
+        );
+        contentRows.galleryItems.push(id);
+        return;
+      case 'category_content':
+        await conn.execute(
+          `insert into categories (id, name, slug, content, created_at, updated_at)
+           values (?, '{"en-US":"RV content"}'::jsonb, ?, ?::jsonb, now(), now())`,
+          [id, `rv-${run}-${id.slice(0, 8)}`, embed(assetId)],
+        );
+        contentRows.categories.push(id);
+        return;
+      case 'cms_body_embed':
+        await conn.execute(
+          `insert into cms_pages (id, path, name, content, created_at, updated_at) values (?, ?, ?, ?::jsonb, now(), now())`,
+          [id, `rv-${run}-${id.slice(0, 8)}`, `RV ${id.slice(0, 8)}`, embed(assetId)],
+        );
+        contentRows.cmsPages.push(id);
+        return;
+      case 'blog_post_main_image':
+        await conn.execute(
+          `insert into blog_posts (id, slug, name, main_image_asset_id, version, created_at, updated_at)
+           values (?, ?, '{"en-US":"RV post"}'::jsonb, ?, 1, now(), now())`,
+          [id, `rv-${run}-${id.slice(0, 8)}`, assetId],
+        );
+        contentRows.blogPosts.push(id);
+        return;
+      case 'megamenu_item_target':
+        await conn.execute(`insert into megamenus (id, name, version, created_at, updated_at) values (?, ?, 1, now(), now())`, [
+          id,
+          `RV ${id.slice(0, 8)}`,
+        ]);
+        await conn.execute(
+          `insert into megamenu_items (id, megamenu_id, parent_id, position, kind, labels, descriptions, target, created_at, updated_at)
+           values (?, ?, null, 0, 'asset', '{}'::jsonb, null, ?::jsonb, now(), now())`,
+          [randomUUID(), id, JSON.stringify({ assetId })],
+        );
+        contentRows.megamenus.push(id);
+        return;
+    }
+  }
+
+  async function attachToTask(taskId: string, assetId: string): Promise<void> {
+    await h
+      .em()
+      .getConnection()
+      .execute(`insert into "task_attachments" ("task_id", "asset_id", "added_by_admin_user_id") values (?, ?, ?)`, [
+        taskId,
+        assetId,
+        A.adminUserId,
+      ]);
+  }
+
+  type Detail = { id: string; references: Array<Record<string, unknown>> };
+  async function detail(cookies: Record<string, string>, id: string): Promise<{ status: number; data: Detail; body: string }> {
+    const response = await inject('GET', `/api/v1/admin/assets/${id}`, cookies);
+    return { status: response.statusCode, data: (response.json() as { data: Detail }).data, body: response.body };
+  }
+
+  /** A reference list as `kind:entityId`, sorted — the order of the registry is not what is compared. */
+  const named = (references: ReadonlyArray<Record<string, unknown>>): string[] =>
+    references.map((r) => `${String(r.kind)}:${String(r.entityId)}`).sort();
+
+  describe('US2 — shared files and files uploaded straight to the library keep working', () => {
+    /** Every unrestricted kind of quickstart §1, US2 row, plus an unused upload and a rescued file. */
+    type SharedKey =
+      | 'product_gallery'
+      | 'category_content'
+      | 'cms_body_embed'
+      | 'blog_post_main_image'
+      | 'megamenu_item_target'
+      | 'unused'
+      | 'rescued';
+    const UNRESTRICTED = [
+      'product_gallery',
+      'category_content',
+      'cms_body_embed',
+      'blog_post_main_image',
+      'megamenu_item_target',
+    ] as const;
+    const SHARED: readonly SharedKey[] = [...UNRESTRICTED, 'unused', 'rescued'];
+    const atRoot = {} as Record<SharedKey | 'twoTasks', string>;
+    const inFolder = {} as Record<SharedKey, string>;
+    let folderG: string;
+    let product: string;
+
+    beforeAll(async () => {
+      const created = await inject('POST', '/api/v1/admin/assets/folders', W, { name: `rvs-${run}-images`, parentId: null });
+      expect(created.statusCode, created.body).toBe(201);
+      folderG = (created.json() as { data: { id: string } }).data.id;
+      product = await createProduct('US2');
+
+      for (const key of SHARED) {
+        atRoot[key] = await uploadPng(`rvs-${run}-${key}.png`);
+        inFolder[key] = await uploadPng(`rvs-${run}-g-${key}.png`, folderG);
+      }
+      atRoot.twoTasks = await uploadPng(`rvs-${run}-twoTasks.png`);
+
+      for (const kind of UNRESTRICTED) {
+        await useUnrestricted(kind, atRoot[kind], product);
+        await useUnrestricted(kind, inFolder[kind], product);
+      }
+      // Rescue (FR-001 b): A's private Task, which B may not see, and a product.
+      for (const rescued of [atRoot.rescued, inFolder.rescued]) {
+        await attachToTask(tasks.private, rescued);
+        await useUnrestricted('product_gallery', rescued, product);
+      }
+      // Two Tasks: the open one B sees, A's private one B does not.
+      await attachToTask(tasks.open, atRoot.twoTasks);
+      await attachToTask(tasks.private, atRoot.twoTasks);
+    });
+
+    it('the control: W sees each file referenced by its kind, the unused one by nothing', async () => {
+      for (const where of [atRoot, inFolder]) {
+        for (const kind of UNRESTRICTED) {
+          const { status, data } = await detail(W, where[kind]);
+          expect(status).toBe(200);
+          expect(data.references.map((r) => r.kind), kind).toEqual([kind]);
+        }
+        expect((await detail(W, where.unused)).data.references).toEqual([]);
+        expect(named((await detail(W, where.rescued)).data.references)).toEqual(
+          [`product_gallery:${product}`, `task_attachment:${tasks.private}`].sort(),
+        );
+      }
+      expect(named((await detail(W, atRoot.twoTasks)).data.references)).toEqual(
+        [`task_attachment:${tasks.open}`, `task_attachment:${tasks.private}`].sort(),
+      );
+    });
+
+    it.each(['root', 'folder'] as const)(
+      'unrestricted kinds and an unused upload: B’s detail equals W’s, byte for byte (%s)',
+      async (where) => {
+        const ids = where === 'root' ? atRoot : inFolder;
+        for (const key of [...UNRESTRICTED, 'unused'] as const) {
+          const forW = await inject('GET', `/api/v1/admin/assets/${ids[key]}`, W);
+          const forB = await inject('GET', `/api/v1/admin/assets/${ids[key]}`, B.cookies);
+          expect(forB.statusCode, `${key}: ${forB.body}`).toBe(200);
+          expect(forB.json(), key).toEqual(forW.json());
+        }
+      },
+    );
+
+    it('root folder: B gets W’s list minus US1’s hidden files — every US2 file listed, pages full', async () => {
+      const forW = await listAll(W, {}, 100);
+      const expected = without(forW, hiddenListFor('B'));
+      expect(expected).toEqual(expect.arrayContaining(Object.values(atRoot)));
+      expect(await listAll(B.cookies, {}, 2)).toEqual(expected);
+      expect(await listAll(B.cookies, {}, 3)).toEqual(expected);
+    });
+
+    /** Every page of a list, as the client receives it: items, order and `nextCursor`. */
+    async function pages(cookies: Record<string, string>, query: Record<string, string>, limit: number): Promise<unknown[]> {
+      const out: unknown[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < 50; page += 1) {
+        const params = new URLSearchParams({ ...query, limit: String(limit), ...(cursor ? { cursor } : {}) });
+        const response = await inject('GET', `/api/v1/admin/assets?${params.toString()}`, cookies);
+        expect(response.statusCode, response.body).toBe(200);
+        const body = response.json() as { data: unknown[]; nextCursor: string | null };
+        out.push(body);
+        cursor = body.nextCursor;
+        if (cursor === null) return out;
+      }
+      throw new Error('pages: more than 50 pages');
+    }
+
+    it.each([2, 3, 50])('a product-image folder: B’s pages equal W’s — items, order and nextCursor (limit %i)', async (limit) => {
+      const query = { folderId: folderG };
+      const forW = await pages(W, query, limit);
+      expect(forW.flatMap((p) => (p as { data: Array<{ id: string }> }).data.map((row) => row.id)).sort()).toEqual(
+        Object.values(inFolder).sort(),
+      );
+      expect(await pages(B.cookies, query, limit)).toEqual(forW);
+    });
+
+    it('the shared picker’s query (mime=image/): the same set for B and W, root and folder', async () => {
+      const picker = { mime: 'image/' };
+      const rootForW = await listAll(W, picker, 24);
+      const rootForB = await listAll(B.cookies, picker, 24);
+      // Root: US1's hidden image is the one difference.
+      expect(rootForB).toEqual(without(rootForW, [files.imageHidden]));
+      expect(rootForB).toEqual(expect.arrayContaining(Object.values(atRoot)));
+      expect(await pages(B.cookies, { ...picker, folderId: folderG }, 24)).toEqual(
+        await pages(W, { ...picker, folderId: folderG }, 24),
+      );
+    });
+
+    it('rescue: a file of A’s private Task and a product is visible to B — list, detail, URL', async () => {
+      for (const id of [atRoot.rescued, inFolder.rescued]) {
+        const shown = await detail(B.cookies, id);
+        expect(shown.status, shown.body).toBe(200);
+        const url = await inject('GET', `/api/v1/admin/assets/${id}/url`, B.cookies);
+        expect(url.statusCode, url.body).toBe(200);
+      }
+      expect(await listAll(B.cookies, { q: `rvs-${run}-rescued` }, 10)).toEqual([atRoot.rescued]);
+      expect(await listAll(B.cookies, { q: `rvs-${run}-g-rescued`, folderId: folderG }, 10)).toEqual([inFolder.rescued]);
+    });
+
+    it('rescue: no by-id route answers B the missing-file answer for the rescued file', async () => {
+      for (const route of BY_ID_ROUTES) {
+        const response = await route.send(atRoot.rescued, B.cookies);
+        const label = `row ${route.row} ${route.name}: ${response.body}`;
+        expect(response.statusCode, label).not.toBe(404);
+        const code = response.statusCode >= 400 ? (response.json() as { error: { code: string } }).error.code : null;
+        expect(code, label).not.toBe(ERROR_CODES.ASSET_NOT_FOUND);
+      }
+    });
+
+    it('a file of two Tasks, one B sees and one B does not, is visible to B (and hidden from N, who reads no Task)', async () => {
+      expect((await detail(B.cookies, atRoot.twoTasks)).status).toBe(200);
+      expect(await listAll(B.cookies, { q: `rvs-${run}-twoTasks` }, 10)).toEqual([atRoot.twoTasks]);
+      // The control: the file has no unrestricted reference, so the visible Task is what shows it.
+      expect((await detail(N.cookies, atRoot.twoTasks)).status).toBe(404);
+      expect(await listAll(N.cookies, { q: `rvs-${run}-twoTasks` }, 10)).toEqual([]);
     });
   });
 

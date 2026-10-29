@@ -246,18 +246,26 @@ description: "Task list for asset visibility following the records that referenc
 
 ### Tests first
 
-- [ ] T036 [US2] Write the US2 block (*unrestricted kinds*) of `backend/test/integration/assets_library/reference-visibility.test.ts`:
+- [X] T036 [US2] Write the US2 block (*unrestricted kinds*) of `backend/test/integration/assets_library/reference-visibility.test.ts`:
   - product gallery, category content, CMS, blog and megamenu images and an unused upload: B's and W's lists (items and order), `nextCursor` and details are equal, in the root folder and in a product-image folder;
   - rescue: a file used by A's private Task **and** a product is visible to B on the list, the detail, the URL and every by-id route;
   - a file used by two Tasks, one B sees and one B does not, is visible to B;
   - the shared picker's query returns the same set to B and W for unrestricted content.
   - Expected: green on first run if Phase 2 is right; a case seen red names a defect in the rescue step. Prove each case measures something by showing it red against a deliberately broken rescue (comment out the step locally, never committed) and record that.
+  - Written 2026-10-29 as a sibling `describe` of US1. Fixtures are uploaded through `POST /assets` as W (real bytes, public, names `rvs-<run>-…` so US1's `q=rv-<run>` never matches them) and referenced in each contributor's own table: a gallery item, category content, a CMS page body (wire kind `cms_body_embed`), a blog post main image, a megamenu item; plus an unused upload and a rescued file (A's private Task + a product) — one set in the root folder, one in a product-image folder G; and a root file of two Tasks (the open one B sees, A's private one). A top-level W control asserts each file's kind. Shared helpers (`hiddenListFor`, `reader`, `BY_ID_ROUTES`) moved from the US1 block to the top level, unchanged. Cases: B's detail equals W's byte for byte for the five kinds and the unused upload (root and G); B's root list = W's minus US1's hidden set at limits 2 and 3, every US2 file present; G's pages equal W's page by page (`data` and `nextCursor`) at limits 2, 3, 50; the picker query (`mime=image/`) at root and in G; rescue on list, detail, URL and every by-id route (none answers the missing-file answer); two Tasks visible to B and — the control — 404 for N, who reads no Task.
+  - **Green on first run** (11/11 with US1's 20, after one fixture fix: the CMS kind on the wire is `cms_body_embed`, not the SQL's `cms_page`). Shown red against three deliberate breaks of `hiddenAmong`, each built into `mod-assets-library`'s dist and run with `-t US2`, the source restored from a copy and rebuilt after (never committed): **R** (no rescue) — 7 red: root list, G pages ×3, picker, rescue list/detail/URL, rescue by-id; **V** (the visible-restricted step dropped) — 3 red: root list, picker, two Tasks; **O** ("hidden unless a restricted reference is visible", over-hiding) — 9 red: both detail-equality cases, root list, G pages ×3, picker, both rescue cases. Every non-control case is red under at least one.
 
 ### Implementation
 
-- [ ] T037 [US2] No new code is planned. If T036 finds a defect, fix it in `AL/src/backend/services/asset-visibility.ts` (rescue step or partition) with its unit case added to `AL/src/backend/services/asset-visibility.test.ts` first, and record it under this task.
+- [X] T037 [US2] No new code is planned. If T036 finds a defect, fix it in `AL/src/backend/services/asset-visibility.ts` (rescue step or partition) with its unit case added to `AL/src/backend/services/asset-visibility.test.ts` first, and record it under this task.
+  - Done 2026-10-29: no defect found, no production code changed.
 
 **Checkpoint**: everyday content work is unchanged for every library reader.
+
+**Phase 4 gate** (2026-10-29, on `01c822cbf` + the US2 block; only the test file changed):
+- `pnpm --filter backend run typecheck` exit 0; `eslint` on the test file exit 0.
+- `reference-visibility.test.ts` (31: US1 20 + US2 11) and `test/unit/scripts/check-fixture-substitution.test.ts`: 2 files / 59 tests green (`TEST_DATABASE_URL` on `postgres-test` 5441, `b2b_test`).
+- `check:naming`, `check:language` clean. No production code, route, schema, package or generated file changed, so `build:packages`, the package suites and the module checks are unaffected; they run in the Phase 5 gate. No file moved or deleted.
 
 ---
 
