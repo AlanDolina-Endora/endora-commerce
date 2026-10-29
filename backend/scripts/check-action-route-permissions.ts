@@ -81,13 +81,18 @@ async function loadActions(): Promise<{
  * disagreement fails the build, and an entry that no longer describes one fails
  * it too.
  *
- * The population that lands here is one shape: an action whose **intent is a
- * write** on a screen whose landing GET is read-gated — "Edit the megamenu",
+ * The population that lands here is mostly one shape: an action whose **intent
+ * is a write** on a screen whose landing GET is read-gated — "Edit the megamenu",
  * "Import products". Declaring the write code hides the action from an operator
  * who could open the screen; declaring the read code advertises an action the
  * operator cannot complete. `requiredPermission` is a single code and the screen
  * needs two, so neither answer is right and the choice is the owner's, not this
  * check's. An entry says which two codes are defensible.
+ *
+ * **One entry is the other shape, an `unresolvable` the walk cannot read past**:
+ * an action whose target's API is registered under a path the walk cannot
+ * evaluate. The entry says what the gate is, read by hand, and what would
+ * retire it.
  */
 export const ACTION_PERMISSION_DISAGREEMENTS: Readonly<Record<string, string>> = {
   'megamenu:edit-megamenu':
@@ -110,6 +115,14 @@ export const ACTION_PERMISSION_DISAGREEMENTS: Readonly<Record<string, string>> =
     'Project (`specs/163-projects-and-tasks/contracts/admin-surfaces.md` §4). Declaring the read ' +
     'code would advertise a screen a reader is refused. Retire this entry if the create form ' +
     'stops reading the list, or the list moves under a lookup route of its own.',
+  'mfa:open-security':
+    '"Account security" (issue #510) declares no code, and that is the right answer: `/security` ' +
+    "is the signed-in admin's own two-factor screen, and its six endpoints are registered by " +
+    "`registerMfaSelfServiceRoutes` under `pathPrefix: '/api/v1/admin/account/mfa'` " +
+    '(`packages/modules/mfa/src/backend/plugin.ts`), each gated by the bare admin guard and no ' +
+    '`requireAdmin(...)`. The walk counts `${pathPrefix}/status` as an unreadable path, so it ' +
+    'finds no registration to compare against. Retire this entry when the route walk resolves a ' +
+    'parameterised path prefix, or when those routes are registered under a literal path.',
 };
 
 async function main(): Promise<void> {
