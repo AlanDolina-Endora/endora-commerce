@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { AdminZoneName } from '@endora-commerce/contracts';
 import { AdminZone } from '@endora-commerce/admin-kit/zones';
 import { setMobileViewport } from '../../setup';
-import { OTHER_TASK_ID, STATUS, TASK_ID, en, renderTasks, taskSummary } from './tasks-fixtures';
+import { OTHER_TASK_ID, STATUS, TASK_ID, core, en, renderTasks, taskSummary } from './tasks-fixtures';
 
 /**
  * The *Tasks* panel on the screens of the records a Task may be linked to
@@ -142,6 +143,11 @@ describe('tasks contributes the Tasks panel', () => {
     answer = () => Promise.reject(new Error('offline'));
     renderZone(ZONES[1]);
     expect(await screen.findByText(en('panel.error'))).toBeInTheDocument();
+    // And offers to read again (T092).
+    answer = () => Promise.resolve({ items: [taskSummary()], nextCursor: null });
+    await userEvent.click(screen.getByRole('button', { name: core('common.action.retry') }));
+    expect(await screen.findByRole('link', { name: /Order the racking/ })).toBeInTheDocument();
+    expect(screen.queryByText(en('panel.error'))).toBeNull();
   });
 
   it('is not there — and asks nothing — while tasks is off, or for a reader without tasks:read', async () => {

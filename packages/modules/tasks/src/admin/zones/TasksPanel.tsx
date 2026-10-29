@@ -35,10 +35,13 @@ type State = { phase: 'loading' } | { phase: 'failed' } | { phase: 'ready'; task
  */
 export function TasksPanel({ kind, recordId }: TasksPanelProps): ReactNode {
   const t = useTranslation('tasks');
+  const tCore = useTranslation('core');
   const { language } = useAppLanguage();
   const { hasPermission } = useAuth();
   const headingId = useId();
   const [state, setState] = useState<State>({ phase: 'loading' });
+  /** Bumped by *Retry*: the read runs again. */
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -55,7 +58,7 @@ export function TasksPanel({ kind, recordId }: TasksPanelProps): ReactNode {
     return (): void => {
       alive = false;
     };
-  }, [kind, recordId]);
+  }, [kind, recordId, attempt]);
 
   const filtered = `/tasks?${new URLSearchParams({ linkedKind: kind, linkedId: recordId }).toString()}`;
 
@@ -83,9 +86,18 @@ export function TasksPanel({ kind, recordId }: TasksPanelProps): ReactNode {
               {t('panel.loading')}
             </p>
           ) : state.phase === 'failed' ? (
-            <p role="alert" className="text-destructive">
-              {t('panel.error')}
-            </p>
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-destructive">{t('panel.error')}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-8"
+                onClick={(): void => setAttempt((previous) => previous + 1)}
+              >
+                {tCore('common.action.retry')}
+              </Button>
+            </div>
           ) : state.tasks.length === 0 ? (
             <p className="text-muted-foreground">{t('panel.empty')}</p>
           ) : (

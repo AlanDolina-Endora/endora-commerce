@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CircleCheck, SearchX, X } from 'lucide-react';
+import { CircleCheck, Plus, SearchX, X } from 'lucide-react';
 import type { TaskSummary } from '@endora-commerce/contracts';
 import { useAuth, useListViewModePreference } from '@endora-commerce/admin-kit/lib';
 import { Alert, AlertDescription, Button, Card, CardContent, PageHeader } from '@endora-commerce/admin-kit/ui';
@@ -47,6 +47,7 @@ export function MyTasksPage(): ReactNode {
   const tCore = useTranslation('core');
   const { hasPermission } = useAuth();
   const customFields = hasPermission(CUSTOM_FIELDS_READ_PERMISSION);
+  const canWrite = hasPermission('tasks:write');
   const columns = useTaskColumns();
   const vocabulary = useTaskVocabulary();
   const [mode, setMode] = useListViewModePreference(LIST_ID);
@@ -56,6 +57,8 @@ export function MyTasksPage(): ReactNode {
   const filtered = hasFilters(params);
   const [rows, setRows] = useState<TaskSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** A read is in flight — the first, or a reload after a filter change (`aria-busy`, T092). */
+  const [loading, setLoading] = useState(true);
   const sequence = useRef(0);
 
   const navigate = useCallback(
@@ -76,12 +79,15 @@ export function MyTasksPage(): ReactNode {
 
   const load = useCallback(async (): Promise<void> => {
     const current = ++sequence.current;
+    setLoading(true);
     setError(null);
     try {
       const loaded = await tasksApi.myTasks(new URLSearchParams(mineQuery));
       if (current === sequence.current) setRows(loaded);
     } catch (failure) {
       if (current === sequence.current) setError(errorMessage(failure, t('mine.error')));
+    } finally {
+      if (current === sequence.current) setLoading(false);
     }
   }, [mineQuery, t]);
 
@@ -137,7 +143,11 @@ export function MyTasksPage(): ReactNode {
         <TaskBoard query={boardQuery} workflow={vocabulary.workflow} filtered={filtered} />
       ) : (
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6" aria-busy={loading}>
+            {/* Mounted before it has text, so a reload is announced (WCAG 4.1.3), as on the Tasks screen. */}
+            <p role="status" className="sr-only">
+              {loading && rows !== null ? t('mine.loading') : ''}
+            </p>
             {error ? (
               <Alert variant="destructive">
                 <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
@@ -176,6 +186,14 @@ export function MyTasksPage(): ReactNode {
                       </div>
                       <div className="b2b-empty__title">{t('mine.empty.title')}</div>
                       <div className="b2b-empty__sub">{t('mine.empty.body')}</div>
+                      {canWrite ? (
+                        <Button className="min-h-11 sm:min-h-9" asChild>
+                          <Link to="/tasks/new">
+                            <Plus aria-hidden="true" />
+                            {t('list.new')}
+                          </Link>
+                        </Button>
+                      ) : null}
                     </div>
                   )
                 }

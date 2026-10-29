@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { TaskBoard } from '@endora-commerce/contracts';
 import { setMobileViewport } from '../../setup';
@@ -144,6 +144,37 @@ describe('MyTasksPage', () => {
     getSpy.mockImplementation((path: string) => (path.startsWith(MINE_PATH) ? Promise.resolve({ data: [] }) : answer(path)));
     renderTasks(<MyTasksPage />, { path: '/tasks/mine', pattern: '/tasks/mine' });
     expect(await screen.findByText(en('mine.empty.title'))).toBeTruthy();
+    // The empty state offers the next step to a writer (T092).
+    expect(screen.getByRole('link', { name: en('list.new') })).toHaveAttribute('href', '/tasks/new');
+  });
+
+  it('offers no New task in the empty state to a reader', async () => {
+    const answer = getSpy.getMockImplementation()!;
+    getSpy.mockImplementation((path: string) => (path.startsWith(MINE_PATH) ? Promise.resolve({ data: [] }) : answer(path)));
+    renderTasks(<MyTasksPage />, { path: '/tasks/mine', pattern: '/tasks/mine', permissions: ['tasks:read'] });
+    expect(await screen.findByText(en('mine.empty.title'))).toBeTruthy();
+    expect(screen.queryByRole('link', { name: en('list.new') })).toBeNull();
+  });
+
+  it('is aria-busy and says so while it reads again after a filter change (WCAG 4.1.3)', async () => {
+    const answer = getSpy.getMockImplementation()!;
+    let pending: ((value: unknown) => void) | null = null;
+    getSpy.mockImplementation((path: string) => {
+      if (path.startsWith(`${MINE_PATH}?`) && path.includes('status=')) return new Promise((resolve) => (pending = resolve));
+      return answer(path);
+    });
+    renderTasks(<MyTasksPage />, { path: '/tasks/mine', pattern: '/tasks/mine' });
+    const table = (await screen.findByText('Sign the handover')).closest('[aria-busy]') as HTMLElement;
+    expect(table).toHaveAttribute('aria-busy', 'false');
+    await screen.findByRole('option', { name: STATUS.in_progress.name });
+    await userEvent.selectOptions(screen.getByLabelText(en('list.filter.status')), 'in_progress');
+    await waitFor(() => expect(table).toHaveAttribute('aria-busy', 'true'));
+    expect(within(table).getByText(en('mine.loading'))).toHaveClass('sr-only');
+    // The rows already shown stay while the new answer is on its way.
+    expect(screen.getByText('Sign the handover')).toBeTruthy();
+    await act(async () => pending?.({ data: [UNDATED] }));
+    await waitFor(() => expect(table).toHaveAttribute('aria-busy', 'false'));
+    expect(screen.queryByText('Sign the handover')).toBeNull();
   });
 
   it("shows the server's sentence when the read fails", async () => {
