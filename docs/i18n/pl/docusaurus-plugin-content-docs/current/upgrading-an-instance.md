@@ -3301,6 +3301,34 @@ produktu korzystały z kluczy URL per język.
 Ten wpis został napisany 2026-10-27 na podstawie gałęzi specyfikacji `163-product-data-scopes`
 (`feat/163-product-data-scopes`).
 
+#### Sklep: język jest częścią adresu URL {#after-0-109-0-language-in-url}
+
+- **Co się zmieniło.** Adres strony sklepu wskazuje teraz jej język pierwszym segmentem
+  ścieżki — `/pl/p/wiertarka`, `/en/p/drill` — więc jeden adres oznacza jeden język dla każdego
+  odwiedzającego i każdej wyszukiwarki. Każdy język kanału dostaje wyliczony prefiks; ustawienie
+  kanału sprzedaży **Prefiks języka domyślnego w adresach URL** decyduje, czy język domyślny też
+  ma prefiks.
+- **Istniejące kanały zachowują swoje adresy.** Migracja aktualizacji
+  (`Migration20261029T152922CoreSalesChannelsPrefixDefaultLanguage`) ustawia to ustawienie na
+  **wyłączone** w każdym kanale istniejącym w chwili jej uruchomienia: adresy języka domyślnego
+  pozostają bez prefiksu (`/p/wiertarka`). Kanały utworzone później startują z **włączonym**.
+- **Pozostałe języki i tak dostają prefiksy.** Link do produktu w języku innym niż domyślny miał
+  postać `/p/<klucz>?lang=<język>`; teraz odpowiada trwałym przekierowaniem (308) na
+  `/<prefiks>/p/<klucz>`. Mapy witryny, feedy produktowe, linki kanoniczne i `hreflang` oraz
+  e-maile używają adresów z prefiksem.
+- **Aby wprowadzić prefiks także dla języka domyślnego**, otwórz *Kanały sprzedaży*, edytuj kanał
+  i włącz **Prefiks języka domyślnego w adresach URL**. Wszystkie adresy języka domyślnego
+  przechodzą wtedy pod jego prefiks; adres bez prefiksu jest przekierowywany (307) do języka
+  wskazanego przez `?lang=`, ciasteczko `lang` lub języki przeglądarki. Nic zaindeksowanego ani
+  zapisanego w zakładkach nie przestaje działać. Przeglądarki mogą pamiętać zapisane trwałe
+  przekierowanie do godziny po zmianie ustawienia.
+- **Strony CMS.** Nie można już zapisać strony, której slug zaczyna się od prefiksu języka kanału
+  (`en`, `pl/…`). Istniejąca jest oznaczona na liście stron CMS jako zasłonięta prefiksem języka:
+  zmień jej slug.
+- **Kod zewnętrzny** wywołujący `productPath` z `@endora-commerce/contracts` musi przekazać fakty
+  URL kanału: `productPath({ key, languageCode, channel })` zastępuje
+  `productPath({ key, languageCode, channelDefaultLanguage })`.
+
 ## Instancja niespójna od początku
 
 Instalator `0.101.x` lub starszy zapisywał każdy pakiet wydania z `^` poza

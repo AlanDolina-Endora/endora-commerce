@@ -98,6 +98,29 @@ Przy wprowadzeniu tej reguły każda istniejąca organizacja otrzymała domyśln
 każdy kanał, w którym miała już zamówienia, więc żaden dotychczasowy klient nie stracił dostępu do
 sklepu, w którym kupował.
 
+## Prefiks języka domyślnego w adresach URL {#prefix-default-language}
+
+Na ekranie edycji kanału przełącznik **Prefiks języka domyślnego w adresach URL** decyduje,
+czy język domyślny kanału ma prefiks w adresach sklepu (`/pl/p/wiertarka`), czy nie
+(`/p/wiertarka`). Pozostałe języki kanału zawsze mają prefiks (`/en/p/drill`). Pod
+przełącznikiem ekran pokazuje prefiks każdego języka kanału, przeliczany przy zmianie języków.
+
+- Nowe kanały startują z przełącznikiem **włączonym**. Kanały istniejące przed aktualizacją,
+  która wprowadziła przełącznik, startują z **wyłączonym**, więc ich adresy się nie zmieniły.
+- **Włączenie** przenosi wszystkie adresy języka domyślnego pod jego prefiks. Stare adresy są
+  przekierowywane (307) do języka wskazanego przez `?lang=`, ciasteczko `lang` lub języki
+  przeglądarki odwiedzającego — nic zaindeksowanego ani zapisanego w zakładkach nie przestaje
+  działać.
+- **Wyłączenie** sprawia, że adres bez prefiksu znów oznacza język domyślny; adres z
+  prefiksem odpowiada trwałym przekierowaniem na niego.
+- **Zmiana języków kanału też zmienia adresy**: nowy język dostaje prefiks, a dodanie drugiego
+  wariantu języka (`en-GB` obok `en-US`) przełącza oba na pełne prefiksy (`/en-us`, `/en-gb`),
+  podczas gdy `/en` nadal przekierowuje.
+- Przeglądarki mogą pamiętać zapisane trwałe przekierowanie do godziny po zmianie.
+- Operatorzy z dostępem tylko do odczytu kanałów sprzedaży widzą przełącznik wyłączony.
+- Strony CMS, której slug zaczyna się od prefiksu języka (na przykład `en`), nie można
+  zapisać; istniejąca jest oznaczona na liście stron CMS jako zasłonięta prefiksem języka.
+
 ## Dezaktywacja kanału
 
 Użyj przycisku **Deactivate** na stronie szczegółów kanału. Dezaktywacja jest idempotentna i

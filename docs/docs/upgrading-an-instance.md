@@ -3150,6 +3150,31 @@ page's links follow the per-language URL keys.
 
 This entry was written on 2026-10-27 against the branch of spec `163-product-data-scopes` (`feat/163-product-data-scopes`).
 
+#### Storefront: the language is part of the URL {#after-0-109-0-language-in-url}
+
+- **What changed.** A storefront URL now names its language as its first path segment —
+  `/pl/p/wiertarka`, `/en/p/drill` — so one URL means one language for every visitor and every
+  search engine. Each channel language gets a derived prefix; a sales channel setting,
+  **Prefix the default language in URLs**, decides whether the default language is prefixed too.
+- **Your existing channels keep their addresses.** The upgrade migration
+  (`Migration20261029T152922CoreSalesChannelsPrefixDefaultLanguage`) sets the setting **off** on
+  every channel that exists when it runs: default-language URLs stay unprefixed (`/p/wiertarka`).
+  Channels created afterwards start **on**.
+- **Other languages gain prefixes either way.** A non-default-language product link was
+  `/p/<key>?lang=<language>`; it now answers a permanent redirect (308) to `/<prefix>/p/<key>`.
+  Sitemaps, product feeds, canonical and `hreflang` links and e-mails emit the prefixed URLs.
+- **To adopt prefixes for the default language too**, open *Sales channels*, edit the channel and
+  switch **Prefix the default language in URLs** on. Every default-language URL then moves under
+  its prefix; an unprefixed URL is redirected (307) to the language chosen by `?lang=`, the `lang`
+  cookie or the browser's languages. Nothing indexed or bookmarked breaks. Browsers may keep a
+  cached permanent redirect for up to an hour after you flip the setting.
+- **CMS pages.** A page slug whose first segment is a channel's language prefix (`en`, `pl/…`) can
+  no longer be saved. An existing one is marked in the CMS page list as hidden by the language
+  prefix: rename its slug.
+- **Third-party code** calling `productPath` from `@endora-commerce/contracts` must pass the
+  channel's URL facts: `productPath({ key, languageCode, channel })` replaces
+  `productPath({ key, languageCode, channelDefaultLanguage })`.
+
 ## An instance that is mixed from the start
 
 The installer of `0.101.x` or earlier wrote every package of the release with a `^` except
