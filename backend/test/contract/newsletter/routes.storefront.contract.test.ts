@@ -7,7 +7,6 @@ import {
 } from '../../helpers/test-server.js';
 import { channelUrlLanguages } from '@endora-commerce/contracts';
 import { SalesChannel } from '@endora-commerce/platform/kernel';
-import { NewsletterSubscriber } from '../../../../packages/modules/newsletter/src/backend/entities/newsletter-subscriber.entity.js';
 import { NewsletterTokenHelper, clickDestinationHash } from '../../../../packages/modules/newsletter/src/backend/services/token.helper.js';
 
 /** The key the test harness pins newsletter links to (`newsletterTokenSecret` in `test-server.ts`). */
@@ -106,7 +105,12 @@ describe('Newsletter storefront routes (feature 048)', () => {
   it('redirects confirm and unsubscribe to the prefixed storefront pages of the subscriber channel', async () => {
     const email = `lang-path-${Date.now()}@example.com`;
     await h.app.inject({ method: 'POST', url: '/api/v1/newsletter/subscribe', payload: { email, channelCode: 'default' } });
-    const subscriber = (await h.em().findOne(NewsletterSubscriber, { email }))!;
+    // Read by SQL: the entity class is the package's, taken from no source path here.
+    const [subscriber] = (await h.em().getConnection().execute(
+      `select id from newsletter_subscribers where email = ?`,
+      [email],
+    )) as Array<{ id: string }>;
+    if (!subscriber) throw new Error('the subscribe call stored no subscriber');
     const channel = (await h.em().findOne(SalesChannel, { code: 'default' }))!;
     const main = channelUrlLanguages(channel).find((l) => l.isDefault)!;
     const prefix = main.prefixed ? `/${main.prefix}` : '';
