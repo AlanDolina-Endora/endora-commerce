@@ -92,6 +92,7 @@ No code change. `src/backend/services/admin-preference-document.test.ts` (added 
 ## G. Demo, tests, generated files
 
 - **Demo:** `packages/demo-composition/src/projects.ts` writes `task_assignees`. The `tasks` module's demo step is new (R-23). The count in `backend/test/integration/demo/demo-shop.test.ts` moves.
+- **Demo role (added at T095):** `packages/modules/admin_roles/src/backend/demo/rows.ts` — `SALES_REPRESENTATIVE_PERMISSIONS` gains `tasks:read` and `tasks:write` (the feature-143 `crm:*` precedent), with a case in `demo.test.ts` beside it and the changeset `admin-roles-demo-sales-rep-tasks.md`. The walk found the demo assigning Tasks to reps who could not open them, so the brief's *My Tasks* scenario was impossible in the demo.
 - **Tests found by the planning sweep.** They pin `assignedAdminUserId`, the four literal statuses or `TASK_STATUSES` and are updated in the phase that changes them:
   - `backend/test/integration/tasks/{tasks-crud,write-port,migration,off-state}.test.ts`
   - `backend/test/contract/tasks/tasks.contract.test.ts`
