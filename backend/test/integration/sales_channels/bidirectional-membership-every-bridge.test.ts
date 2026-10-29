@@ -61,7 +61,6 @@ describe('bidirectional membership: every bridge (T043)', () => {
       defaultCurrency: 'EUR',
       languages: ['en'],
       currencies: ['EUR'],
-      isPublic: false,
       active: true,
       systemDefault: false,
       version: 1,

@@ -92,7 +92,6 @@ describe('brand tokens (feature 163, contract §1)', () => {
       defaultCurrency: 'USD',
       active: true,
       systemDefault: false,
-      isPublic: true,
       status: 'active',
     });
     await em.persistAndFlush(channel);

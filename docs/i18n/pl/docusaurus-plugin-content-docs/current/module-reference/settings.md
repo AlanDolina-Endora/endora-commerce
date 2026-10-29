@@ -43,6 +43,8 @@ Strona wygenerowana z manifestu modułu, bez żadnych ręcznych zmian. Co moduł
 
 | Akcja | Otwiera | Uprawnienie |
 | --- | --- | --- |
+| `clear-cache` | `/settings/cache` | `settings:write` |
+| `open-setting-groups` | `/settings/groups` | `settings:read` |
 | `open-settings` | `/settings` | `settings:read` |
 
 ## Ustawienia

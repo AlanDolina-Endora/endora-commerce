@@ -33,9 +33,12 @@ zabezpieczenia cyklu życia chroniące platformę przed danymi bez kanału.
   moduł inventory wprowadzi tę tabelę).
 
 - **Otwarty dla niezalogowanych odwiedzających** — flaga kanału (`anonymousAccess`, domyślnie
-  włączona). Gdy jest wyłączona, sklep obsługuje wyłącznie zalogowanych klientów. Jest niezależna od
-  `isPublic`, które decyduje, czy niezalogowani odwiedzający widzą ceny, i ma znaczenie tylko w
-  sklepie dla nich otwartym.
+  włączona). Gdy jest wyłączona, sklep obsługuje wyłącznie zalogowanych klientów. To, czy
+  niezalogowani odwiedzający widzą *ceny* w otwartym sklepie, nie jest flagą kanału: decyduje o tym
+  tryb wyświetlania cen dla niezalogowanych (`pricing.unauthenticated_display_mode`), który można
+  ustawić dla jednego kanału — `none` ukrywa ceny do czasu zalogowania. Dawna flaga kanału
+  `isPublic`, która ukrywała ceny także przed zalogowanymi klientami, została wycofana na jego
+  rzecz.
 
 - **Dostęp klientów** — organizacje obsługiwane przez kanał (przypisanie `organization`) to kanały,
   w których członkowie danej organizacji mogą się logować i kupować. Brak przypisania oznacza brak

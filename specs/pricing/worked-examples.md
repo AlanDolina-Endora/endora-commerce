@@ -1,8 +1,8 @@
 # Pricing — worked examples and test vectors
 
-The product owner's three target scenarios (E1–E3) and the cases that chose the precedence (F, S, T, Q vectors), and the cases the owner's rulings of 2026-10-21 decide (C∩, configurable precedence, H, A, K, U, V, D vectors), each as **inputs → expected price → which row wins and why**, under the proposed model, with today's answer where it differs. They are written to become the failing-first tests of the pricing-model feature (Constitution III) and to answer "what should this cost?" without re-deriving the algorithm.
+The product owner's three target scenarios (E1–E3) and the cases that chose the precedence (F, S, T, Q vectors), and the cases the owner's rulings of 2026-10-21 decide (C∩, configurable precedence, H, A, K, U, V, D vectors), and the display-mode withholding of issue #491 (W vectors), each as **inputs → expected price → which row wins and why**, under the proposed model, with today's answer where it differs. They are written to become the failing-first tests of the pricing-model feature (Constitution III) and to answer "what should this cost?" without re-deriving the algorithm.
 
-**Verified against** `master` at `b1021c71b` on 2026-10-21; §10.11 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21; §10.16 re-checked at `e3f456957` on 2026-10-24 (vectors G1–G4). §10.17 written against `2716908b3` on 2026-10-24 (issue #417) and rewritten for the owner's VAT ruling of the same day; §10.16 and §10.17 recomputed and §10.18 written for the four-place unit-price ruling of 2026-10-25 against `ad06079a4` (branch `fix/four-place-unit-prices`); §10.17 extended for issue #428 (refunds outside `payments`, the overpayment, the on-account case, section summaries) against `9e43c3412` on 2026-10-25. File:line citations are as of `b1021c71b`; re-check them before relying on one.
+**Verified against** `master` at `b1021c71b` on 2026-10-21; §10.11 re-checked for the P0 read-path hardening (branch `fix/pricing-read-path-hardening` on `fd6255339`) on 2026-10-21; §10.16 re-checked at `e3f456957` on 2026-10-24 (vectors G1–G4). §10.17 written against `2716908b3` on 2026-10-24 (issue #417) and rewritten for the owner's VAT ruling of the same day; §10.16 and §10.17 recomputed and §10.18 written for the four-place unit-price ruling of 2026-10-25 against `ad06079a4` (branch `fix/four-place-unit-prices`); §10.17 extended for issue #428 (refunds outside `payments`, the overpayment, the on-account case, section summaries) against `9e43c3412` on 2026-10-25; §10.19 written for issue #491 against `92dba80a9` on 2026-10-28 (branch `fix/491-display-mode-none-withholds-amounts`); §10.20 written for issue #492 on 2026-10-28 (branch `fix/492-retire-ispublic`). File:line citations are as of `b1021c71b`; re-check them before relying on one.
 
 **The "Today" lines** under each vector record what the **pre-160** engine (the Application rule
 and the Default list) answered, as the comparison the model was decided against. Since feature 160
@@ -502,3 +502,74 @@ unit-price column is `numeric(14,4)`), `backend/test/integration/price_lists/wor
 (§10.16 under the ruling), `packages/contracts/test/unit-price.unit.test.ts` (the arithmetic, the
 display rule and the typed-input refusal), `packages/platform/src/http/error-envelope-amount-precision.test.ts`,
 `admin/test/admin-kit/money-unit-price.test.ts` and `storefront/test/lib/money.test.ts` (the formatters).
+
+### 10.19 Display mode `none` withholds every amount (issue #491)
+
+A display mode decides whether a price is shown, and `none` — "price on request" — means the server
+sends no amount at all, not that the page hides one it was sent. Fixture: the §10.1 shape on one
+product **PV** on `pl_retail`, priced **88.00** for everyone (catalogue tier) and **10.00** for
+Acme's buyer (buyer tier), with a sale for everyone at **80.00** and `pricing.show_list_price` on —
+so a guest's priced answer carries four figures: price 80.00, compare-at 88.00, sale 80.00, list
+88.00. "Withheld" below means: listing and product page `price` `null`, no `compareAtPrice`,
+`resolvedPrice { basePrice: null, salePrice: null, displayMode: 'none' }` and no `listPrice`;
+product links and comparison `price` `null`; the resolved-price endpoint with no book, bracket,
+sale, source or compare-at; search hits and suggestions alike; no 88 or 80 anywhere in the body.
+
+| Vector | Configuration | Viewer | Answer |
+| --- | --- | --- | --- |
+| W0 | none of the below | guest | **80.00**, compare-at 88.00, list 88.00 — the control |
+| W1 | `unauthenticated_display_mode = none` | guest | **withheld** on every surface |
+| W2 | W1, `default_display_mode = net_only` | Acme | **10.00** (`net_only`) — a priced signed-in mode is untouched |
+| W3 | product override PV `none` | guest, Acme | **withheld** for both: the product step precedes the viewer's tail |
+| W4 | category override (a category of PV) `none` | guest | **withheld** |
+| W5 | W1 and product override PV `gross_only` | guest | **80.00** — the product step decides before the unauthenticated setting |
+| W6 | product override PV `none` | Acme, *Add to cart* | `400 CART_PRODUCT_QUOTE_ONLY`, no amount in the body |
+
+Price sort and range (feature 086's fixture: Acme sees ALPHA 10, DELTA 55, BETA 90; GAMMA unpriced):
+
+| Vector | Configuration | Request | Answer |
+| --- | --- | --- | --- |
+| W7 | product override BETA `none` | Acme, `sort=price` | ALPHA, DELTA, then {BETA, GAMMA} in the unpriced tail |
+| W8 | as W7 | Acme, `sort=-price` | DELTA, ALPHA, then the tail — BETA does not lead |
+| W9 | as W7 | Acme, `minPrice=80&maxPrice=100` | nothing — a range never brackets a withheld price |
+
+**Today** (before #491) W1, W3 and W4 sent every figure and the storefront hid them; W7–W9 ranked
+BETA at 90.00 (spec 086, clarification 2).
+
+Tests: `backend/test/integration/price_lists/worked-examples/display-mode-withheld.test.ts` (W0–W6),
+`backend/test/integration/search/display-mode-withheld-in-search.test.ts` (W1–W3 on search),
+`backend/test/integration/catalog/price-sort-withheld.test.ts` (W7–W9),
+`backend/test/integration/price_lists/price-surface-targeted-refresh.test.ts` (a product or category
+override marks its products, and `none` takes them off the surface),
+`packages/modules/price_lists/src/backend/services/book-pricing.withheld.test.ts` (the mapping and
+the surface's omission) and
+`packages/modules/catalog/src/backend/services/catalog-org-price-decorator.withheld.test.ts` (the
+external catalogue API).
+
+### 10.20 A former non-public channel, after the flag is retired (issue #492)
+
+A sales channel's `isPublic = false` withheld prices from every viewer, signed-in buyers included.
+The flag is retired: the migration gives every such channel `pricing.unauthenticated_display_mode =
+none` as its own value (unless it has one already) and drops the column, and no consumer reads the
+channel to decide whether to price. Fixture: §10.19's probe product **PV** on `pl_retail`, priced
+**88.00** for everyone and **10.00** for Acme's buyer, no sale; `pl_retail` is made a former
+non-public channel by recreating the column, marking it `false` and running the migration.
+
+| Vector | Configuration | Viewer | Answer |
+| --- | --- | --- | --- |
+| P1 | the migrated channel | guest | **withheld** on the listing, product page, product links and comparison |
+| P2 | as P1 | Acme | **10.00** (`gross_only`) everywhere — the behaviour change: the flag used to withhold it |
+| P3 | as P1 | guest / Acme, `sort=price` | `400 PRICE_ORDERING_UNAVAILABLE` / served |
+| P4 | P1 and product override PV `gross_only` | guest | **88.00** — the product step precedes the channel's guest setting (owner ruling of 2026-10-28) |
+
+The migration's own vectors: a channel with `is_public = false` and no value of its own gets `none`
+(M1); one with a value of its own keeps it (M2); a channel with `is_public = true` gets nothing (M3);
+the column is gone (M4); a database with a non-public channel and no registered setting is refused
+rather than migrated into showing prices (M5); `down` restores `false` where the channel's guest
+value is `none` (M6).
+
+**Today** (before #492) P2 sent no amount to the buyer, and P3 refused the buyer as well.
+
+Tests: `backend/test/integration/price_lists/worked-examples/retired-is-public.test.ts` (P1–P4),
+`backend/test/integration/sales_channels/retire-is-public-migration.test.ts` (M1–M6) and
+`backend/test/unit/sales_channels/is-public-retired.test.ts` (no code names the flag or the column).

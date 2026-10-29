@@ -36,7 +36,7 @@ import { RoleRequiredNotice } from './RoleRequiredNotice.js';
 import { useViewportTier } from './hooks/useViewportTier.js';
 import { NotificationBell } from './notifications/index.js';
 import { useAdminActions } from '../lib/admin-actions/useAdminActions.js';
-import { normalize } from '../lib/text-normalization.js';
+import { matchesSearchTerms, searchTerms } from '../lib/palette-match.js';
 import { useModulePresence } from '../lib/module-presence/index.js';
 import { usePlatformVersion } from '../lib/platform-info/usePlatformVersion.js';
 import {
@@ -756,13 +756,19 @@ interface PaletteItem extends GatedSurface {
  * does type `zamówienia`; folding only the query breaks the one who does not.
  * (Postel's Law — accept what was typed and normalise it.)
  *
- * `needle` must already be normalised; the caller folds the query once per
- * keystroke rather than once per row. `normalize` trims, so a query with a
+ * **Per word, across the row** — every word of the query must occur in some
+ * field, not the whole query in one. The rule itself is `lib/palette-match.ts`,
+ * shared with the Actions group for the same reason as the fold: a multi-word
+ * query such as `kanał sprzedaży` used to need one field carrying those words
+ * contiguously, so it missed `Kanały sprzedaży`.
+ *
+ * `terms` must already be folded by `searchTerms`; the caller does that once
+ * per keystroke rather than once per row. `normalize` trims, so a query with a
  * leading space matches what the operator meant rather than nothing at all
  * (issue #236).
  */
-function matchesQuery(needle: string, ...haystacks: string[]): boolean {
-  return haystacks.some((haystack) => normalize(haystack).includes(needle));
+function matchesQuery(terms: readonly string[], ...haystacks: string[]): boolean {
+  return matchesSearchTerms(terms, haystacks);
 }
 
 /**
@@ -1896,7 +1902,7 @@ function CommandPalette(props: CommandPaletteProps): ReactNode {
   const itemsBeforeSeeAll = useMemo(() => {
     if (!query.trim()) return [...assistantItems, ...navigateItems, ...actionItems];
     // Folded once here, then compared against every row — see `matchesQuery`.
-    const q = normalize(query);
+    const q = searchTerms(query);
     const filteredAssistant = assistantItems.filter((i) =>
       matchesQuery(q, i.label, i.sub, i.keywords),
     );

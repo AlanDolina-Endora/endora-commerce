@@ -14,7 +14,13 @@ feeds): §1.2's caching and consumers paragraphs, §1.3 and §1.4 item 7; and at
 2026-10-24 for the second review of release 0.108.0: §1.2's display-mode paragraph and §1.3; and
 on `perf/416-surface-rebuild` (from `2716908b3`) on 2026-10-24 for the faster whole rebuild
 (issue #416): §1.4 item 7; and on `fix/four-place-unit-prices` (from `ad06079a4`) on 2026-10-25 for
-the four-place unit-price ruling: §1.2's consumers paragraph. The old model — the Application rule, the per-list
+the four-place unit-price ruling: §1.2's consumers paragraph; and on
+`fix/491-display-mode-none-withholds-amounts` (from `92dba80a9`) on 2026-10-28 for issue #491
+(display mode `none` withholds every amount): §1.2's display-mode paragraph and §1.3; and on
+`fix/497-price-cursor-leak` (from `857092eab`) on 2026-10-28 for issue #497 (sealed price-walk
+cursors): §1.3's paragraph on the walk; and on
+`fix/492-retire-ispublic` on 2026-10-28 for issue #492 (the sales channel's `isPublic` retired into
+the display-mode chain): §1.2's display-mode paragraphs. The old model — the Application rule, the per-list
 product roster and brackets, the `Default` list, the product *default price* and the variant price
 override — is gone from the code and, after the conversion migration, from the database. How it
 worked is recorded in this file's history (`git log -- specs/pricing/current-model.md`); the
@@ -134,8 +140,34 @@ tail apart from it, per channel, guest or signed-in and (signed in) organization
 generation (`ViewerModeKey`): the profile is shared by viewers whose tails differ, so a display mode
 cached with the answer would be served to the wrong one. An organization override,
 `setSettingsDisplayMode` and a settings write of either display-mode key (`settings.value_changed`)
-bump the generation. A resolution of a fixed profile
+bump the generation; a product or category override bumps it and marks the products it concerns on
+the price surface (§1.3). A resolution of a fixed profile
 (the surface worker, a feed's catalogue reference) neither reads nor writes the answer cache.
+
+**The sales channel has no price-visibility flag** (issue #492). `sales_channels.is_public` withheld
+prices from every viewer on a channel, signed-in buyers included, and every consumer skipped the
+resolution on it (catalogue listing and walk, product page, product links, search, comparisons, the
+price-control check). It is gone, column and all: `Migration20261028T173317CoreSalesChannelsRetireIsPublic`
+wrote `pricing.unauthenticated_display_mode = none` as the channel's own value for every channel that
+had it off and no value of its own, then dropped it. So "prices after sign-in" on one channel is the
+settings tier of the chain, per channel, and a signed-in buyer there is priced by their own tail. The
+chain's precedence is unchanged (owner ruling of 2026-10-28): a product or category override
+precedes the viewer's tail, so it decides for a guest as well, and is the one way a guest is shown a
+price where the guest mode is `none` (`worked-examples.md` §10.19 W5, §10.20).
+
+**Display mode `none` withholds every amount** (issue #491, `worked-examples.md` §10.19). Where the
+viewer's mode is `none`, the mapping onto the published shapes (`PL/backend/services/book-pricing.ts`:
+`listingPriceFromBook`, `listingDetailFromBook`, `engineFromBook`) answers no price, no base, no
+sale, no list price, no tier, no book and no source — `displayMode: 'none'` stays — so the catalogue
+listing, the product page, home cards, search hits and suggestions, comparisons, product links and
+the storefront resolved price send no amount, and none of them restates the rule. The mode is
+applied per request after the cached resolution, so an amount cached for a priced viewer under the
+shared profile is never mapped for a `none` viewer. A line (`resolveLinePrices`) keeps its amount
+beside the mode: the cart, the admin order preview and order intake refuse it as quote-only by that
+mode; the external catalogue API, which publishes line amounts, withholds them through
+`displayModeWithholdsAmounts` (`CON/price-lists.ts`). Quote reference prices are resolved for a
+signed-in owner and shown only in the admin projection; product feeds are out of scope (a feed
+publishes deliberately; a pinned feed reads its book).
 
 **Consumers.** Catalogue listing, product page, product links, home cards, search hits and
 suggestions, comparisons, the cart read and placement (one chain, `CartLinePricing.orderablePrices`:
@@ -169,7 +201,17 @@ its significant places, up to four, at least two (`unitPriceFractionDigits`): `0
 
 `orderByUnitPrice` / `pricedProductIds` read the **price surface** (`price-surface.ts`,
 `specs/160-pricing-model-v2/contracts/price-surface.md`): per profile, `price_profile_prices` holds
-the quantity-1 price of each product (the lowest variant price for a variant product); the everyone
+the quantity-1 price of each product (the lowest variant price for a variant product) — except a
+product whose own display-mode step (its override, else its category's) is `none`, which is
+withheld from every viewer and has no row, so price sort walks it in the unpriced tail and a price
+range leaves it out (issue #491; spec 086's clarification 2 had it keep its position while the API
+still sent its amount). The step is read by a build only while some product or category override
+is `none`. A viewer whose own tail (organization, settings) is `none` is refused price sort and
+range by the catalogue (`pageDisplayMode`); `pricedProductIds` and the live ordering of a
+never-built profile leave out whatever the viewer's mode withholds. Like a price change, a
+display-mode override reaches the order at the worker's turnaround: until the marked product is
+refreshed it keeps the position its last price gave it (and the walk may meet it again in the
+tail); its card is withheld at once. The everyone
 profile holds every priced product, a buyer profile only the products whose answer differs. A page
 is one statement over the buyer profile and the everyone profile, each read at the generation its
 profile serves. The surface is built only by the `price_lists.surface` worker (BullMQ, deduplicated,
@@ -187,7 +229,14 @@ then the unpriced, in the default order), never from page 1. A walk meets every 
 price does not change during it exactly once; a product repriced meanwhile may be met twice or not
 at all, as on any keyset walk over a live price — the order goes missing *because* pricing changed
 more often than not. A page cut by its scan budget is short, possibly empty, and hands on a cursor
-at its scan position, so a budget never ends a walk (review 3 of 0.108.0, A1/A2). **No request builds a
+at its scan position, so a budget never ends a walk (review 3 of 0.108.0, A1/A2). That position can
+be a product the viewer may not see, and under a price sort it holds its resolved price and id, as
+the last card of a full page holds a price the viewer's display mode may withhold while the order
+still ranks it; so every cursor a price walk issues — price sort and a price range under another
+sort alike — is sealed (AES-256-GCM under a key derived from `SESSION_COOKIE_SECRET`, the
+platform's `cursorSeal`; issue #497): it decodes to nothing and cannot be forged, and one that does
+not open — altered, of the unsealed format, or sealed before the session key changed — starts the
+walk again, as an unreadable cursor always has. **No request builds a
 surface**: the order may lag a change by the worker's turnaround (SC-005: ≤ 60 s for a targeted
 change, ≤ 150 s at 200 profiles for a catalogue-wide one), a displayed
 price never — cards are always resolved live. Measured in

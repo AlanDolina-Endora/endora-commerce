@@ -266,6 +266,40 @@ export const manifest = defineModuleManifest({
   i18n: { bundlesDir: 'i18n' },
   docs: { dir: 'docs' },
   actions: [
+    // Principle XVI (issue #510): the three screens the sidebar lists were
+    // reachable from the sidebar alone — the palette offered only the create
+    // form. Each is gated on `blog.read`, the code its route and its `GET`
+    // enforce; the create form stays on `blog.write`.
+    {
+      id: 'open-blog-posts',
+      labelKey: 'actions.openPosts.label',
+      descriptionKey: 'actions.openPosts.description',
+      icon: 'Newspaper',
+      targetRoute: '/blog/posts',
+      requiredPermission: 'blog.read',
+      keywords: ['blog', 'post', 'posts', 'article', 'wpis', 'wpisy', 'artykuł', 'artykuły'],
+      weight: 130,
+    },
+    {
+      id: 'open-blog-categories',
+      labelKey: 'actions.openCategories.label',
+      descriptionKey: 'actions.openCategories.description',
+      icon: 'Newspaper',
+      targetRoute: '/blog/categories',
+      requiredPermission: 'blog.read',
+      keywords: ['blog', 'category', 'categories', 'kategoria', 'kategorie'],
+      weight: 150,
+    },
+    {
+      id: 'open-blog-tags',
+      labelKey: 'actions.openTags.label',
+      descriptionKey: 'actions.openTags.description',
+      icon: 'Newspaper',
+      targetRoute: '/blog/tags',
+      requiredPermission: 'blog.read',
+      keywords: ['blog', 'tag', 'tags', 'tagi'],
+      weight: 160,
+    },
     {
       id: 'new-post',
       labelKey: 'actions.newPost.label',

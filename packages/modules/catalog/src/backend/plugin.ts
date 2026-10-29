@@ -29,7 +29,7 @@ import {
 } from './services/bulk-operation-queue.js';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
-import { CatalogQueryService } from './services/catalog-query.service.js';
+import { CatalogQueryService, type CatalogCursorSeal } from './services/catalog-query.service.js';
 import {
   CatalogAdminService,
   type CatalogWarehouseThresholdCopy,
@@ -85,6 +85,12 @@ export type RequireApiKeyFactory = (
 export interface CatalogModuleOptions {
   emFactory: () => EntityManager;
   eventBus: EventBus;
+  /**
+   * Issue #497 — what the storefront listing seals a price walk's cursors
+   * with. Optional for fixtures that never sort or filter by price; a price
+   * walk without it fails loudly.
+   */
+  cursorSeal?: CatalogCursorSeal;
   /**
    * Feature 068 — flushes the storefront's `catalog:categories` fetch-cache tag.
    * Owned by `backend.ts`, which also owns the `category.updated.v1`
@@ -313,6 +319,9 @@ export function catalogModule(options: CatalogModuleOptions) {
       options.organizations,
       // Feature 086 — the ordering slice of the same `pricingService`.
       options.pricingService,
+      // No scan-budget log on this instance, as before.
+      undefined,
+      options.cursorSeal,
     );
     const adminService = new CatalogAdminService(
       options.emFactory,

@@ -248,10 +248,26 @@ przekreśla własną cenę kupującego. Koszyk i składanie zamówienia zawsze p
 
 **Tryby prezentacji** decydują, jak ceny są pokazywane — tylko brutto, tylko netto, obie albo wcale.
 Tryb *none* ukrywa wszystkie ceny i zastępuje *Dodaj do koszyka* przyciskiem *Dodaj do zapytania
-ofertowego*; koszyk również odrzuca taki produkt (`400 CART_PRODUCT_QUOTE_ONLY`). Tryb ustawia się dla
-całej platformy (osobno dla zalogowanych i anonimowych odwiedzających) i można go nadpisać dla
-organizacji, kategorii i produktu; wygrywa najbardziej szczegółowe ustawienie. Tryby prezentacji
-ustawia się w *Ustawieniach cenowych* oraz w edytorach organizacji i kategorii.
+ofertowego*; koszyk również odrzuca taki produkt (`400 CART_PRODUCT_QUOTE_ONLY`). Ceny wstrzymuje
+serwer, a nie tylko strona: listy produktów, karta produktu, wyniki i podpowiedzi wyszukiwania,
+porównania, produkty powiązane i zewnętrzne API katalogu nie wysyłają dla takiego produktu żadnej
+kwoty. Przy sortowaniu po cenie taki produkt nie jest szeregowany — trafia za produkty z ceną, w obu
+kierunkach — a filtr zakresu cen go pomija. Tryb *none* dla anonimowych odwiedzających to
+konfiguracja „ceny po zalogowaniu”. Tryb ustawia się osobno dla zalogowanych i anonimowych
+odwiedzających — dla wszystkich kanałów sprzedaży w *Ustawieniach cenowych* albo dla jednego kanału
+na ekranie *Ustawienia*, gdzie wartość kanału wygrywa z wartością dla całej platformy — i można go
+nadpisać dla organizacji, kategorii i produktu; wygrywa najbardziej szczegółowe ustawienie.
+Nadpisanie produktu lub kategorii wygrywa **także dla anonimowych odwiedzających**: produkt
+nadpisany na *Tylko brutto* pokazuje cenę gościom nawet w kanale, którego tryb dla anonimowych to
+*Żaden*, i jest to jedyny sposób, by pokazać tam gościowi cenę. Nadpisanie organizacji dotyczy tylko
+zalogowanych kupujących z tej organizacji. Tryby prezentacji ustawia się w *Ustawieniach cenowych*
+oraz w edytorach organizacji i kategorii.
+
+Kanały sprzedaży nie mają własnego przełącznika widoczności cen. Kiedyś go miały (`isPublic`), a gdy
+był wyłączony, kanał ukrywał ceny przed wszystkimi, także przed zalogowanymi kupującymi. Przełącznik
+wycofano: każdy kanał, który miał go wyłączonego, dostał tryb *Żaden* dla anonimowych
+odwiedzających, więc goście nadal nie widzą tam cen, a jego zalogowani kupujący widzą teraz ceny
+zgodnie ze swoim trybem prezentacji.
 
 ## Przykłady — sklep demonstracyjny
 

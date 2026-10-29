@@ -368,9 +368,11 @@ export const manifest = defineModuleManifest({
    * Sales Rep starts from it daily, the board, analytics — the one screen
    * that opens on a code of its own, so for a manager holding it the palette
    * would otherwise offer nothing of what that code is for — and the calendar,
-   * opened daily by everybody who holds `crm:read` (User Story 22). Curated, not a
-   * route dump — the workflow configuration is reached from the sidebar by the
-   * few who configure it.
+   * opened daily by everybody who holds `crm:read` (User Story 22). The tags and
+   * the workflow configuration joined them with issue #516: both are sidebar
+   * screens, and a sidebar entry the palette cannot find is the gap Principle
+   * XVI names. They open on `crm:configure`, so only the few who configure CRM
+   * see them.
    *
    * Each `requiredPermission` is the code the target route itself enforces
    * (`src/admin/index.ts`), so the palette never advertises a screen the
@@ -426,6 +428,26 @@ export const manifest = defineModuleManifest({
       requiredPermission: 'crm:read',
       keywords: ['crm', 'calendar', 'events', 'reminder', 'schedule', 'kalendarz', 'wydarzenia', 'przypomnienie', 'terminy'],
       weight: 324,
+    },
+    {
+      id: 'open-crm-tags',
+      labelKey: 'actions.openCrmTags.label',
+      descriptionKey: 'actions.openCrmTags.description',
+      icon: 'Tag',
+      targetRoute: '/crm/tags',
+      requiredPermission: 'crm:configure',
+      keywords: ['crm', 'tag', 'tags', 'label', 'labels', 'etykieta', 'etykiety'],
+      weight: 325,
+    },
+    {
+      id: 'open-crm-workflow',
+      labelKey: 'actions.openCrmWorkflow.label',
+      descriptionKey: 'actions.openCrmWorkflow.description',
+      icon: 'ListChecks',
+      targetRoute: '/crm/workflow',
+      requiredPermission: 'crm:configure',
+      keywords: ['crm', 'workflow', 'status', 'statuses', 'transitions', 'pipeline', 'przepływ', 'statusy', 'lejek'],
+      weight: 326,
     },
   ],
   /**

@@ -3171,6 +3171,43 @@ Ten wpis został napisany 2026-10-25 na podstawie `master` w `9e43c3412` i gał�
 (`fix/428-money-followups`). W chwili jej pisania żadna instancja nie była zaktualizowana do
 0.109.0.
 
+#### Kanały sprzedaży: flaga kanału publicznego zastąpiona trybami wyświetlania {#after-0-109-0-channel-prices}
+
+**Dla operatorów.**
+
+- **Co się zmieniło** (zgłoszenie #492). Kanał sprzedaży miał własną flagę widoczności cen
+  (`is_public`, nigdy niepokazywaną w panelu). Gdy była wyłączona — a tak było w każdym kanale
+  utworzonym w panelu, przez uzgadnianie kanału domyślnego przy starcie i w demonstracyjnym
+  *PL B2B VIP* — kanał nie wysyłał ceny **nikomu**, także zalogowanym kupującym. Flaga zniknęła. O
+  tym, czy oglądający widzi cenę, decydują wyłącznie tryby wyświetlania: *Ustawienia cenowe* dla
+  wszystkich kanałów, ekran *Ustawienia* dla jednego kanału oraz nadpisania organizacji, kategorii i
+  produktu.
+- **Co robi migracja.** `Migration20261028T173317CoreSalesChannelsRetireIsPublic` nadaje każdemu
+  kanałowi, który miał flagę wyłączoną, `pricing.unauthenticated_display_mode = none` jako własną
+  wartość tego kanału, więc jego niezalogowani odwiedzający nadal nie widzą cen, a następnie usuwa
+  kolumnę. Kanał, który miał już własną wartość tego ustawienia, zachowuje ją.
+- **Co zobaczysz.** W kanale, który miał flagę wyłączoną, **zalogowani kupujący widzą teraz ceny**
+  zgodnie ze swoim trybem wyświetlania i mogą sortować oraz filtrować po cenie. Jeśli nie tego
+  chcesz w danym kanale, ustaw jego *Default price display mode* (`pricing.default_display_mode`)
+  na *Żaden* na ekranie *Ustawienia* dla tego kanału albo ustaw nadpisanie dla właściwych
+  organizacji. Nadpisanie trybu dla produktu lub kategorii dotyczy także niezalogowanych
+  odwiedzających, tak jak dotąd, więc produkt nadpisany na *Tylko brutto* pokazuje w takim kanale
+  cenę gościom.
+- **Przed migracją** zatrzymaj procesy poprzedniego wydania: kolumna, którą czytają, jest usuwana.
+  Migracja odmawia bazie, która ma kanał z wyłączoną flagą, ale nie ma zarejestrowanego ustawienia
+  `pricing.unauthenticated_display_mode` (platforma nigdy na niej nie wystartowała); uruchom raz
+  poprzednie wydanie, aby ustawienia zostały zarejestrowane, i ponów migrację.
+
+**Dla klientów API i autorów modułów.** Żadna odpowiedź HTTP nie zawierała flagi, więc żadna nie
+zmienia kształtu; oglądający, którego tryb wyświetlania to `none`, dostaje odpowiedź opisaną w
+dokumentacji modułu `price_lists` (`resolvedPrice.displayMode: 'none'` i brak kwoty, gdzie taki
+kanał odpowiadał wcześniej `resolvedPrice: null`). W kodzie usunięto `SalesChannel.isPublic`,
+`CachedChannel.isPublic`, `ResolvedSearchChannel.isPublic` i `CatalogResolvedChannel.isPublic` —
+usuń je z obiektów, które budujesz — a klucz pamięci podręcznej kanałów zmienia się na
+`sales-channels:v4:`.
+
+Ten wpis został napisany 2026-10-28 na gałęzi zgłoszenia #492 (`fix/492-retire-ispublic`).
+
 ## Instancja niespójna od początku
 
 Instalator `0.101.x` lub starszy zapisywał każdy pakiet wydania z `^` poza

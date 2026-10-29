@@ -54,7 +54,6 @@ describe('CMS page tree and breadcrumbs contract (feature 163, T079)', () => {
       defaultCurrency: 'PLN',
       active: true,
       systemDefault: false,
-      isPublic: true,
       status: 'active',
     });
     await h.em().persistAndFlush(otherChannel);

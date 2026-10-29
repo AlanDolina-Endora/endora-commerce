@@ -42,9 +42,17 @@ The **Open to anonymous visitors** checkbox on the channel form decides who may 
 
 The list of channels marks a closed channel with a **Sign-in required** badge.
 
-Two things to keep in mind when closing a store:
+Whether anonymous visitors see **prices** is a separate setting, and it is not on this form: the
+*unauthenticated display mode* (`pricing.unauthenticated_display_mode`). The hint under the
+checkbox links to *Pricing settings*, where it is set for every channel; the *Settings* screen sets
+it for one channel. *None* hides prices until sign-in. A product or category display-mode override
+takes precedence over it, for anonymous visitors too. Signed-in customers see prices according to
+their own display mode. Channels used to carry a price-visibility flag of their own, which also hid
+prices from signed-in customers; it was retired, and every channel that had it off was given
+*None* for anonymous visitors, so they still see no prices there.
 
-- **Showing prices to anonymous visitors is a separate setting.** It only matters on a store that is open to them.
+One thing to keep in mind when closing a store:
+
 - **Moderation decides who gets in by registering.** An Organization registered on a closed store is assigned that store's channel. With automatic moderation it is active at once, so anyone who registers a business there gets access; with manual moderation nobody gets in until an operator approves the Organization.
 
 ## Deciding which customers may use a store

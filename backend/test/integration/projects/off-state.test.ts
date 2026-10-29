@@ -152,7 +152,7 @@ describe('projects off-state (Constitution XVII)', () => {
 
   /**
    * User Story 11 — what the module contributes to the platform beyond its
-   * routes: four palette actions, the `projects.project` global-search type and
+   * routes: six palette actions, the `projects.project` global-search type and
    * `projectReadPort`. Each is measured present, absent on both axes, and back.
    *
    * The rest of the final sweep (T135) is proved where its subject lives, each
@@ -166,7 +166,15 @@ describe('projects off-state (Constitution XVII)', () => {
    * the alert sweep below.
    */
   describe('palette, global search and projectReadPort (User Story 11)', () => {
-    const ACTIONS = ['new-project', 'open-project-analytics', 'open-project-templates', 'open-projects'];
+    // Six since issue #516 added the role and loss-reason dictionaries.
+    const ACTIONS = [
+      'new-project',
+      'open-project-analytics',
+      'open-project-loss-reasons',
+      'open-project-roles',
+      'open-project-templates',
+      'open-projects',
+    ];
     const capability = async (): Promise<string[]> => {
       const response = await h.app.inject({
         method: 'GET',

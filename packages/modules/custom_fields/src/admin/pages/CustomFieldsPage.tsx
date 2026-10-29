@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ListPlus, Pencil, Trash2, TriangleAlert } from 'lucide-react';
+import { ListPlus, Pencil, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { ApiError, useAuth } from '@endora-commerce/admin-kit/lib';
 import { customFieldsClient } from '../api/custom-fields-client.js';
 import { CarryDriftDialog } from '../components/CarryDriftWarning.js';
-import { DefinitionBehaviourFields } from '../components/DefinitionBehaviourFields.js';
 import { DefinitionEditorDialog } from '../components/DefinitionEditorDialog.js';
+import { AUDIENCES } from '../components/DefinitionForm.js';
 import { carryCounterpartsBrokenBy, type CarryCounterpart, type DefinitionChange } from '../lib/carry-drift.js';
-import { entityTypeLabelKey, incompatibilitySentence, isCarryRefusal, refusalSentence } from '../lib/carry-labels.js';
-import { Alert, AlertDescription, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Label, PageHeader, Select } from '@endora-commerce/admin-kit/ui';
+import { entityTypeLabelKey, incompatibilitySentence, refusalSentence } from '../lib/carry-labels.js';
+import { Alert, AlertDescription, Badge, Button, Card, CardContent, CardHeader, CardTitle, Label, PageHeader, Select } from '@endora-commerce/admin-kit/ui';
 import { ResponsiveTable, resolveCustomFieldLabel, type ResponsiveColumn } from '@endora-commerce/admin-kit/components';
 import { useTranslation, useTranslationContext } from '@endora-commerce/admin-kit/i18n';
 import {
@@ -16,7 +16,6 @@ import {
   type CustomFieldAudience,
   type CustomFieldDefinitionDto,
   type CustomFieldEntityTypeInfo,
-  type CustomFieldValueType,
   type SupportedEntityType,
 } from '@endora-commerce/contracts';
 
@@ -36,30 +35,6 @@ const FALLBACK_ENTITY_TYPES: CustomFieldEntityTypeInfo[] = (
   // So are the carry options (feature 162).
   carryTargets: [],
 }));
-const VALUE_TYPES: CustomFieldValueType[] = [
-  'text',
-  'number',
-  'boolean',
-  'date',
-  'select',
-  'multiselect',
-];
-const AUDIENCES: CustomFieldAudience[] = ['internal', 'customer'];
-const SELECT_TYPES = new Set<CustomFieldValueType>(['select', 'multiselect']);
-
-/** The create form's comma-separated options as option drafts; none for a type without options. */
-function draftOptions(
-  valueType: CustomFieldValueType,
-  raw: string,
-): Array<{ value: string; label: Record<string, string>; labelDefault: string; isDefault: boolean; sortOrder: number }> {
-  if (!SELECT_TYPES.has(valueType)) return [];
-  return raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((value, i) => ({ value, label: {}, labelDefault: value, isDefault: false, sortOrder: i }));
-}
-
 /** A change from the table waiting on the drift warning's answer (feature 162). */
 interface PendingTableChange {
   change: DefinitionChange;
@@ -70,10 +45,11 @@ interface PendingTableChange {
 }
 
 /**
- * Custom-field definition management (feature 055). List + create per entity
- * type; an existing definition is edited in `DefinitionEditorDialog` (feature
- * 157). Every write control — create, edit, delete, audience — is offered only
- * to an operator holding `custom_fields:write`; a reader sees the table.
+ * Custom-field definition management (feature 055). The definitions of one
+ * entity type in a table; a field is created and edited in the one definition
+ * form `DefinitionEditorDialog` renders for both (feature 157, issue #447).
+ * Every write control — create, edit, delete, audience — is offered only to an
+ * operator holding `custom_fields:write`; a reader sees the table.
  *
  * Feature 162 (`specs/162-custom-fields-value-carry/contracts/admin-surfaces.md`
  * §1): the *Carry value to …* options, a *Carries to* column whose chips are
@@ -104,7 +80,6 @@ export function CustomFieldsPage(): ReactNode {
   const [error, setError] = useState<string | null>(null);
   /** The row whose Delete is asking for confirmation. */
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
-  const keyInputRef = useRef<HTMLInputElement>(null);
   const keepDeleteRef = useRef<HTMLButtonElement>(null);
   /** The row whose Delete takes the focus back once its confirmation is kept. */
   const returnFocusTo = useRef<string | null>(null);
@@ -118,23 +93,8 @@ export function CustomFieldsPage(): ReactNode {
   const editable = canWrite && !managedBy;
   const [editing, setEditing] = useState<CustomFieldDefinitionDto | null>(null);
 
-  // New-definition form state.
-  const [key, setKey] = useState('');
-  const [label, setLabel] = useState('');
-  const [valueType, setValueType] = useState<CustomFieldValueType>('text');
-  const [required, setRequired] = useState(false);
-  // `internal` until the administrator says otherwise: a field's values reach
-  // a customer only as a decision, never as the form's resting state.
-  const [audience, setAudience] = useState<CustomFieldAudience>('internal');
-  const [options, setOptions] = useState('');
-  const [listFilter, setListFilter] = useState(false);
-  const [carryTo, setCarryTo] = useState<SupportedEntityType[]>([]);
-  /**
-   * The create form's carry refusal (R16): said beside the carry options it is
-   * about, at the form, not in the page-top alert out of sight above the table.
-   */
-  const [createCarryError, setCreateCarryError] = useState<string | null>(null);
-  const createCarryErrorRef = useRef<HTMLParagraphElement>(null);
+  /** The create dialog is open (issue #447). */
+  const [creating, setCreating] = useState(false);
 
   // Feature 162 — every type's definitions, for the carry marks and warnings.
   // `null` until read (or when the read failed): no mark is shown on a guess.
@@ -217,24 +177,18 @@ export function CustomFieldsPage(): ReactNode {
   }, [refresh, offersCarry, loadAll]);
 
   const run = useCallback(
-    async (fn: () => Promise<unknown>, onCarryRefusal?: (sentence: string) => void): Promise<void> => {
+    async (fn: () => Promise<unknown>): Promise<void> => {
       setError(null);
       try {
         await fn();
         await reload();
       } catch (err) {
         // A carry refusal reads as a sentence built from `details` (feature 162).
-        const sentence = refusalSentence(t, err, typeLabel, t('customFields.error.action'));
-        if (onCarryRefusal && isCarryRefusal(err)) onCarryRefusal(sentence);
-        else setError(sentence);
+        setError(refusalSentence(t, err, typeLabel, t('customFields.error.action')));
       }
     },
     [reload, t, typeLabel],
   );
-
-  useEffect(() => {
-    if (createCarryError !== null) createCarryErrorRef.current?.focus();
-  }, [createCarryError]);
 
   /** Runs `proceed` at once, or after the drift warning when `change` breaks an enabled carry. */
   const guarded = (change: DefinitionChange, proceed: () => void, lead?: string): void => {
@@ -257,38 +211,9 @@ export function CustomFieldsPage(): ReactNode {
     if (id !== null) document.querySelector<HTMLButtonElement>(`[data-delete-trigger="${id}"]`)?.focus();
   }, [confirmingDelete]);
 
-  const carryTargets = entityTypeInfo?.carryTargets ?? [];
-  /** The ticked targets the selected type still offers — a type switch keeps no stale target. */
-  const draftCarryTo = carryTo.filter((target) => carryTargets.includes(target));
-
-  const submit = (): void => {
-    const opts = draftOptions(valueType, options);
-    setCreateCarryError(null);
-    void run(async () => {
-      await customFieldsClient.create({
-        entityType,
-        key: key.trim(),
-        label: label.trim() ? { en: label.trim() } : {},
-        labelDefault: label.trim() || key.trim(),
-        valueType,
-        required,
-        audience,
-        sortOrder: rows.length,
-        config: {},
-        // Feature 162 — `[]` unless the operator ticked a target the type offers.
-        carryTo: draftCarryTo,
-        options: opts,
-        // Sent only where the entity type offers the option.
-        ...(entityTypeInfo?.listFilter ? { listFilter } : {}),
-      });
-      setKey('');
-      setLabel('');
-      setOptions('');
-      setAudience('internal');
-      setListFilter(false);
-      setCarryTo([]);
-    }, setCreateCarryError);
-  };
+  /** A new field's position among its type's fields: after every one the page knows of. */
+  const sortOrderFor = (type: SupportedEntityType): number =>
+    known.filter((definition) => definition.entityType === type).length;
 
   const columns: ResponsiveColumn<CustomFieldDefinitionDto>[] = [
     {
@@ -483,11 +408,7 @@ export function CustomFieldsPage(): ReactNode {
           <Select
             id="entity"
             value={entityType}
-            onChange={(e) => {
-              setEntityType(e.target.value as SupportedEntityType);
-              // A carry refusal was about the type it was made for.
-              setCreateCarryError(null);
-            }}
+            onChange={(e) => setEntityType(e.target.value as SupportedEntityType)}
           >
             {entityTypes.map((info) => (
               <option key={info.entityType} value={info.entityType}>
@@ -510,8 +431,14 @@ export function CustomFieldsPage(): ReactNode {
       )}
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle>{t('customFields.table.title')}</CardTitle>
+          {editable ? (
+            <Button className="min-h-11 sm:min-h-9" onClick={(): void => setCreating(true)}>
+              <Plus className="size-4" aria-hidden="true" />
+              {t('customFields.form.newField')}
+            </Button>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-3">
           {offersCarry && allFailed ? (
@@ -552,7 +479,7 @@ export function CustomFieldsPage(): ReactNode {
                     <Button
                       className="min-h-11 sm:min-h-9"
                       variant="outline"
-                      onClick={(): void => keyInputRef.current?.focus()}
+                      onClick={(): void => setCreating(true)}
                     >
                       {t('customFields.table.emptyAction')}
                     </Button>
@@ -562,102 +489,30 @@ export function CustomFieldsPage(): ReactNode {
             />
           )}
 
-          {editable && (
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1">
-              <Label htmlFor="key">{t('customFields.form.key')}</Label>
-              <input
-                ref={keyInputRef}
-                id="key"
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                placeholder={t('customFields.form.keyPlaceholder')}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="label">{t('customFields.form.label')}</Label>
-              <input
-                id="label"
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="vt">{t('customFields.form.valueType')}</Label>
-              <Select
-                id="vt"
-                value={valueType}
-                onChange={(e) => setValueType(e.target.value as CustomFieldValueType)}
-              >
-                {VALUE_TYPES.map((vt) => (
-                  <option key={vt} value={vt}>
-                    {t(`customFields.valueType.${vt}`)}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            {SELECT_TYPES.has(valueType) && (
-              <div className="space-y-1">
-                <Label htmlFor="opts">{t('customFields.form.options')}</Label>
-                <input
-                  id="opts"
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  value={options}
-                  onChange={(e) => setOptions(e.target.value)}
-                  placeholder={t('customFields.form.optionsPlaceholder')}
-                />
-              </div>
-            )}
-            <div className="space-y-1">
-              <Label htmlFor="audience">{t('customFields.audience.label')}</Label>
-              <Select
-                id="audience"
-                aria-describedby="audience-help"
-                value={audience}
-                onChange={(e) => setAudience(e.target.value as CustomFieldAudience)}
-              >
-                {AUDIENCES.map((a) => (
-                  <option key={a} value={a}>
-                    {t(`customFields.audience.${a}`)}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <label htmlFor="required" className="flex min-h-11 items-center gap-2 text-sm">
-              <Checkbox id="required" checked={required} onChange={(e) => setRequired(e.target.checked)} />
-              {t('customFields.form.required')}
-            </label>
-            {entityTypeInfo ? (
-              <DefinitionBehaviourFields
-                definition={{ key: key.trim(), valueType, options: draftOptions(valueType, options), audience }}
-                entityTypeInfo={entityTypeInfo}
-                value={carryTargets.length > 0 ? { listFilter, carryTo: draftCarryTo } : { listFilter }}
-                onChange={(next) => {
-                  setListFilter(next.listFilter);
-                  if (next.carryTo !== undefined && next.carryTo.join() !== draftCarryTo.join()) {
-                    setCarryTo(next.carryTo);
-                    // The refusal was about the boxes as they were.
-                    setCreateCarryError(null);
-                  }
-                }}
-                entityTypes={entityTypes}
-                layout="row"
-                carryError={createCarryError}
-                carryErrorRef={createCarryErrorRef}
-              />
-            ) : null}
-            <Button size="sm" disabled={!key.trim()} onClick={submit}>
-              {t('customFields.form.submit')}
-            </Button>
-            <p id="audience-help" className="basis-full text-sm text-muted-foreground">
-              {t('customFields.audience.help')}
-            </p>
-          </div>
-          )}
         </CardContent>
       </Card>
+
+      {creating && editable ? (
+        <DefinitionEditorDialog
+          mode="create"
+          entityType={entityType}
+          sortOrderFor={sortOrderFor}
+          entityTypes={entityTypes}
+          definitions={known}
+          onClose={() => setCreating(false)}
+          onSaved={(createdFor) => {
+            setCreating(false);
+            if (createdFor === entityType) {
+              void reload();
+              return;
+            }
+            // The new field is shown among the fields of the type it was created for,
+            // which the type switch reads; the carry marks need every type read again.
+            setEntityType(createdFor);
+            if (offersCarry) void loadAll();
+          }}
+        />
+      ) : null}
 
       {editing && entityTypeInfo ? (
         <DefinitionEditorDialog

@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent } from '@testing-library/react';
 import type { SalesChannelDetail } from '@endora-commerce/contracts';
+import type { ReactElement } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { renderWithI18n } from '../../helpers/render-with-i18n';
 
 /**
@@ -101,9 +103,14 @@ function themeInput(): HTMLInputElement {
   return el as HTMLInputElement;
 }
 
+/** The form links to *Pricing settings* (issue #492), so it renders inside a router. */
+function renderForm(ui: ReactElement, b: typeof bundle): ReturnType<typeof renderWithI18n> {
+  return renderWithI18n(<MemoryRouter>{ui}</MemoryRouter>, b);
+}
+
 describe('the sales-channel theme control', () => {
   it('is a free-text box, not a closed list', () => {
-    renderWithI18n(
+    renderForm(
       <ChannelIdentityForm mode="create" onSubmit={() => undefined} />,
       bundle,
     );
@@ -116,7 +123,7 @@ describe('the sales-channel theme control', () => {
     // field neither refuses it nor decorates it as unknown — this screen has no
     // standing to say so.
     let submitted: { themeCode: string } | null = null;
-    renderWithI18n(
+    renderForm(
       <ChannelIdentityForm
         mode="create"
         onSubmit={(value) => {
@@ -134,7 +141,7 @@ describe('the sales-channel theme control', () => {
   });
 
   it('holds the field to the same shape the backend validates, and no more', () => {
-    renderWithI18n(
+    renderForm(
       <ChannelIdentityForm mode="create" onSubmit={() => undefined} />,
       bundle,
     );
@@ -151,7 +158,7 @@ describe('the sales-channel theme control', () => {
     // Opening the form must not re-point the channel at a different theme, and
     // there is now no list against which it could think one is "wrong".
     for (const stored of ['industria-pro', 'nordic', 'vendor-theme-x']) {
-      const { unmount } = renderWithI18n(
+      const { unmount } = renderForm(
         <ChannelIdentityForm mode="edit" initial={channel(stored)} onSubmit={() => undefined} />,
         bundle,
       );
@@ -161,7 +168,7 @@ describe('the sales-channel theme control', () => {
   });
 
   it('renders an empty field for a channel that names no theme', () => {
-    renderWithI18n(
+    renderForm(
       <ChannelIdentityForm mode="edit" initial={channel(null)} onSubmit={() => undefined} />,
       bundle,
     );

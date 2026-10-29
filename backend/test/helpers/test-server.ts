@@ -192,7 +192,7 @@ import { DefaultChannelReconciler } from '@endora-commerce/platform/composition'
 import { ManifestReconciler } from '@endora-commerce/platform/composition';
 import type { CartService } from '../../../packages/modules/carts/src/backend/services/cart-service.js';
 import type { Mailer } from '../../../packages/modules/email/src/backend/services/mailer.js';
-import { seedUs1Catalog } from './seed-catalog.js';
+import { seedUs1Catalog, seedUs1CatalogSettings } from './seed-catalog.js';
 import { seedTestOrganizations, TEST_ORGANIZATION_TAX_ID } from './seed-organizations.js';
 import { seedUs2Commerce } from './seed-commerce.js';
 import { seedTestAdmins } from './seed-admins.js';
@@ -2757,6 +2757,11 @@ export async function setupBackendServer(
       await new ManifestReconciler(em()).apply(
         settingsManifestCollectionPort().collect(deploymentShippedEntries(resolvedRegistry)),
       );
+      // Issue #492 — the seeded VIP channel's guest display mode, which needs
+      // the setting row the reconcile above has just written.
+      if ((options.seed ?? 'us1-catalog') === 'us1-catalog') {
+        await seedUs1CatalogSettings(em());
+      }
     },
     afterReady: async () => {
       // `_i18n` reconciles from its `ctx.routes` callback, so the bundles are on

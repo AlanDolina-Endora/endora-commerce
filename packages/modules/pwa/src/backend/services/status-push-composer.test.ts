@@ -31,7 +31,6 @@ function channel(overrides: Partial<CachedChannel>): CachedChannel {
     name: { en: 'Default' },
     active: true,
     anonymousAccess: true,
-    isPublic: true,
     systemDefault: true,
     defaultLanguage: 'en-US',
     defaultCurrency: 'PLN',

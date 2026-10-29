@@ -1,6 +1,8 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
+import { displayModeWithholdsAmounts } from '@endora-commerce/contracts';
 import type {
   CatalogBulkPriceLine,
+  LinePriceResult,
   LinePricesPort,
   OrgLinePricePort,
   OrganizationDetailsPort,
@@ -31,7 +33,18 @@ import { Product } from '../entities/product.entity.js';
  *    the injected inventory port;
  *  - answers the bound-only bulk `(sku, quantity)` pricing request with
  *    per-line results (misses are data, not errors).
+ *
+ * Issue #491 — a line answer keeps its amount under display mode `none` (it is
+ * the charging path), so this decorator, which **publishes** line amounts, asks
+ * `displayModeWithholdsAmounts` first: a product whose display mode is `none`
+ * for the bound Organization gets no price, no tier ladder and no bulk price —
+ * `priceUnavailable` / `price_unavailable`, as a product nothing prices.
  */
+
+/** A resolved line the caller may be shown, or `null` (nothing prices it, or its display mode withholds it). */
+function shown(resolved: LinePriceResult | null | undefined): LinePriceResult | null {
+  return resolved && !displayModeWithholdsAmounts(resolved.displayMode) ? resolved : null;
+}
 
 /** The request's resolved sales channel — only `id` + `defaultCurrency` are read. */
 export interface ExternalPricingChannel {
@@ -121,7 +134,7 @@ export class CatalogOrgPriceDecorator {
         out.push({ ...decorated, price: null, priceUnavailable: true });
         continue;
       }
-      const resolved = priced.get(String(index)) ?? null;
+      const resolved = shown(priced.get(String(index)));
       out.push(
         resolved
           ? {
@@ -203,7 +216,7 @@ export class CatalogOrgPriceDecorator {
         });
         continue;
       }
-      const resolved = priced.get(String(index)) ?? null;
+      const resolved = shown(priced.get(String(index)));
       if (!resolved) {
         out.push({
           sku: line.sku,
@@ -255,7 +268,7 @@ export class CatalogOrgPriceDecorator {
 
     const tiers: ProductPriceTier[] = [];
     for (const quantity of probeQuantities) {
-      const resolved = priced.get(String(quantity)) ?? null;
+      const resolved = shown(priced.get(String(quantity)));
       if (!resolved) continue;
       const tier: ProductPriceTier = {
         minQuantity: quantity,

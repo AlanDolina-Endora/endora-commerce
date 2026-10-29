@@ -413,6 +413,29 @@ export const manifest = defineModuleManifest({
       keywords: ['settings', 'preferences', 'config', 'ustawienia'],
       weight: 250,
     },
+    // Issue #516 (Principle XVI): the two other sidebar screens. Each declares
+    // the code its route enforces — `settings:read` for the group list,
+    // `settings:write` for the cache flush, whose only purpose is a write.
+    {
+      id: 'open-setting-groups',
+      labelKey: 'actions.openSettingGroups.label',
+      descriptionKey: 'actions.openSettingGroups.description',
+      icon: 'Settings',
+      targetRoute: '/settings/groups',
+      requiredPermission: 'settings:read',
+      keywords: ['settings', 'groups', 'sections', 'ustawienia', 'grupy'],
+      weight: 251,
+    },
+    {
+      id: 'clear-cache',
+      labelKey: 'actions.clearCache.label',
+      descriptionKey: 'actions.clearCache.description',
+      icon: 'Eraser',
+      targetRoute: '/settings/cache',
+      requiredPermission: 'settings:write',
+      keywords: ['cache', 'clear', 'flush', 'purge', 'wyczyść', 'pamięć'],
+      weight: 252,
+    },
   ],
 });
 

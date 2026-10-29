@@ -541,14 +541,11 @@ describe('admin sales-channels CRUD + lifecycle (T029-T033)', () => {
       },
       { orderBy: { actedAt: 'desc' } },
     );
-    const state = entry?.stateAfter as {
-      action: string;
-      before: { anonymousAccess: boolean };
-      after: { anonymousAccess: boolean };
-    };
-    expect(state.action).toBe('updated');
-    expect(state.before.anonymousAccess).toBe(true);
-    expect(state.after.anonymousAccess).toBe(false);
+    // A Command Bus row (Principle XIII): the snapshots are the row's own
+    // before/after columns, and the actor is the signed-in administrator.
+    expect(entry?.actorAdminUserId).toBeTruthy();
+    expect(entry?.stateBefore).toMatchObject({ anonymousAccess: true, version: 1 });
+    expect(entry?.stateAfter).toMatchObject({ anonymousAccess: false, version: 2 });
 
     const identity = await h.app.inject({
       method: 'GET',

@@ -84,7 +84,8 @@ import type {
   DemoCompositionInput,
   DemoCompositionResult,
 } from '@endora-commerce/platform/demo';
-import { SalesChannel, hashPassword } from '@endora-commerce/platform/kernel';
+import { PRICING_SETTING_CODES } from '@endora-commerce/contracts';
+import { SalesChannel, Setting, SettingValue, hashPassword } from '@endora-commerce/platform/kernel';
 import { entityNamed } from '@endora-commerce/platform/packages';
 import { createAttributeFixture, findAttributeDefinitionByKey } from './attribute-fixtures.js';
 import { DEMO_USAGE_WITHDRAWAL_NAME, withdrawDemoUsage } from './demo-usage.js';
@@ -703,7 +704,6 @@ const FOUNDATION_STEPS: readonly CompositionStep[] = [
       // the demo's own name is given only to a channel that had none of its own.
       if (retail.code === PLATFORM_FALLBACK_CHANNEL_CODE) retail.code = DEMO_RETAIL_CHANNEL_CODE;
       retail.name = { 'en-US': 'PL Retail', 'pl-PL': 'PL Retail' };
-      retail.isPublic = true;
       retail.languages = ['pl-PL', 'en-US'];
       retail.defaultLanguage = 'pl-PL';
       retail.currencies = ['PLN', 'EUR'];
@@ -720,7 +720,6 @@ const FOUNDATION_STEPS: readonly CompositionStep[] = [
         em.create(SalesChannel, {
           code: DEMO_VIP_CHANNEL_CODE,
           name: { 'en-US': 'PL B2B VIP', 'pl-PL': 'PL B2B VIP' },
-          isPublic: false,
           languages: ['pl-PL', 'en-US'],
           defaultLanguage: 'pl-PL',
           currencies: ['PLN', 'EUR'],
@@ -1047,6 +1046,48 @@ const STEPS: readonly CompositionStep[] = [
       await withdrawDemoPriceBooks(
         em,
         products.map((product) => product.id),
+      );
+    },
+  },
+  {
+    // ── 3c. the VIP channel hides prices until sign-in ────────────────────
+    // Issue #492. The VIP channel used to be created as a non-public channel,
+    // a flag that withheld prices from its signed-in B2B buyers as well as
+    // from anonymous visitors. That flag is retired; "hide prices until
+    // sign-in" is the display-mode chain's `pricing.unauthenticated_display_mode
+    // = none`, set for this channel only, so its buyers see their prices and
+    // the retail channel keeps publishing prices to everyone.
+    //
+    // A composition step rather than part of the foundation: the setting is
+    // `price_lists`' declaration, so the step is guarded on that module like
+    // any other. The rows are the kernel's (`settings`, `setting_values`), the
+    // same two `PriceListService.setSettingsDisplayMode` writes. A value the
+    // channel already carries is an operator's and is left alone.
+    name: 'the VIP channel hides prices until sign-in',
+    modules: ['price_lists'],
+    async apply(em) {
+      const channel = await em.findOne(SalesChannel, { code: DEMO_VIP_CHANNEL_CODE });
+      const setting = await em.findOne(Setting, {
+        code: PRICING_SETTING_CODES.UNAUTHENTICATED_DISPLAY_MODE,
+      });
+      if (channel === null || setting === null) return;
+      const existing = await em.findOne(SettingValue, {
+        setting: setting.id,
+        salesChannel: channel.id,
+      });
+      if (existing !== null) return;
+      em.create(SettingValue, { setting, salesChannel: channel, value: 'none' });
+      await em.flush();
+    },
+    async withdraw(em) {
+      // The foundation's withdrawal deletes the channel later, and its values
+      // with it (`on delete cascade`). Removed here as well, so this step's
+      // withdrawal does not depend on another step having run.
+      await em.execute(
+        `delete from setting_values
+          where setting_id in (select id from settings where code = ?)
+            and sales_channel_id in (select id from sales_channels where code = ?)`,
+        [PRICING_SETTING_CODES.UNAUTHENTICATED_DISPLAY_MODE, DEMO_VIP_CHANNEL_CODE],
       );
     },
   },

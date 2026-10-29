@@ -37,7 +37,6 @@ function channel(name: string): CachedChannel {
     name: { en: name },
     active: true,
     anonymousAccess: true,
-    isPublic: true,
     systemDefault: true,
     defaultLanguage: 'en',
     defaultCurrency: 'PLN',
@@ -239,12 +238,37 @@ describe('SalesChannelsCache carries anonymousAccess', () => {
     expect(new SalesChannel().anonymousAccess).toBe(true);
   });
 
-  it('keys v3, so an entry cached in the v2 shape is ignored', async () => {
-    expect(SALES_CHANNELS_CACHE_KEY_PREFIX).toBe('sales-channels:v3:');
+  it('caches exactly the fields the resolver and the access step read (issue #492)', () => {
+    // The price-visibility flag left with its column; nothing else did.
+    const entity = new SalesChannel();
+    entity.code = 'trade';
+    entity.name = { en: 'Trade' };
+    entity.defaultLanguage = 'en';
+    entity.defaultCurrency = 'PLN';
+    expect(Object.keys(toCachedChannel(entity)).sort()).toEqual([
+      'active',
+      'anonymousAccess',
+      'code',
+      'currencies',
+      'defaultCurrency',
+      'defaultLanguage',
+      'id',
+      'languages',
+      'logoAssetId',
+      'name',
+      'systemDefault',
+      'themeCode',
+      'version',
+    ]);
+  });
+
+  it('keys v4, so an entry cached in the v3 shape is ignored', async () => {
+    // Issue #492 — the price-visibility flag left the cached shape with its
+    // column. A process still running the v3 code reads v3 keys and never meets
+    // an entry without the flag it reads.
+    expect(SALES_CHANNELS_CACHE_KEY_PREFIX).toBe('sales-channels:v4:');
     const controls = fakeRedis();
-    const legacy = { ...channel('Retail') } as Partial<CachedChannel>;
-    delete legacy.anonymousAccess;
-    controls.store.set(`sales-channels:v2:${CODE}`, JSON.stringify(legacy));
+    controls.store.set(`sales-channels:v3:${CODE}`, JSON.stringify(channel('Retail')));
     const cache = new SalesChannelsCache(controls.redis);
     expect(await cache.get(CODE)).toEqual({ hit: false });
   });

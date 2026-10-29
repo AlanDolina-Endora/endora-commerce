@@ -381,14 +381,46 @@ describe('price surface — targeted refresh per trigger', () => {
     await expectIdentity();
   });
 
-  it('a display-mode override marks nothing (the surface holds no display mode)', async () => {
+  it('a display-mode override: an organization one marks nothing; a product or category one marks its products, and `none` takes them out of the order (#491)', async () => {
     const service = (h.container as unknown as { resolve<T>(n: string): T }).resolve<{
-      upsertDisplayModeOverride(scope: 'product', targetId: string, mode: 'net_only' | 'inherit'): Promise<unknown>;
+      upsertDisplayModeOverride(
+        scope: 'organization' | 'category' | 'product',
+        targetId: string,
+        mode: 'net_only' | 'none' | 'inherit',
+      ): Promise<unknown>;
     }>('priceListService');
-    await service.upsertDisplayModeOverride('product', f.products.P1.id, 'net_only');
+    // The viewer's tail is not on the surface (it holds amounts, and the
+    // catalogue refuses price sort to a viewer whose tail is `none`).
+    await service.upsertDisplayModeOverride('organization', f.orgs.Acme.id, 'none');
     expect(await pending()).toEqual({});
-    await service.upsertDisplayModeOverride('product', f.products.P1.id, 'inherit');
+    await service.upsertDisplayModeOverride('organization', f.orgs.Acme.id, 'inherit');
     expect(await pending()).toEqual({});
+
+    // A product's own step is: `none` withholds it from every viewer, so the
+    // surface leaves it out, and the override marks it wherever it may move.
+    const surfaced = async (productId: string): Promise<number> =>
+      (await sql<{ n: number }>(`select count(*)::int as n from "price_profile_prices" where "product_id" = ?`, [productId]))[0]!.n;
+    expect(await surfaced(f.products.P1.id)).toBeGreaterThan(0);
+    for (const [scope, targetId, label] of [
+      ['product', f.products.P1.id, 'a product override'],
+      ['category', f.categories.screws, 'a category override'],
+    ] as const) {
+      const before = await profiles();
+      await service.upsertDisplayModeOverride(scope, targetId, 'none');
+      const marked = await pending();
+      expect(Object.keys(marked).length, label).toBeGreaterThan(0);
+      for (const marks of Object.values(marked)) expect(marks, label).toEqual(expect.arrayContaining(['P1']));
+      await settleAndDiff(before);
+      expect(await surfaced(f.products.P1.id), label).toBe(0);
+      await expectIdentity();
+
+      const withheld = await profiles();
+      await service.upsertDisplayModeOverride(scope, targetId, 'inherit');
+      expect(Object.keys(await pending()).length, label).toBeGreaterThan(0);
+      await settleAndDiff(withheld);
+      expect(await surfaced(f.products.P1.id), label).toBeGreaterThan(0);
+      await expectIdentity();
+    }
   });
 
   it('a buyer whose group changes is not a rebuild: the new vector registers on request, nothing else moves', async () => {

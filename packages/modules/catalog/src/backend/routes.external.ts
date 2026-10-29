@@ -182,7 +182,6 @@ function readContext(request: FastifyRequest): {
   resolvedChannel: {
     id: string;
     code: string;
-    isPublic: boolean;
     defaultCurrency: string;
     defaultLanguage: string;
   };
@@ -197,7 +196,6 @@ function readContext(request: FastifyRequest): {
     resolvedChannel: {
       id: channel.id,
       code: channel.code,
-      isPublic: channel.isPublic,
       defaultCurrency: channel.defaultCurrency,
       defaultLanguage: channel.defaultLanguage,
     },

@@ -101,11 +101,37 @@ export class PriceListService {
   }
 
   /**
-   * A display mode is not on the price surface (it holds amounts, not how they
-   * are shown), so nothing there is marked; the cache is cleared as ever.
+   * Clear the pricing cache after a display-mode write. The price surface
+   * stores amounts, not how they are shown, so the viewer's tail — an
+   * organization override, a settings key — marks nothing there (`none`). A
+   * product or category override does (issue #491): a product whose own step is
+   * `none` is withheld from every viewer and left out of the surface, so the
+   * products the override concerns are marked for the worker to refresh.
    */
-  private async invalidatePricingCache(): Promise<void> {
-    await this.pricingCache?.invalidateAll({ kind: 'none' });
+  private async invalidatePricingCache(change: SurfaceChange = { kind: 'none' }): Promise<void> {
+    await this.pricingCache?.invalidateAll(change);
+  }
+
+  /** What a display-mode override moves on the price surface — see {@link invalidatePricingCache}. */
+  private overrideSurfaceChange(scope: DisplayModeOverrideScope, targetId: string): SurfaceChange {
+    if (scope === 'product') return { kind: 'products', productIds: [targetId] };
+    if (scope === 'category') return { kind: 'categories', categoryIds: [targetId] };
+    return { kind: 'none' };
+  }
+
+  /**
+   * Issue #491 — whether any product or category override is `none`, the only
+   * way the product step of the chain withholds a product from every viewer.
+   * One statement; the price surface's worker asks it before it reads the
+   * product step, which it otherwise does not need.
+   */
+  async anyProductStepWithholds(): Promise<boolean> {
+    const row = await this.emFactory().findOne(
+      PriceDisplayModeOverride,
+      { scope: { $in: ['product', 'category'] }, mode: 'none' },
+      { fields: ['scope', 'targetId'] },
+    );
+    return row !== null;
   }
 
   // ---- Engine: display mode (US7) ------------------------------------
@@ -128,10 +154,11 @@ export class PriceListService {
     const em = this.emFactory();
     await this.assertOverrideTargetExists(scope, targetId);
     const existing = await em.findOne(PriceDisplayModeOverride, { scope, targetId });
+    const change = this.overrideSurfaceChange(scope, targetId);
     if (mode === 'inherit') {
       if (existing) {
         await em.removeAndFlush(existing);
-        await this.invalidatePricingCache();
+        await this.invalidatePricingCache(change);
       }
       return null;
     }
@@ -139,12 +166,12 @@ export class PriceListService {
       existing.mode = mode;
       existing.updatedAt = new Date();
       await em.flush();
-      await this.invalidatePricingCache();
+      await this.invalidatePricingCache(change);
       return existing;
     }
     const row = em.create(PriceDisplayModeOverride, { scope, targetId, mode });
     await em.persistAndFlush(row);
-    await this.invalidatePricingCache();
+    await this.invalidatePricingCache(change);
     return row;
   }
 
@@ -314,13 +341,15 @@ export class PriceListService {
    * mode a *page* resolves to, which is the Organization → Settings tail of the
    * FR-039 chain with the product and category steps deliberately absent.
    *
-   * **The absence is the ruling, not a shortcut** (spec 086, clarification 2).
-   * A single product overridden to `none` keeps its position in a price
-   * ordering: a per-product override reads as "ask us for a quote" rather than
-   * "this price is secret", and withdrawing the whole control because one
-   * product opts out would make the sort appear and disappear as a buyer walks
-   * the catalogue. Moving those products to the tail instead is a change to
-   * this method's two omitted steps and to nothing else.
+   * **The absence is the ruling, not a shortcut** (spec 086, clarification 2):
+   * withdrawing the whole control because one product opts out would make the
+   * sort appear and disappear as a buyer walks the catalogue. A single product
+   * overridden to `none` (or in a category overridden to `none`) does not take
+   * part in the order either, since issue #491: its amount is withheld on the
+   * server, so the price surface leaves it out and the catalogue walks it in
+   * the unpriced tail (`BookPricing.resolveProfileListing`), where its position
+   * says nothing about its price. Spec 086's recommendation — such a product
+   * "keeps its position" — was written when the API sent the amount anyway.
    *
    * The decision itself still goes through `decideDisplayMode`, so a page and a
    * card cannot rank the organisation tier differently.

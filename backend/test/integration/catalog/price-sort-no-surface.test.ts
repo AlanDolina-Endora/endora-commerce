@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { encodeCursor } from '@endora-commerce/platform/http';
+import {
+  PRICE_WALK_CURSOR_PURPOSE,
+  type CatalogCursorSeal,
+} from '../../../../packages/modules/catalog/src/backend/services/catalog-query.service.js';
 import { pricingEngineOf, settlePriceSurface, warmPriceSort } from '../../helpers/price-surface.js';
 import {
   setupBackendServer,
@@ -189,7 +192,10 @@ describe('a price-sorted listing with no price surface pages to the end', () => 
     expect(firstDefault.statusCode, firstDefault.body).toBe(200);
     const defaultCursor = (firstDefault.json() as { pagination: { cursor: string | null } }).pagination.cursor;
     expect(defaultCursor, 'the listing has a second page').not.toBeNull();
-    const priceCursor = encodeCursor(JSON.stringify({ stream: 'unordered', cursor: defaultCursor }));
+    // Sealed as the walk seals its own (issue #497).
+    const priceCursor = (h.container as unknown as { resolve<T>(name: string): T })
+      .resolve<CatalogCursorSeal>('cursorSeal')
+      .seal(PRICE_WALK_CURSOR_PURPOSE, JSON.stringify({ stream: 'unordered', cursor: defaultCursor }));
     const statementsOf = async (query: string): Promise<string[]> => {
       const knex = h.em().getConnection().getKnex();
       const seen: string[] = [];

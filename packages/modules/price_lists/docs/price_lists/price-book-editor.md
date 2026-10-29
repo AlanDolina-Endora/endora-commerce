@@ -278,7 +278,10 @@ there.
 
 - **Display modes** — the platform-wide modes for signed-in and anonymous visitors
   (`pricing.default_display_mode`, `pricing.unauthenticated_display_mode`) and the overrides per
-  organization, category and product.
+  organization, category and product. A sales channel's own value for either mode, set on the
+  *Settings* screen, wins over the platform-wide one. A product or category override takes
+  precedence over both modes, for anonymous visitors too — the card under the two modes says so;
+  an organization override applies to signed-in buyers only.
 - **Storefront prices** — *Show list price beside the buyer's price*
   (`pricing.show_list_price`, off by default). Saving it is audited, and buyers see the change from
   their next page. What buyers then see is described on the

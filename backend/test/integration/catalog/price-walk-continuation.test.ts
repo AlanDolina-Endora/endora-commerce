@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { ANONYMOUS_PRODUCT_AUDIENCE } from '@endora-commerce/contracts';
-import { SalesChannel } from '@endora-commerce/platform/kernel';
 import { encodeCursor } from '@endora-commerce/platform/http';
-import type { CatalogQueryService } from '../../../../packages/modules/catalog/src/backend/services/catalog-query.service.js';
+import {
+  PRICE_WALK_CURSOR_PURPOSE,
+  type CatalogCursorSeal,
+} from '../../../../packages/modules/catalog/src/backend/services/catalog-query.service.js';
 import { settlePriceSurface, warmPriceSort } from '../../helpers/price-surface.js';
 import {
   PRICE_WALK_CHANNEL,
@@ -25,8 +26,12 @@ import {
  * price changes during the walk: it may be met twice or not at all, as on any
  * keyset walk over a mutable key. Every other product is met exactly once —
  * when the price order goes missing midway, when a page runs out of its scan
- * budget, on a channel that publishes no prices, and on a cursor issued before
- * any of that happened.
+ * budget, and on a cursor issued before any of that happened.
+ *
+ * A fourth case — a walk on a channel that published no prices (A3) — went
+ * with the channel's price-visibility flag (issue #492): no channel withholds
+ * prices from the walk any more, and a viewer whose display mode is `none` is
+ * refused a price ordering by the route before any walk starts.
  */
 describe('a price-sorted walk meets every product once and ends', () => {
   let h: BackendServerHandle;
@@ -102,48 +107,15 @@ describe('a price-sorted walk meets every product once and ends', () => {
     }
   });
 
-  // ---- no channel loses the remainder of a walk -------------------------------
-
-  it('on a channel that publishes no prices, the remainder of a walk still meets every product once', async () => {
-    const items: PriceWalkItem[] = [
-      ...w.priced(6, (i) => ({ price: `${100 + i}.00`, age: (i * 5) % 6 })),
-      { key: 'U0', price: null, age: 3 },
-      { key: 'U1', price: null, age: 7 },
-    ];
-    await w.seed(items);
-    const service = (h.container as unknown as { resolve<T>(name: string): T }).resolve<CatalogQueryService>('catalogQueryPort');
-    const channel = await h.em().findOneOrFail(SalesChannel, { code: 'pl_retail' });
-    const ctx = {
-      // The service's own answer for such a channel: the route refuses a price
-      // sort there, but nothing below the route may lose products over it.
-      resolvedChannel: {
-        id: channel.id,
-        code: channel.code,
-        isPublic: false,
-        defaultCurrency: channel.defaultCurrency,
-        defaultLanguage: channel.defaultLanguage,
-      },
-      audience: ANONYMOUS_PRODUCT_AUDIENCE,
-    };
-    const skus: string[] = [];
-    let cursor: string | undefined;
-    let ended = false;
-    for (let n = 0; n < 50 && !ended; n += 1) {
-      const result = await service.listProducts(
-        { q: PRICE_WALK_PREFIX, limit: 2, sort: 'price', ...(cursor ? { cursor } : {}) },
-        ctx,
-      );
-      skus.push(...result.data.map((d) => d.sku));
-      for (const card of result.data) expect(card.price, 'the channel withholds prices').toBeNull();
-      ended = !result.pagination.hasMore;
-      cursor = result.pagination.cursor ?? undefined;
-      if (n === 0) await w.dropRetailProfiles();
-    }
-    expect(ended).toBe(true);
-    expect([...skus].sort()).toEqual(w.visibleSkus(items).sort());
-  });
-
   // ---- a malformed cursor is discarded, never a 500 ---------------------------
+  //
+  // Sealed as the walk seals its own (issue #497), so each case reaches the
+  // field it names: an unsealed one is discarded before any field is read
+  // (`price-cursor-sealed.test.ts`).
+  const sealed = (payload: unknown): string =>
+    (h.container as unknown as { resolve<T>(name: string): T })
+      .resolve<CatalogCursorSeal>('cursorSeal')
+      .seal(PRICE_WALK_CURSOR_PURPOSE, JSON.stringify(payload));
 
   const someId = '00000000-0000-4000-8000-000000000001';
   const at = '2026-03-01T00:00:00.000Z';
@@ -164,7 +136,7 @@ describe('a price-sorted walk meets every product once and ends', () => {
   ])('%s is discarded: the first page, not a 500', async (_name, payload) => {
     await w.seed(w.priced(4, (i) => ({ price: `${100 + i}.00`, age: i })));
     const first = await w.page('&limit=2&sort=price');
-    const again = await w.page(`&limit=2&sort=price&cursor=${encodeURIComponent(encodeCursor(JSON.stringify(payload)))}`);
+    const again = await w.page(`&limit=2&sort=price&cursor=${encodeURIComponent(sealed(payload))}`);
     expect(again.data.map((d) => d.sku)).toEqual(first.data.map((d) => d.sku));
   });
 

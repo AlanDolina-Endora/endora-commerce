@@ -40,7 +40,6 @@ describe('Customer-group pricing override (US6)', () => {
     const channel = em.create(SalesChannel, {
       code: `cg-px-${Math.floor(performance.now())}`,
       name: { 'pl-PL': 'T', 'en-US': 'T' },
-      isPublic: true,
       defaultLanguage: 'pl-PL',
       defaultCurrency: 'PLN',
       languages: ['pl-PL'],

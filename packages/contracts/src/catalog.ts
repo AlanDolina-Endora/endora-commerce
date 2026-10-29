@@ -239,7 +239,13 @@ export type ProductPriceTier = z.infer<typeof productPriceTierSchema>;
  * when that is what `price` came from; `salePrice` is set only when a sale list
  * priced the product (it is then also `price`). Both are `null` when nothing
  * prices the product; `displayMode` is still the viewer's, so a page can tell
- * "sold on request only" (`none`) from "no price". The display-mode values are
+ * "sold on request only" (`none`) from "no price".
+ *
+ * Issue #491 — under `displayMode: 'none'` the server sends **no amount**:
+ * `basePrice` and `salePrice` are `null`, `listPrice` is absent, and so are
+ * `ProductSummary.price`, `compareAtPrice` and `priceVariesByVariant` beside it,
+ * whatever the price books would charge. The storefront renders "price on
+ * request" from `displayMode`; there is no figure to hide. The display-mode values are
  * `displayModeSchema`'s (`price-lists.ts`, which imports this file and checks
  * the two agree at compile time).
  */
@@ -1433,8 +1439,8 @@ export type ProductListQuery = z.infer<typeof productListQuerySchema>;
  *
  * It rides on the listing response because the storefront has to decide whether
  * to *render* the price controls, and the answer depends on the viewer and the
- * channel: a non-public channel publishes no prices, and
- * `pricing.unauthenticated_display_mode = none` hides them until login. A
+ * channel: `pricing.unauthenticated_display_mode = none` hides prices until
+ * login, on one channel or on all of them. A
  * storefront that guessed would guess wrong on exactly the deployments that
  * care, and a control that offers an ordering the API refuses is a worse defect
  * than no control.

@@ -61,9 +61,9 @@ describe('sales_channels.anonymous_access migration', () => {
     await h.em().execute(
       `insert into "sales_channels"
          ("id", "code", "name", "languages", "default_language", "currencies", "default_currency",
-          "active", "system_default", "version", "is_public", "status", "created_at", "updated_at")
+          "active", "system_default", "version", "status", "created_at", "updated_at")
        values (gen_random_uuid(), 'm1-raw-insert', '{"en-US":"Raw"}', '["en-US"]', 'en-US',
-               '["PLN"]', 'PLN', true, false, 1, false, 'active', now(), now())`,
+               '["PLN"]', 'PLN', true, false, 1, 'active', now(), now())`,
     );
     const rows = await h
       .em()

@@ -156,8 +156,7 @@ export class DefaultChannelReconciler {
       anonymousAccess: true,
       systemDefault: true,
       version: 1,
-      // Legacy columns preserved for one release (research R-12).
-      isPublic: false,
+      // Legacy column preserved for one release (research R-12).
       status: 'active',
     });
     await em.persistAndFlush(channel);

@@ -244,10 +244,24 @@ show only the price charged.
 
 **Display modes** decide how prices are shown — gross only, net only, both, or not at all. *None*
 hides every price and replaces *Add to cart* with *Add to quote request*; the basket also refuses
-such a product (`400 CART_PRODUCT_QUOTE_ONLY`). The mode is set platform-wide (separately for
-signed-in and anonymous visitors) and can be overridden per organization, per category and per
-product; the most specific setting wins. Display modes are set on *Pricing settings* and in the
-organization and category editors.
+such a product (`400 CART_PRODUCT_QUOTE_ONLY`). The prices are withheld by the server, not only
+hidden on the page: product lists, the product page, search results and suggestions, comparisons,
+related products and the external catalogue API send no amount for such a product. It is not
+ranked when a list is sorted by price — it comes after the priced products, in either direction —
+and a price range leaves it out. *None* for anonymous visitors is the "prices after sign-in"
+configuration. The mode is set separately for signed-in and anonymous visitors — for every sales
+channel on *Pricing settings*, or for one channel on the *Settings* screen, where a channel's own
+value wins over the platform-wide one — and can be overridden per organization, per category and
+per product; the most specific setting wins. A product or category override wins for **anonymous
+visitors too**: a product overridden to *Gross only* shows its price to guests even on a channel
+whose anonymous mode is *None*, which makes it the one way to show a guest a price there. An
+organization override applies to that organization's signed-in buyers only. Display modes are set on
+*Pricing settings* and in the organization and category editors.
+
+Sales channels have no price-visibility switch of their own. They used to (`isPublic`), and with it
+off a channel hid prices from everyone, signed-in buyers included. The switch was retired: every
+channel that had it off was given *None* for anonymous visitors, so guests there still see no
+prices, and its signed-in buyers now see prices according to their display mode.
 
 ## Worked examples — the demo shop
 

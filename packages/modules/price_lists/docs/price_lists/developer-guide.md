@@ -193,6 +193,29 @@ rows, and the catalogue facts (categories, variants with axis values, eligible a
 | `namedListPrices`, `namedListPublishability` | a feed pinned to one book | `namedListPrices`: the book's rows that are not variant rows, at quantity 1, over the channel's catalogue price **without the pinned book**; products it does not price are absent, and the map is empty while the book does not publish. `namedListPublishability`: whether it publishes now — `{ publishable: true }` or `{ publishable: false, reason }` |
 | `listTierStarts` | a tier ladder | the starting quantities of the rows and base tiers that can apply to `(product, variant?, currency)` |
 
+**Display mode `none` withholds every amount, in this module** (issue #491). Where the viewer's
+display mode resolves to `none`, `resolveListingPriceDetails` answers `price: { source: 'none' }`,
+`basePrice` and `salePrice` `null`, no `listPrice` and every `tiers` entry `null`;
+`resolveListingPrices` answers the `none` arm; `resolveEngine` (the resolved-price endpoint) names
+no book, bracket, sale or source. `displayMode: 'none'` stays, so a storefront still says "price
+on request". The rule is applied once, where `book-pricing.ts` maps a resolution onto those shapes
+(`listingPriceFromBook`, `listingDetailFromBook`, `engineFromBook`), so the catalogue, search,
+comparisons and product links carry nothing to forward. A **line** (`resolveLinePrices`) keeps its
+amount beside `displayMode: 'none'`: it is the charging path, and the cart, the admin order preview
+and order intake refuse such a line as quote-only by that mode. A consumer that publishes a line
+amount to a viewer — the external catalogue API — withholds it with
+`displayModeWithholdsAmounts` (`@endora-commerce/contracts`), the one statement of the rule.
+
+**No consumer gates prices on the sales channel** (issue #492). The channel's `isPublic` flag,
+which the catalogue, search, comparisons, product links and the price-control check read to skip
+pricing altogether, is retired and its column dropped: it withheld prices from signed-in buyers as
+well, beside a chain that already said "prices after sign-in". A channel that hides prices from
+anonymous visitors carries `pricing.unauthenticated_display_mode = none` as its own setting value —
+the retiring migration (`…CoreSalesChannelsRetireIsPublic`) wrote it for every channel that had the
+flag off and no value of its own. The chain's precedence is unchanged: a product or category
+override precedes the viewer's tail, so it decides for a guest as well
+(`specs/pricing/worked-examples.md` §10.19 W5, §10.20 P4).
+
 **A book pinned to a feed publishes only while it would price an anonymous buyer on the feed's
 channel now** (`BookPricing.namedBookPublishability`, `book-pricing.ts`): its status is `active` or
 `scheduled` and `starts_at ≤ now < ends_at`, evaluated at the call rather than by the status sweep;
@@ -293,8 +316,12 @@ too slow, so price sorting and price-range filtering read a precomputed **price 
   order. A walk meets every product whose price does not change while it is under way exactly once;
   a product repriced meanwhile may be met twice or not at all, as on any keyset walk over a live
   price. A page that runs out of its scan budget is short, possibly empty, and its cursor continues
-  from where the scan stopped, so the budget never ends a walk. Prices on cards are always resolved
-  live, so only the order can lag.
+  from where the scan stopped, so the budget never ends a walk. That position can be a product the
+  viewer may not see, and under a price sort it holds the product's price and id, so the catalogue
+  seals every cursor of a price walk with the platform's `cursorSeal` (AES-256-GCM, its key derived
+  from `SESSION_COOKIE_SECRET`; issue #497): a client can neither read a position nor forge one, and
+  a cursor that does not open starts the walk again. Prices on cards are always resolved live, so
+  only the order can lag.
 - **A write marks only what it can move**, at two granularities. Each writer describes its change
   as a `SurfaceChange` (`src/backend/services/surface-change.ts`) and `PricingGeneration.bump`
   hands it to `PriceSurface.markChanged` after the commit, which writes every mark of the change in
@@ -312,9 +339,11 @@ too slow, so price sorting and price-range filtering read a precomputed **price 
   buyer resolves that product over the everyone profile's books and answers what it answers. A
   change that concerns more than
   10 000 products, a row that selects by attribute alone or every product, a channel event and the
-  precedence mark their profiles whole. A new or duplicated book (a draft), a display mode and the
-  list-price switch mark nothing; deleting a book also drops the buyer profiles whose vector holds
-  it. When the marking itself fails, every profile is marked whole.
+  precedence mark their profiles whole. A new or duplicated book (a draft), an organization
+  display-mode override, a `pricing.*` display-mode setting and the list-price switch mark nothing;
+  a product or category display-mode override marks the product, or the products of the category's
+  subtree, in every profile, because a product whose own step is `none` is left out of the surface
+  (below). Deleting a book also drops the buyer profiles whose vector holds it. When the marking itself fails, every profile is marked whole.
 - The **worker** consumes the BullMQ queue `price_lists.surface` (one coalesced job id, three
   attempts with exponential backoff), attached with `ctx.worker` so it stops with the module, and
   runs only in a process that consumes queues (`BACKEND_ROLE` unset, `all` or `worker`) with a queue
@@ -330,7 +359,14 @@ too slow, so price sorting and price-range filtering read a precomputed **price 
   A whole build reads the catalogue at its own start through
   `catalogProductReadPort.listPricingRefs()`, one statement with no entity hydration. The surface's
   rows are resolved by `BookPricing.resolveProfileListing`, which is the listing resolution without
-  the display mode the surface does not store. A build resolves its next batch of products while
+  the viewer's tail of the display-mode chain, which the surface does not store. A product whose own
+  step — its override, else its category's — is `none` is withheld from every viewer, so it has no
+  row: price sort walks it in the unpriced tail and a price range leaves it out (issue #491). The
+  step is read only while some product or category override is `none`
+  (`PriceListService.anyProductStepWithholds`, one statement per batch). A viewer whose own tail is
+  `none` is refused price sort and range by the catalogue (`pageDisplayMode`), and the live paths —
+  `pricedProductIds` and the ordering of a never-built profile — leave out whatever the viewer's
+  display mode withholds. A build resolves its next batch of products while
   the previous batch is written, and a failure of either swaps nothing. A build whose insert meets
   a product deleted after its read rolls back and runs again on a fresh read, up to three times.
   If its products still vanish, the pass fails with every mark kept and no later profile built,
@@ -430,7 +466,7 @@ offer.
 
 | Method and path | Answers |
 | --- | --- |
-| `GET /api/v1/storefront/products/:id/resolved-price?quantity=&currency=&variantId=` | For the viewer (the session's organization and customer, else a guest): `resolvedPrice { basePrice, salePrice, baseListId, saleListId, displayMode, currencyCode, quantityBracket, source, compareAt, listPrice? }`. `basePrice` is the viewer's **regular** price — buyer, catalogue or base — and `salePrice` is set only when a sale is charged; `listPrice` only when `pricing.show_list_price` is on and the everyone price is above the price charged. Amounts are decimal strings (`{ amount, currency }`). A product no book prices for the viewer is **unpriced**: `baseListId`, `basePrice` and `quantityBracket` are all `null`, never an empty-string id (`resolvedPriceEngineSchema` in `packages/contracts/src/price-lists.ts` holds the three to null together or set together). |
+| `GET /api/v1/storefront/products/:id/resolved-price?quantity=&currency=&variantId=` | For the viewer (the session's organization and customer, else a guest): `resolvedPrice { basePrice, salePrice, baseListId, saleListId, displayMode, currencyCode, quantityBracket, source, compareAt, listPrice? }`. `basePrice` is the viewer's **regular** price — buyer, catalogue or base — and `salePrice` is set only when a sale is charged; `listPrice` only when `pricing.show_list_price` is on and the everyone price is above the price charged. Amounts are decimal strings (`{ amount, currency }`). A product no book prices for the viewer is **unpriced**: `baseListId`, `basePrice` and `quantityBracket` are all `null`, never an empty-string id (`resolvedPriceEngineSchema` in `packages/contracts/src/price-lists.ts` holds the three to null together or set together). A product whose display mode is `none` for the viewer answers the same way, with `salePrice`, `saleListId`, `source` and `compareAt` `null`, no `listPrice` and `displayMode: 'none'` (issue #491). |
 | `GET /api/v1/storefront/pricing/display-mode/:productId` | The display mode alone. |
 
 Both are resolved for the viewer and derive it through one function. A response resolved for an

@@ -66,7 +66,7 @@ describe('SearchEventSubscriber — incremental index updates', () => {
     teardown = () => offs.forEach((off) => off());
 
     client = new Meilisearch({ host: meilisearchHost, apiKey: meilisearchKey });
-    const channel = await h.em().findOneOrFail(SalesChannel, { isPublic: true });
+    const channel = await h.em().findOneOrFail(SalesChannel, { code: 'pl_retail' });
     publicChannel = channel;
     // Reindex once so the wipe + add settle the index for this test run.
     await indexer.reindexChannel(h.em(), channel);

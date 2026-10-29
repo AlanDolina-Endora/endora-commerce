@@ -3032,6 +3032,40 @@ match; nothing breaks without them.
 This entry was written on 2026-10-25 against `master` at `9e43c3412` and the branch of issue
 #428 (`fix/428-money-followups`). No instance had been upgraded to 0.109.0 when it was written.
 
+#### Sales channels: the public-channel flag is retired into the display modes {#after-0-109-0-channel-prices}
+
+**For operators.**
+
+- **What changed** (issue #492). A sales channel used to carry a price-visibility flag of its own
+  (`is_public`, never shown in the admin). With it off — the state of every channel created by the
+  admin, by the boot-time default-channel reconciler and of the demo's *PL B2B VIP* — the channel
+  sent no price to **anyone**, signed-in buyers included. The flag is gone. Whether a viewer sees a
+  price is decided by the display modes alone: *Pricing settings* for every channel, the *Settings*
+  screen for one channel, and the organization, category and product overrides.
+- **What the migration does.** `Migration20261028T173317CoreSalesChannelsRetireIsPublic` gives every
+  channel that had the flag off `pricing.unauthenticated_display_mode = none` as that channel's own
+  value, so its anonymous visitors still see no prices, and then drops the column. A channel that
+  already had its own value for that setting keeps it.
+- **What you will see.** On a channel that had the flag off, **signed-in buyers now see prices**
+  according to their display mode, and may sort and filter by price. If that is not what you want
+  for a channel, set its *Default price display mode* (`pricing.default_display_mode`) to *None* on
+  the *Settings* screen for that channel, or set an override for the organizations concerned. A
+  product or category display-mode override applies to anonymous visitors too, as it always did, so
+  a product overridden to *Gross only* shows its price to guests on such a channel.
+- **Before migrating**, stop the processes running the previous release: the column they read is
+  dropped. The migration refuses a database that has a channel with the flag off but no registered
+  `pricing.unauthenticated_display_mode` setting (one the platform has never started on); start the
+  previous release once so the settings are registered, then migrate.
+
+**For API clients and module authors.** No HTTP response carried the flag, so none changes shape;
+a viewer whose display mode is `none` is answered as described in the `price_lists` module's
+documentation (`resolvedPrice.displayMode: 'none'` and no amount, where such a channel used to
+answer `resolvedPrice: null`). In code, `SalesChannel.isPublic`, `CachedChannel.isPublic`,
+`ResolvedSearchChannel.isPublic` and `CatalogResolvedChannel.isPublic` are removed — drop them from
+anything you construct — and the channel cache key moves to `sales-channels:v4:`.
+
+This entry was written on 2026-10-28 on the branch of issue #492 (`fix/492-retire-ispublic`).
+
 ## An instance that is mixed from the start
 
 The installer of `0.101.x` or earlier wrote every package of the release with a `^` except

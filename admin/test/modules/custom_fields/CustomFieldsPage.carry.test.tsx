@@ -108,37 +108,65 @@ async function openEditor(key = 'region', bundle: Record<string, string> = EN): 
   return screen.findByRole('dialog', { name: title });
 }
 
+/** Opens the definition form in its create view (issue #447), the key and default label filled when given. */
+async function openCreate(key?: string, bundle: Record<string, string> = EN): Promise<HTMLElement> {
+  fireEvent.click(screen.getByRole('button', { name: sentence(bundle, 'customFields.form.newField') }));
+  const dialog = await screen.findByRole('dialog', { name: sentence(bundle, 'customFields.form.createTitle') });
+  if (key !== undefined) {
+    fireEvent.change(within(dialog).getByPlaceholderText('po_number'), { target: { value: key } });
+    const labels = within(dialog).getByRole('group', { name: sentence(bundle, 'customFields.editor.section.labels') });
+    fireEvent.change(within(labels).getByLabelText(sentence(bundle, 'customFields.editor.labelDefault')), {
+      target: { value: key },
+    });
+  }
+  return dialog;
+}
+
 describe('CustomFieldsPage — carry options (US4)', () => {
   it('offers one carry checkbox per carry target in the create form and sends the ticked ones', async () => {
     await renderPage('quote_request');
-    const toOrder = screen.getByRole('checkbox', { name: toggle('Order') });
-    expect(screen.getByRole('checkbox', { name: toggle('Opportunity') })).not.toBeChecked();
-    // The create form's row explains the group once, not each box (owner ruling V2; see the help-line suite below).
-    expect(toOrder).not.toHaveAccessibleDescription();
-    fireEvent.change(screen.getByPlaceholderText('po_number'), { target: { value: 'region_copy' } });
+    const dialog = await openCreate('region_copy');
+    const toOrder = within(dialog).getByRole('checkbox', { name: toggle('Order') });
+    expect(within(dialog).getByRole('checkbox', { name: toggle('Opportunity') })).not.toBeChecked();
     fireEvent.click(toOrder);
-    fireEvent.click(screen.getByRole('button', { name: 'Add field' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add field' }));
     await waitFor(() => expect(client.create).toHaveBeenCalledTimes(1));
     expect(client.create.mock.calls[0]![0]).toMatchObject({ key: 'region_copy', carryTo: ['order'] });
   });
 
   it('creates a field that carries nothing when no box is ticked', async () => {
     await renderPage('quote_request');
-    fireEvent.change(screen.getByPlaceholderText('po_number'), { target: { value: 'plain' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add field' }));
+    const dialog = await openCreate('plain');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add field' }));
     await waitFor(() => expect(client.create).toHaveBeenCalledTimes(1));
     expect(client.create.mock.calls[0]![0]).toMatchObject({ key: 'plain', carryTo: [] });
   });
 
   it('offers no carry option for a type without carry targets (US4-4)', async () => {
     await renderPage('category');
-    expect(screen.queryByRole('checkbox', { name: /Carry value to/ })).toBeNull();
+    const dialog = await openCreate();
+    expect(within(dialog).queryByRole('checkbox', { name: /Carry value to/ })).toBeNull();
   });
 
   it('never offers an Order field a Quote Request target', async () => {
     await renderPage('order');
-    expect(screen.getByRole('checkbox', { name: toggle('Opportunity') })).toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: toggle('Quote request') })).toBeNull();
+    const dialog = await openCreate();
+    expect(within(dialog).getByRole('checkbox', { name: toggle('Opportunity') })).toBeInTheDocument();
+    expect(within(dialog).queryByRole('checkbox', { name: toggle('Quote request') })).toBeNull();
+  });
+
+  it('follows the record type chosen in the create form, keeping no target the new type does not offer', async () => {
+    await renderPage('quote_request');
+    const dialog = await openCreate('region_copy');
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: toggle('Order') }));
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: toggle('Opportunity') }));
+    fireEvent.change(within(dialog).getByLabelText('Record type'), { target: { value: 'opportunity' } });
+    expect(within(dialog).queryByRole('checkbox', { name: toggle('Opportunity') })).toBeNull();
+    expect(within(dialog).getByRole('checkbox', { name: toggle('Order') })).toBeChecked();
+    expect(within(dialog).getByRole('checkbox', { name: toggle('Quote request') })).not.toBeChecked();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add field' }));
+    await waitFor(() => expect(client.create).toHaveBeenCalledTimes(1));
+    expect(client.create.mock.calls[0]![0]).toMatchObject({ entityType: 'opportunity', carryTo: ['order'] });
   });
 
   it('shows the stored carry in the editor and sends nothing when it is left alone', async () => {
@@ -229,27 +257,30 @@ describe('CustomFieldsPage — carry options (US4)', () => {
       }),
     );
     await renderPage('quote_request');
-    fireEvent.change(screen.getByPlaceholderText('po_number'), { target: { value: 'fresh_key' } });
-    fireEvent.click(screen.getByRole('checkbox', { name: toggle('Order') }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add field' }));
+    const dialog = await openCreate('fresh_key');
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: toggle('Order') }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add field' }));
     const refusal = sentence(EN, 'errors.CUSTOM_FIELD_CARRY_INCOMPATIBLE.target_missing', {
       key: 'fresh_key',
       targetEntityType: 'Order',
     });
-    const message = await screen.findByText(refusal);
-    // R16 — said at the form, beside the carry group it describes, and focused;
-    // not in the page-top alert above the table.
-    const group = screen.getByRole('group', { name: sentence(EN, 'customFields.carry.legend') });
-    expect(group).toHaveAccessibleDescription(`${sentence(EN, 'customFields.carry.helpGroup')} ${refusal}`);
-    expect(message.parentElement).toBe(group.parentElement);
+    const message = await within(dialog).findByText(refusal);
+    // R16 — said at the form, inside the carry group it describes, and focused;
+    // a summary beside the submit button points at it.
+    const group = within(dialog).getByRole('group', { name: sentence(EN, 'customFields.carry.legend') });
+    expect(group).toHaveAccessibleDescription(refusal);
+    expect(group).toContainElement(message);
     await waitFor(() => expect(message).toHaveFocus());
-    expect(screen.getByRole('checkbox', { name: toggle('Order') })).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByRole('checkbox', { name: toggle('Opportunity') })).not.toHaveAttribute('aria-invalid');
+    expect(within(dialog).getByRole('checkbox', { name: toggle('Order') })).toHaveAttribute('aria-invalid', 'true');
+    expect(within(dialog).getByRole('checkbox', { name: toggle('Opportunity') })).not.toHaveAttribute('aria-invalid');
     expect(screen.getAllByText(refusal)).toHaveLength(1);
     expect(message.closest('[role="alert"]')).toBeNull();
+    expect(within(dialog).getByTestId('save-error')).toHaveTextContent(
+      sentence(EN, 'customFields.carry.refusalSummary', { section: sentence(EN, 'customFields.carry.legend') }),
+    );
     // The form keeps what was typed, so the operator can fix it and try again.
-    expect(screen.getByPlaceholderText('po_number')).toHaveValue('fresh_key');
-    expect(screen.getByRole('checkbox', { name: toggle('Order') })).toBeChecked();
+    expect(within(dialog).getByPlaceholderText('po_number')).toHaveValue('fresh_key');
+    expect(within(dialog).getByRole('checkbox', { name: toggle('Order') })).toBeChecked();
   });
 
   it('falls back to the server sentence for an unknown refusal token', async () => {
@@ -268,8 +299,9 @@ describe('CustomFieldsPage — carry options (US4)', () => {
 
 /**
  * Owner ruling V2 (2026-10-21, T066) — the editor dialog explains each carry
- * checkbox with its own help line; the narrow create-form row explains the
- * whole group with one shared line, linked to the group rather than to each box.
+ * checkbox with its own help line. Since issue #447 a field is created in the
+ * same definition form, so the create view reads exactly as the edit view
+ * does; the narrow create-form row, and its one shared help line, are gone.
  */
 describe.each([
   ['en', EN],
@@ -278,17 +310,14 @@ describe.each([
   const typeName = (entityType: 'order' | 'opportunity'): string =>
     sentence(bundle, CARRY_ENTITY_TYPES.find((info) => info.entityType === entityType)!.labelKey);
 
-  it('describes the create form\'s carry group with one shared help line', async () => {
+  it('describes each carry checkbox of the create form by its own help line, as the editor does', async () => {
     await renderPage('quote_request', bundle);
-    const shared = sentence(bundle, 'customFields.carry.helpGroup');
-    const group = screen.getByRole('group', { name: sentence(bundle, 'customFields.carry.legend') });
-    expect(group).toHaveAccessibleDescription(shared);
-    expect(screen.getAllByText(shared)).toHaveLength(1);
+    const dialog = await openCreate(undefined, bundle);
+    const fieldset = within(dialog).getByRole('group', { name: sentence(bundle, 'customFields.carry.legend') });
     for (const target of ['order', 'opportunity'] as const) {
-      const box = within(group).getByRole('checkbox', { name: toggle(typeName(target), bundle) });
-      expect(box).not.toHaveAttribute('aria-describedby');
-      // No per-target sentence is printed in the row.
-      expect(screen.queryByText(sentence(bundle, 'customFields.carry.help', { entityType: typeName(target) }))).toBeNull();
+      expect(within(fieldset).getByRole('checkbox', { name: toggle(typeName(target), bundle) })).toHaveAccessibleDescription(
+        sentence(bundle, 'customFields.carry.help', { entityType: typeName(target) }),
+      );
     }
   });
 
@@ -301,7 +330,6 @@ describe.each([
         sentence(bundle, 'customFields.carry.help', { entityType: typeName(target) }),
       );
     }
-    expect(within(dialog).queryByText(sentence(bundle, 'customFields.carry.helpGroup'))).toBeNull();
   });
 });
 

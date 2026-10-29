@@ -13,6 +13,7 @@ import {
   type DictionaryLanguagesPageResponse,
   type SalesChannelDetail,
 } from '@endora-commerce/contracts';
+import { Link } from 'react-router-dom';
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import {
   Alert,
@@ -466,6 +467,13 @@ export function ChannelIdentityForm({
 
             The hint is the operator's only warning of the consequences, so it
             is attached to the control rather than left beside it.
+
+            The second hint answers the question operators bring to this
+            control and it does not answer: whether anonymous visitors see
+            prices. That is the display-mode chain's
+            `pricing.unauthenticated_display_mode`, per channel — the channel's
+            own public flag that once said it is retired (issue #492) — so the
+            hint names it and links to where it is set.
           */}
           <div className="grid gap-1">
             <div className="flex items-center gap-2">
@@ -473,7 +481,7 @@ export function ChannelIdentityForm({
                 id="sc-anonymous-access"
                 checked={anonymousAccess}
                 onChange={(e) => setAnonymousAccess(e.target.checked)}
-                aria-describedby="sc-anonymous-access-hint"
+                aria-describedby="sc-anonymous-access-hint sc-anonymous-access-prices-hint"
               />
               <Label htmlFor="sc-anonymous-access" className="cursor-pointer">
                 {t('identity.anonymousAccess.label')}
@@ -481,6 +489,12 @@ export function ChannelIdentityForm({
             </div>
             <p id="sc-anonymous-access-hint" className="text-xs text-muted-foreground">
               {t('identity.anonymousAccess.hint')}
+            </p>
+            <p id="sc-anonymous-access-prices-hint" className="text-xs text-muted-foreground">
+              {t('identity.anonymousAccess.pricesHint')}{' '}
+              <Link to="/price-lists/display-modes" className="underline underline-offset-2">
+                {t('identity.anonymousAccess.pricesLink')}
+              </Link>
             </p>
           </div>
 

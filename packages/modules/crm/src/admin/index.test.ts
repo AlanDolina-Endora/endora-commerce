@@ -108,6 +108,9 @@ describe('crm admin contributions', () => {
       'open-crm-analytics',
       // Added with its route, never before (Principle XVI).
       'open-crm-calendar',
+      // The two configuration screens the sidebar lists (issue #516).
+      'open-crm-tags',
+      'open-crm-workflow',
     ]);
     for (const action of actions) {
       expect(paths.has(action.targetRoute), action.id).toBe(true);

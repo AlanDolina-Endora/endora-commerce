@@ -145,7 +145,7 @@ function fakeEm(): () => EntityManager {
   const em = {
     findOne: async (entity: { name?: string }) =>
       entity.name === 'SalesChannel'
-        ? { id: 'channel-1', defaultCurrency: 'PLN', isPublic: true }
+        ? { id: 'channel-1', defaultCurrency: 'PLN' }
         : null,
     find: async (entity: { name?: string }) =>
       entity.name === 'ComparisonProduct'
@@ -419,7 +419,7 @@ function fakeEmWith(productIds: readonly string[]): () => EntityManager {
   const em = {
     findOne: async (entity: { name?: string }) =>
       entity.name === 'SalesChannel'
-        ? { id: 'channel-1', defaultCurrency: 'PLN', isPublic: true }
+        ? { id: 'channel-1', defaultCurrency: 'PLN' }
         : null,
     find: async (entity: { name?: string }) =>
       entity.name === 'ComparisonProduct'

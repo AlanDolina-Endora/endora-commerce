@@ -32,47 +32,74 @@ modułu.
 
 ## Tworzenie pola
 
-Wybierz typ rekordu na ekranie **Pola niestandardowe** i wypełnij formularz pod tabelą:
+Wybierz typ rekordu na ekranie **Pola niestandardowe** i naciśnij **Nowe pole** nad tabelą (albo
+**Dodaj pole**, gdy typ nie ma jeszcze żadnego pola). Pole definiuje się w całości w jednym oknie —
+tym samym formularzu, w którym później się je edytuje, z tymi samymi sekcjami w tej samej
+kolejności:
 
-- **Klucz** — identyfikator pola: małe litery, cyfry i podkreślenia, zaczyna się od litery
-  (`po_number`). Po utworzeniu pola nigdy się nie zmienia.
-- **Etykieta (EN)** — etykieta angielska; gdy zostanie pusta, używany jest klucz.
-- **Typ** — *Tekst*, *Liczba*, *Tak / Nie*, *Data*, *Pojedynczy wybór* lub *Wielokrotny wybór*.
-  Pole wyboru przyjmuje opcje jako listę oddzieloną przecinkami.
-- **Kto widzi wartość** — *Wewnętrzne* (tylko administratorzy, domyślnie) albo *Klient* (wartość
-  trafia też do klienta w sklepie oraz do integracji korzystających z zewnętrznego API).
-- **Wymagane** — rekordu nie da się zapisać bez wartości.
-- **Używaj jako filtra listy** — dostępne tylko dla zamówień, zapytań ofertowych i szans
-  sprzedażowych. Zob. [Filtry list](#filtry-list).
-- **Przenoś wartość do: …** — jedno pole wyboru na każdy typ rekordu, do którego wartość może
-  trafić, dostępne tylko dla zapytań ofertowych, zamówień i szans sprzedażowych, z jedną wspólną
-  linią pomocy dla całej grupy. Zob. sekcję *Przenoszenie wartości między zapytaniami ofertowymi,
-  zamówieniami i szansami sprzedażowymi* poniżej.
+1. **Definicja**
+   - **Typ rekordu** — wstępnie ustawiony na typ widoczny na stronie; można wybrać każdy typ
+     zarządzany na tym ekranie.
+   - **Typ** — *Tekst*, *Liczba*, *Tak / Nie*, *Data*, *Pojedynczy wybór* lub *Wielokrotny wybór*.
+   - **Klucz** — identyfikator pola: małe litery, cyfry i podkreślenia, zaczyna się od litery,
+     najwyżej 64 znaki (`po_number`). Po utworzeniu pola nigdy się nie zmienia.
+2. **Etykiety** — **etykieta domyślna** (wymagana) i po jednej etykiecie na każdy język panelu
+   administracyjnego, dziś angielski i polski. Rekord pokazuje etykietę w języku czytającego, a gdy
+   jej brak — etykietę domyślną.
+3. **Opcje**, dla *Pojedynczego wyboru* i *Wielokrotnego wyboru* — **Dodaj opcję** dodaje wiersz z:
+   - **zapisaną wartością**, którą przechowują rekordy — niepowtarzalną w obrębie pola;
+   - **etykietą domyślną** (wymaganą) i etykietą w każdym języku panelu;
+   - **Domyślna** — opcją, od której zaczyna nowy rekord. Pole *Pojedynczego wyboru* może mieć
+     najwyżej jedną opcję domyślną, pole *Wielokrotnego wyboru* — kilka. Żadne nie musi jej mieć;
+   - **Przesuń w górę** / **Przesuń w dół** — kolejnością, w jakiej opcje są oferowane, oraz
+     **Usuń**.
+   Opcje zapisują się razem z polem, więc nic nie zostaje zapisane przed naciśnięciem **Dodaj pole**.
+4. **Reguły**
+   - **Wymagane** — rekordu nie da się zapisać bez wartości.
+   - **Kto widzi wartość** — *Wewnętrzne* (tylko administratorzy, domyślnie) albo *Klient* (wartość
+     trafia też do klienta w sklepie oraz do integracji korzystających z zewnętrznego API).
+5. **Zachowanie**
+   - **Używaj jako filtra listy** — dostępne tylko dla zamówień, zapytań ofertowych i szans
+     sprzedażowych. Zob. [Filtry list](#filtry-list).
+   - **Przenoś wartość do: …** — jedno pole wyboru na każdy typ rekordu, do którego wartość może
+     trafić, każde z własną linią pomocy, dostępne tylko dla zapytań ofertowych, zamówień i szans
+     sprzedażowych. Zob. sekcję *Przenoszenie wartości między zapytaniami ofertowymi, zamówieniami
+     i szansami sprzedażowymi* poniżej.
 
-Przycisk **Dodaj pole** tworzy pole. **Usuń** (kosz) prosi o potwierdzenie w miejscu, zanim pole
-zostanie usunięte. Tworzenie, edycja i usuwanie pól wymaga uprawnienia
-`custom_fields:write`; administrator z samym `custom_fields:read` widzi tylko tabelę, bez
-żadnych kontrolek, które ją zmieniają.
+Przycisk **Dodaj pole** tworzy pole ze wszystkim powyżej w jednym kroku. Zanim cokolwiek zostanie
+wysłane, okno sprawdza format klucza, etykietę domyślną, to, czy każda opcja ma zapisaną wartość
+nieużywaną przez inną opcję i etykietę domyślną, oraz liczbę opcji domyślnych; każdy problem jest
+opisany przy polu, którego dotyczy, a fokus przechodzi do pierwszego z nich. Odmowa serwera jest
+pokazywana tak samo — na przykład klucz użyty już w danym typie rekordu przy kluczu — a okno
+zachowuje wszystko, co wpisano.
+
+**Usuń** (kosz) prosi o potwierdzenie w miejscu, zanim pole zostanie usunięte. Tworzenie, edycja i
+usuwanie pól wymaga uprawnienia `custom_fields:write`; administrator z samym `custom_fields:read`
+widzi tylko tabelę, bez żadnych kontrolek, które ją zmieniają.
 
 ## Edycja pola
 
-Każdy wiersz tabeli ma przycisk **Edytuj** (ołówek). Otwarte okno pokazuje klucz, typ rekordu i typ jako
-stały tekst, a resztę pozwala zmienić:
+Każdy wiersz tabeli ma przycisk **Edytuj** (ołówek). Otwiera ten sam formularz co **Nowe pole**. Typ
+rekordu, klucz i typ są pokazane jako stały tekst; resztę można zmienić:
 
-- **Etykiety** — domyślną (wymaganą), angielską i polską.
-- **Wymagane** — po włączeniu okno wyjaśnia skutki: istniejące rekordy zachowują swoje wartości,
-  a rekord bez wartości tego pola będzie jej wymagał przy następnej edycji jego pól
-  niestandardowych. Nic nie jest uzupełniane automatycznie.
+- **Etykiety** — domyślną (wymaganą) i etykietę w każdym języku panelu.
 - **Opcje** pola wyboru — każdą opcję zmienia się osobno, od razu, bez naciskania **Zapisz**:
-  - jej etykiety domyślną, angielską i polską, zapisywane po opuszczeniu pola lub naciśnięciu Enter;
-  - **Domyślna** — opcja wstępnie wybrana dla nowego rekordu;
+  - jej etykietę domyślną i etykiety w poszczególnych językach, zapisywane po opuszczeniu pola lub
+    naciśnięciu Enter;
+  - **Domyślna** — opcja wstępnie wybrana dla nowego rekordu; w polu *Pojedynczego wyboru* najpierw
+    odznacz bieżącą opcję domyślną, a potem zaznacz inną;
   - **Przesuń w górę** / **Przesuń w dół** — zmienia kolejność, w jakiej opcja jest oferowana;
   - **Usuń** — po potwierdzeniu w oknie. Opcji, którą ma jeszcze którykolwiek rekord, nie można
     usunąć: okno mówi o tym przy opcji, podając jej etykietę, i prosi, by najpierw zmienić wartość
     tych rekordów;
-  - **Dodaj opcję** — z zapisaną wartością i etykietami.
+  - **Dodaj opcję** — z zapisaną wartością, której nie używa inna opcja, i etykietami.
   **Zapisana wartość** opcji nigdy się nie zmienia — to ją przechowują rekordy — więc zmiana
   etykiety opcji nie psuje żadnego rekordu ani filtra.
+- **Wymagane** — po włączeniu okno wyjaśnia skutki: istniejące rekordy zachowują swoje wartości,
+  a rekord bez wartości tego pola będzie jej wymagał przy następnej edycji jego pól
+  niestandardowych. Nic nie jest uzupełniane automatycznie.
+- **Kto widzi wartość** — ten sam wybór, który daje kolumna *Widoczne dla* w tabeli. Zmiana, po
+  której przenoszenie wartości przestałoby działać, najpierw pyta o potwierdzenie, tak jak w tabeli.
 - **Używaj jako filtra listy**, tam gdzie typ rekordu na to pozwala.
 - **Przenoś wartość do: …**, tam gdzie typ rekordu na to pozwala — jedno pole wyboru na każdy typ
   docelowy, każde z własną linią pomocy.
@@ -185,8 +212,8 @@ utworzone w międzyczasie nie są później uzupełniane.
 ### Kiedy można włączyć opcję
 
 **Przenoś wartość do: …** zostaje przyjęte tylko wtedy, gdy docelowy typ rekordu ma pole o tym samym
-kluczu, które może przyjąć wartość. W przeciwnym razie zapis jest odrzucany, formularz lub okno
-pozostaje otwarte, a komunikat podaje powód:
+kluczu, które może przyjąć wartość. W przeciwnym razie zapis jest odrzucany, okno pozostaje
+otwarte, a komunikat podaje powód:
 
 | Odmowa | Znaczenie |
 | --- | --- |

@@ -197,6 +197,31 @@ jednym wywołaniu i tylko wtedy, gdy potrzebuje ich któryś wiersz:
 | `namedListPrices`, `namedListPublishability` | feed przypięty do jednego cennika | `namedListPrices`: wiersze cennika inne niż wiersze wariantów, przy ilości 1, liczone od ceny katalogowej kanału **bez przypiętego cennika**; produktów, których cennik nie wycenia, nie ma w odpowiedzi, a dopóki cennik nie jest publikowany, mapa jest pusta. `namedListPublishability`: czy jest publikowany teraz — `{ publishable: true }` albo `{ publishable: false, reason }` |
 | `listTierStarts` | drabina progów | ilości początkowe wierszy i progów bazowych, które mogą dotyczyć `(product, variant?, currency)` |
 
+**Tryb prezentacji `none` wstrzymuje każdą kwotę — w tym module** (zgłoszenie #491). Gdy tryb
+prezentacji oglądającego wynosi `none`, `resolveListingPriceDetails` odpowiada
+`price: { source: 'none' }`, `basePrice` i `salePrice` równymi `null`, bez `listPrice` i z każdym
+wpisem `tiers` równym `null`; `resolveListingPrices` odpowiada wariantem `none`; `resolveEngine`
+(endpoint `resolved-price`) nie wskazuje cennika, progu, promocji ani źródła. `displayMode: 'none'`
+zostaje, więc sklep nadal pokazuje „cena na zapytanie”. Reguła jest stosowana raz, tam, gdzie
+`book-pricing.ts` odwzorowuje wycenę na te kształty (`listingPriceFromBook`,
+`listingDetailFromBook`, `engineFromBook`), więc katalog, wyszukiwanie, porównania i powiązania
+produktów nie mają czego przekazać dalej. **Pozycja** (`resolveLinePrices`) zachowuje kwotę obok
+`displayMode: 'none'`: to ścieżka naliczania, a koszyk, podgląd zamówienia w panelu i przyjmowanie
+zamówień odrzucają taką pozycję jako „tylko na zapytanie” właśnie po tym trybie. Konsument, który
+publikuje kwotę pozycji oglądającemu — zewnętrzne API katalogu — wstrzymuje ją przez
+`displayModeWithholdsAmounts` (`@endora-commerce/contracts`), jedyne sformułowanie tej reguły.
+
+**Żaden konsument nie uzależnia cen od kanału sprzedaży** (issue #492). Flaga kanału `isPublic`,
+którą katalog, wyszukiwanie, porównania, powiązania produktów i sprawdzenie kontrolek cenowych
+czytały, by w ogóle pominąć wycenę, została wycofana, a jej kolumna usunięta: wstrzymywała ceny
+także zalogowanym kupującym, obok łańcucha, który już wyrażał „ceny po zalogowaniu”. Kanał, który
+ukrywa ceny przed anonimowymi odwiedzającymi, ma `pricing.unauthenticated_display_mode = none` jako
+własną wartość ustawienia — migracja wycofująca (`…CoreSalesChannelsRetireIsPublic`) zapisała ją
+dla każdego kanału, który miał flagę wyłączoną i nie miał własnej wartości. Pierwszeństwo w
+łańcuchu się nie zmienia: nadpisanie produktu lub kategorii poprzedza końcówkę łańcucha
+oglądającego, więc rozstrzyga także dla gościa (`specs/pricing/worked-examples.md` §10.19 W5,
+§10.20 P4).
+
 **Cennik przypięty do feedu jest publikowany tylko wtedy, gdy teraz wyceniałby anonimowego
 kupującego w kanale feedu** (`BookPricing.namedBookPublishability`, `book-pricing.ts`): ma status
 `active` albo `scheduled` i `starts_at ≤ now < ends_at`, sprawdzane w chwili wywołania, a nie przez
@@ -300,7 +325,11 @@ wstępnie wyliczoną **powierzchnię cen**.
   cena zmieni się w międzyczasie, może pojawić się dwa razy albo wcale, jak przy każdym
   stronicowaniu kursorem po bieżącej cenie. Strona, która wyczerpie swój limit odczytu, jest krótsza,
   może być pusta, a jej kursor prowadzi dalej od miejsca, w którym odczyt się zatrzymał, więc limit
-  nigdy nie kończy przeglądania.
+  nigdy nie kończy przeglądania. To miejsce może być produktem, którego oglądający nie widzi, a przy
+  sortowaniu według ceny zawiera cenę i identyfikator tego produktu, więc katalog pieczętuje każdy
+  kursor przeglądania według ceny wartością platformy `cursorSeal` (AES-256-GCM, klucz wyprowadzony
+  z `SESSION_COOKIE_SECRET`; zgłoszenie #497): klient nie może ani odczytać pozycji, ani jej
+  podrobić, a kursor, którego nie da się otworzyć, zaczyna przeglądanie od początku.
   Ceny na kartach są zawsze wyliczane na bieżąco, więc opóźniać się może tylko porządek.
 - **Zapis oznacza tylko to, co może przesunąć**, na dwóch poziomach szczegółowości. Każdy zapisujący
   opisuje swoją zmianę jako `SurfaceChange` (`src/backend/services/surface-change.ts`), a
@@ -320,8 +349,11 @@ wstępnie wyliczoną **powierzchnię cen**.
   profilu ma dla niego wiersz — każdy inny kupujący wycenia ten produkt cennikami profilu dla
   wszystkich i dostaje tę samą odpowiedź. Zmiana dotycząca ponad 10 000 produktów, wiersz wybierający
   tylko po atrybucie albo wszystkie produkty, zdarzenie kanału i kolejność cen oznaczają swoje profile
-  w całości. Nowy albo zduplikowany cennik (szkic), tryb prezentacji i przełącznik ceny katalogowej
-  nie oznaczają niczego; usunięcie cennika usuwa też profile kupujących, których wektor go zawiera.
+  w całości. Nowy albo zduplikowany cennik (szkic), nadpisanie trybu prezentacji dla organizacji,
+  ustawienie trybu prezentacji `pricing.*` i przełącznik ceny katalogowej nie oznaczają niczego;
+  nadpisanie trybu prezentacji dla produktu albo kategorii oznacza produkt albo produkty poddrzewa
+  kategorii w każdym profilu, bo produkt, którego własny krok wynosi `none`, jest pomijany na
+  powierzchni (niżej). Usunięcie cennika usuwa też profile kupujących, których wektor go zawiera.
   Gdy samo oznaczanie się nie powiedzie, każdy profil zostaje oznaczony w całości.
 - **Worker** obsługuje kolejkę BullMQ `price_lists.surface` (jedno scalone zadanie, trzy próby z
   wykładniczo rosnącym odstępem), jest podłączony przez `ctx.worker`, więc zatrzymuje się razem z
@@ -339,7 +371,15 @@ wstępnie wyliczoną **powierzchnię cen**.
   statystyk, wykonuje na niej `ANALYZE` we własnej transakcji. Budowa całego profilu czyta katalog
   na swoim początku przez `catalogProductReadPort.listPricingRefs()`, jednym zapytaniem, bez
   tworzenia encji. Wiersze powierzchni wylicza `BookPricing.resolveProfileListing`, czyli wycena
-  listingu bez trybu wyświetlania, którego powierzchnia nie przechowuje. Budowa wycenia kolejną
+  listingu bez końcowej, zależnej od oglądającego części łańcucha trybu prezentacji, której
+  powierzchnia nie przechowuje. Produkt, którego własny krok — jego nadpisanie, a w braku go
+  nadpisanie kategorii — wynosi `none`, jest wstrzymany dla każdego oglądającego, więc nie ma
+  wiersza: sortowanie po cenie umieszcza go w ogonie produktów bez ceny, a zakres cen go pomija
+  (zgłoszenie #491). Ten krok jest czytany tylko wtedy, gdy jakieś nadpisanie produktu albo
+  kategorii wynosi `none` (`PriceListService.anyProductStepWithholds`, jedno zapytanie na partię).
+  Oglądającemu, którego własna końcowa część łańcucha wynosi `none`, katalog odmawia sortowania i
+  zakresu cen (`pageDisplayMode`), a ścieżki na żywo — `pricedProductIds` i kolejność profilu nigdy
+  niezbudowanego — pomijają to, co tryb prezentacji oglądającego wstrzymuje. Budowa wycenia kolejną
   partię produktów, gdy poprzednia jest zapisywana, a błąd jednego albo drugiego niczego nie
   podmienia. Budowa, której zapis trafi na produkt usunięty po jej odczycie, wycofuje się i rusza
   ponownie na świeżym odczycie, najwyżej trzy razy. Jeśli produkty nadal znikają, przebieg kończy
@@ -445,7 +485,7 @@ organizacje (`403` dla innego typu, także przy `PATCH`), wskazujące co najmnie
 
 | Metoda i ścieżka | Zwraca |
 | --- | --- |
-| `GET /api/v1/storefront/products/:id/resolved-price?quantity=&currency=&variantId=` | Dla oglądającego (organizacja i klient z sesji, w przeciwnym razie gość): `resolvedPrice { basePrice, salePrice, baseListId, saleListId, displayMode, currencyCode, quantityBracket, source, compareAt, listPrice? }`. `basePrice` to **regularna** cena oglądającego — kupującego, katalogowa albo bazowa — a `salePrice` jest ustawiona tylko wtedy, gdy naliczana jest cena promocyjna; `listPrice` — tylko przy włączonym `pricing.show_list_price`, gdy cena dla wszystkich jest wyższa od naliczanej. Kwoty są tekstami dziesiętnymi (`{ amount, currency }`). Produkt, którego żaden cennik nie wycenia dla oglądającego, jest **bez ceny**: `baseListId`, `basePrice` i `quantityBracket` mają wszystkie wartość `null`, nigdy pusty identyfikator (`resolvedPriceEngineSchema` w `packages/contracts/src/price-lists.ts` wymaga, by te trzy były razem `null` albo razem ustawione). |
+| `GET /api/v1/storefront/products/:id/resolved-price?quantity=&currency=&variantId=` | Dla oglądającego (organizacja i klient z sesji, w przeciwnym razie gość): `resolvedPrice { basePrice, salePrice, baseListId, saleListId, displayMode, currencyCode, quantityBracket, source, compareAt, listPrice? }`. `basePrice` to **regularna** cena oglądającego — kupującego, katalogowa albo bazowa — a `salePrice` jest ustawiona tylko wtedy, gdy naliczana jest cena promocyjna; `listPrice` — tylko przy włączonym `pricing.show_list_price`, gdy cena dla wszystkich jest wyższa od naliczanej. Kwoty są tekstami dziesiętnymi (`{ amount, currency }`). Produkt, którego żaden cennik nie wycenia dla oglądającego, jest **bez ceny**: `baseListId`, `basePrice` i `quantityBracket` mają wszystkie wartość `null`, nigdy pusty identyfikator (`resolvedPriceEngineSchema` w `packages/contracts/src/price-lists.ts` wymaga, by te trzy były razem `null` albo razem ustawione). Produkt, którego tryb prezentacji dla oglądającego wynosi `none`, odpowiada tak samo, z `salePrice`, `saleListId`, `source` i `compareAt` równymi `null`, bez `listPrice` i z `displayMode: 'none'` (zgłoszenie #491). |
 | `GET /api/v1/storefront/pricing/display-mode/:productId` | Sam tryb prezentacji. |
 
 Obie są wyceniane dla oglądającego, którego wyznacza jedna funkcja. Odpowiedź wyceniona dla

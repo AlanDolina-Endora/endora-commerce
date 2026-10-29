@@ -72,6 +72,12 @@ export function priceWalkCorpus(h: BackendServerHandle) {
     dropRetailProfiles: () => sql(`delete from "price_profiles" where "sales_channel_id" = ?`, [retailId]),
 
     async clear(): Promise<void> {
+      // The harness does not empty display-mode overrides between files, so the
+      // corpus removes the ones `withhold` wrote (issue #497).
+      await sql(
+        `delete from "price_display_mode_overrides" where "scope" = 'product' and "target_id" in (select "id" from "products" where "sku" like ?)`,
+        [`${PRICE_WALK_PREFIX}%`],
+      );
       await sql(`delete from "price_list_product_lines" where "price_list_id" = ?`, [BOOK_ID]);
       await sql(`delete from "price_list_matrix_entries" where "price_list_id" = ?`, [BOOK_ID]);
       await sql(`delete from "sales_channel_price_lists" where "price_list_id" = ?`, [BOOK_ID]);
@@ -138,6 +144,27 @@ export function priceWalkCorpus(h: BackendServerHandle) {
         BOOK_ID,
         ids.get(skuOf(key))!,
       ]);
+      await bump();
+    },
+
+    /** The id of a product of the corpus seeded last. */
+    idOf(key: string): string {
+      const id = ids.get(skuOf(key));
+      if (id === undefined) throw new Error(`no product ${key} in the corpus`);
+      return id;
+    },
+
+    /**
+     * Withhold one product's price from every viewer (display mode `none`,
+     * issue #491) the way a write the surface has not caught up with yet leaves
+     * it: its card is withheld at once, and the price order keeps the position
+     * its last price gave it until the worker refreshes it. Removed by `clear`.
+     */
+    async withhold(key: string): Promise<void> {
+      await sql(
+        `insert into "price_display_mode_overrides" ("scope", "target_id", "mode") values ('product', ?, 'none')`,
+        [corpus.idOf(key)],
+      );
       await bump();
     },
 

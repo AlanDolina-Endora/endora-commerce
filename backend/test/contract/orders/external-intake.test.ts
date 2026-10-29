@@ -123,7 +123,6 @@ describe('POST /api/v1/external/orders — contract (062 / T020)', () => {
       currencies: ['PLN'],
       defaultCurrency: 'PLN',
       active: true,
-      isPublic: true,
     });
     await em.persistAndFlush(channel);
     channelId = channel.id;

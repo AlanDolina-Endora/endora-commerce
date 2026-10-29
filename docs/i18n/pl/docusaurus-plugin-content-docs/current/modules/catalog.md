@@ -23,7 +23,7 @@ w obu przypadkach każda cena podaje swoją walutę. Niepoprawny kod jest odrzuc
 | Metoda i ścieżka | Kto | Przeznaczenie |
 | --- | --- | --- |
 | `GET /api/v1/catalog/products` | storefront / klucz API | Lista, wyszukiwanie i filtrowanie produktów w aktywnym kanale sprzedaży |
-| `GET /api/v1/catalog/products/:idOrSlug` | storefront | Szczegóły produktu (bez ceny w niepublicznych kanałach sprzedaży) |
+| `GET /api/v1/catalog/products/:idOrSlug` | storefront | Szczegóły produktu (bez kwoty, gdy tryb wyświetlania cen oglądającego to *Żaden*) |
 | `GET /api/v1/catalog/categories` | storefront | Zagnieżdżone drzewo kategorii |
 | `GET /api/v1/catalog/categories/:id/content` | storefront | Treść strony jednej kategorii, dobrana do języka wywołującego |
 | `GET /api/v1/catalog/filters` | storefront | Atrybuty, po których można filtrować w aktywnym kanale sprzedaży |
@@ -77,7 +77,14 @@ Na stronie modułu `price_lists` opisano, jak wybierana jest cena, którą płac
   pojawić się dwa razy albo wcale, jak przy każdym kursorze po bieżącej cenie. Strona może być krótsza,
   a nawet pusta, i mimo to mieć dalszy ciąg (`hasMore: true`), gdy większość odczytanych wierszy jest
   ukryta przed oglądającym; wtedy należy podążyć za jej kursorem.
-- **Szczegóły produktu w niepublicznym kanale sprzedaży** nie zawierają ceny.
+  Kursor porządku według ceny i zakresu cen jest zapieczętowany: nie da się go odczytać ani zmienić,
+  bo miejsce, od którego prowadzi dalej, może być produktem, którego oglądający nie widzi. Kursor,
+  którego nie da się otworzyć — zmieniony, wydany przez wersję sprzed pieczętowania albo przed zmianą
+  klucza sesji instancji — zaczyna listę od pierwszej strony.
+- **Gdy tryb wyświetlania cen oglądającego to *Żaden*** — na przykład dla niezalogowanego
+  odwiedzającego w kanale, który ukrywa ceny do czasu zalogowania — lista i szczegóły produktu nie
+  zawierają kwoty, a sortowanie i zakres cen są dla tej strony odrzucane. Kanały sprzedaży nie mają
+  już własnej flagi widoczności cen: o tym, co widzi każdy oglądający, decyduje tryb wyświetlania.
 
 Dla programistów: ścieżki list wyceniają całą stronę jednym zbiorczym wywołaniem —
 `resolveListingPrices` albo `resolveListingPriceDetails` tam, gdzie strona pokazuje podział

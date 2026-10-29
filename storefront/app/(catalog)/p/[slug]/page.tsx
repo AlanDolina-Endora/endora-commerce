@@ -146,8 +146,10 @@ export default async function ProductPage({
    *
    * `price_lists` not being present (issue #124) still quotes nothing: the
    * catalogue detail cannot price without it and refuses, so no figure reaches
-   * this page from a module the platform is not serving. A channel that
-   * withholds prices answers `price: null` and `resolvedPrice: null`.
+   * this page from a module the platform is not serving. A viewer whose
+   * display mode withholds prices (`none`, e.g. a guest on a channel that hides
+   * prices until sign-in) is answered `price: null` and a `resolvedPrice` with
+   * no amounts and `displayMode: 'none'`.
    */
   let resolved = product.resolvedPrice ?? null;
   let price = product.price;
