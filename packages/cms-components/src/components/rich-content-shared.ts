@@ -427,6 +427,104 @@ export const inlineImageNode = Node.create({
   },
 });
 
+/** R19A (T233): a bullet list's marker besides the disc (unset): a check mark, a chevron, or none. */
+export const LIST_MARKERS = ['check', 'chevron', 'none'] as const;
+export type ListMarker = (typeof LIST_MARKERS)[number];
+
+function isListMarker(value: unknown): value is ListMarker {
+  return typeof value === 'string' && (LIST_MARKERS as readonly string[]).includes(value);
+}
+
+// ── Text size on a run (R19A, T233) ──────────────────────────────────
+
+/** The type tokens a run may take, smallest first. */
+export const TEXT_SIZE_TOKENS = ['small', 'body', 'lead', 'h6', 'h5', 'h4', 'h3', 'h2', 'h1', 'display'] as const;
+export type TextSizeToken = (typeof TEXT_SIZE_TOKENS)[number];
+/**
+ * A Custom size: whole px, 8–200. R23 (T442): no longer offered — a run takes a
+ * type token — but a Custom px stored by R19A is still read and written as it
+ * was, so a stored page renders unchanged.
+ */
+export const TEXT_SIZE_PX_RE = /^(?:[89]|[1-9]\d|1\d\d|200)px$/;
+
+function isTextSizeToken(value: unknown): value is TextSizeToken {
+  return typeof value === 'string' && (TEXT_SIZE_TOKENS as readonly string[]).includes(value);
+}
+
+export function isTextSize(value: unknown): value is string {
+  return isTextSizeToken(value) || (typeof value === 'string' && TEXT_SIZE_PX_RE.test(value));
+}
+
+/** R23 (T442): what the editor may set — a type token. */
+export function isSettableTextSize(value: unknown): value is TextSizeToken {
+  return isTextSizeToken(value);
+}
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    textSize: {
+      /** Size the selection: a type token (`lead`, `h4`, …). R23 (T442): a Custom px is no longer set. */
+      setTextSize: (size: string) => ReturnType;
+      /** Back to the text's own size. */
+      unsetTextSize: () => ReturnType;
+    };
+  }
+}
+
+/**
+ * R19A (T233): a run's text size, stored as `{type: 'textSize', attrs: {size}}`
+ * — a type token, written `<span class="cmsc-fs cmsc-fs--<token>">` (the
+ * stylesheet gives it the token's size per breakpoint), or a Custom px,
+ * written `<span class="cmsc-fs" style="font-size: Npx">`. Read back from that
+ * markup; a size outside the grammar writes no size. Its own mark, so the
+ * colour (`textStyle`) and the emphasis stay what they are.
+ */
+export const textSizeMark = Mark.create({
+  name: 'textSize',
+
+  addAttributes() {
+    return {
+      size: {
+        default: null,
+        parseHTML: (element: HTMLElement): string | null => {
+          const token = TEXT_SIZE_TOKENS.find((name) => element.classList.contains(`cmsc-fs--${name}`));
+          if (token) return token;
+          const px = /(?:^|;)\s*font-size\s*:\s*([^;]+)/i.exec(element.getAttribute('style') ?? '')?.[1]?.trim() ?? '';
+          return TEXT_SIZE_PX_RE.test(px) ? px : null;
+        },
+        renderHTML: (attributes: Record<string, unknown>): Record<string, string> => {
+          const size = attributes.size;
+          if (isTextSizeToken(size)) return { class: `cmsc-fs cmsc-fs--${size}` };
+          if (typeof size === 'string' && TEXT_SIZE_PX_RE.test(size)) return { class: 'cmsc-fs', style: `font-size: ${size}` };
+          return { class: 'cmsc-fs' };
+        },
+      },
+    };
+  },
+
+  parseHTML() {
+    // Ahead of `textStyle`, which reads any styled span.
+    return [{ tag: 'span.cmsc-fs', priority: 60 }];
+  },
+
+  renderHTML(props) {
+    return ['span', mergeAttributes(props.HTMLAttributes), 0];
+  },
+
+  addCommands() {
+    return {
+      setTextSize:
+        (size) =>
+        ({ commands }) =>
+          isSettableTextSize(size) ? commands.setMark(this.name, { size }) : commands.unsetMark(this.name),
+      unsetTextSize:
+        () =>
+        ({ commands }) =>
+          commands.unsetMark(this.name, { extendEmptyMarkRange: true }),
+    };
+  },
+});
+
 export const richContentAttributes = Extension.create({
   name: 'richContentAttributes',
 
@@ -455,12 +553,13 @@ export const richContentAttributes = Extension.create({
       {
         types: ['bulletList'],
         attributes: {
+          // R19A (T233): `check`, `chevron` or `none` — a class; unset (or anything else) is the disc.
           listStyle: {
             default: null,
-            parseHTML: (element: HTMLElement): 'check' | null =>
-              element.classList.contains('cmsc-list--check') ? 'check' : null,
+            parseHTML: (element: HTMLElement): ListMarker | null =>
+              LIST_MARKERS.find((marker) => element.classList.contains(`cmsc-list--${marker}`)) ?? null,
             renderHTML: (attributes: Record<string, unknown>): Record<string, string> =>
-              attributes.listStyle === 'check' ? { class: 'cmsc-list--check' } : {},
+              isListMarker(attributes.listStyle) ? { class: `cmsc-list--${attributes.listStyle}` } : {},
           },
         },
       },
@@ -489,6 +588,7 @@ export const richContentExtensions = [
   richImageNode,
   inlineImageNode,
   emphasisMark,
+  textSizeMark,
   readMoreNode,
   readMoreSummaryNode,
   richContentAttributes,
@@ -549,6 +649,9 @@ const SAFE_STYLE_VALUES: Record<string, RegExp> = {
 /** T128: an image's size, and on an `<img>` only. */
 const IMAGE_STYLE_VALUES: Record<string, RegExp> = { width: RICH_IMAGE_SIZE_RE };
 
+/** R19A (T233): a run's Custom size, whole px, and on a `<span>` only. */
+const SPAN_STYLE_VALUES: Record<string, RegExp> = { 'font-size': TEXT_SIZE_PX_RE };
+
 /**
  * Keeps the declarations the rich text editor writes — colours and alignment,
  * and an image's width in px or % (T128) — and nothing else.
@@ -560,7 +663,8 @@ function sanitizeStyleAttr(style: string, tag?: string): string | null {
     if (colon === -1) continue;
     const prop = declaration.slice(0, colon).trim().toLowerCase();
     const value = declaration.slice(colon + 1).trim();
-    const pattern = SAFE_STYLE_VALUES[prop] ?? (tag === 'img' ? IMAGE_STYLE_VALUES[prop] : undefined);
+    const pattern =
+      SAFE_STYLE_VALUES[prop] ?? (tag === 'img' ? IMAGE_STYLE_VALUES[prop] : tag === 'span' ? SPAN_STYLE_VALUES[prop] : undefined);
     if (!pattern || !pattern.test(value) || !isInertStyle(value)) continue;
     kept.push(`${prop}: ${value}`);
   }

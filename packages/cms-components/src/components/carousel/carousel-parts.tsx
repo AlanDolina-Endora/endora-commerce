@@ -1,7 +1,9 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { createColorField, createToggleField, PB_RESPONSIVE_METADATA, type BreakpointTier, type ResponsiveProp } from '@endora-commerce/page-builder-core';
+import type { Field } from '@puckeditor/core';
+import { createColorField, createToggleField, PB_RESPONSIVE_METADATA, type BreakpointTier, type HideOn, type ResponsiveProp } from '@endora-commerce/page-builder-core';
+import { createHideOnField } from '@endora-commerce/page-builder-core/fields/hide-on-field';
 import type {
   CarouselArrowIcon,
   CarouselArrowShape,
@@ -24,6 +26,8 @@ import { BUTTON_SPEC_OBJECT_FIELDS, specAtTier } from '../Button.js';
 import { ButtonView } from '../ButtonView.js';
 import { BlockHeading, blockHeadingStyle, blockHeadingStyleFields, gapCss, isEmptyInline } from '../section-parts.js';
 import { colorValueToCss } from '../../utils/color-value.js';
+import { customOnlyLeading, lineHeightField } from '../text-style.js';
+import { tierLeading } from '../tier-leading.js';
 
 /**
  * The Carousel's options as parts, shared by every block that shows a
@@ -33,13 +37,13 @@ import { colorValueToCss } from '../../utils/color-value.js';
  * and the shell options, so the blocks cannot drift apart.
  */
 
-const PLACEMENTS: readonly CarouselControlsPlacement[] = ['header', 'below', 'overlay'];
+const PLACEMENTS: readonly CarouselControlsPlacement[] = ['header', 'below', 'overlay', 'slide'];
 const ARROW_VARIANTS: readonly CarouselArrowVariant[] = ['default', 'outline', 'solid'];
 const ARROW_SHAPES: readonly CarouselArrowShape[] = ['round', 'square'];
 const ARROW_SIZES: readonly CarouselArrowSize[] = ['s', 'm', 'l'];
 const ARROW_ICONS: readonly CarouselArrowIcon[] = ['chevron', 'arrow'];
 const NEXT_ARROW_VARIANTS: readonly CarouselNextArrowVariant[] = ['same', 'default', 'outline', 'solid'];
-const CONTROL_ALIGNS: readonly CarouselControlsAlign[] = ['center', 'start', 'end', 'between', 'split'];
+const CONTROL_ALIGNS: readonly CarouselControlsAlign[] = ['center', 'start', 'end', 'between', 'split', 'dots-start'];
 const DISABLED_ARROW_LOOKS: readonly CarouselDisabledArrowLook[] = ['dim', 'outline-light', 'color'];
 
 /** T147: the alignment of the controls below the track, also the Responsive tab's select; centred is today's. */
@@ -49,6 +53,8 @@ export const CAROUSEL_CONTROLS_ALIGN_OPTIONS = [
   { label: 'At the end', value: 'end' },
   { label: 'Spread out', value: 'between' },
   { label: 'Arrows at both ends', value: 'split' },
+  // R20F (T313): the dots at the start, both arrows together at the end.
+  { label: 'Dots at the start, arrows at the end', value: 'dots-start' },
 ];
 
 /** The placement options, also the Responsive tab's select (T129). */
@@ -58,6 +64,16 @@ export const CAROUSEL_PLACEMENT_OPTIONS = [
   { label: 'Over the slides', value: 'overlay' },
 ];
 
+
+/**
+ * R19B (T253): the Carousel's placements — the shared three and "inside each
+ * split slide"; the product and post listings hold no split slides, so they
+ * keep the three.
+ */
+export const CONTENT_SLIDER_PLACEMENT_OPTIONS = [
+  ...CAROUSEL_PLACEMENT_OPTIONS,
+  { label: 'Inside each split slide (under its text)', value: 'slide' },
+];
 
 /** The header above the track: a heading, a lead and one button, with the heading's level and size. */
 export const CAROUSEL_HEADER_FIELDS = {
@@ -75,6 +91,8 @@ export const CAROUSEL_HEADER_FIELDS = {
   headingSizePx: sizePxField('Custom heading size (px)'),
   // T151/T152: the heading's weight and its maximum width per breakpoint.
   ...blockHeadingStyleFields(),
+  // R22I (T379): the heading's line height per breakpoint; empty keeps its size's own. R23 (T435): with a Custom px size only.
+  headingLineHeight: lineHeightField('Heading line height'),
 };
 
 /** The track's options: slides per view, gap, transition, controls, bleed, autoplay, equal heights. */
@@ -106,6 +124,8 @@ export const CAROUSEL_TRACK_FIELDS = {
     objectFields: {
       arrows: createToggleField({ label: 'Show arrows', defaultValue: true }),
       dots: createToggleField({ label: 'Show dots' }),
+      // R20F (T314): the arrows stay (both disabled, the dots hidden) when every slide fits; off hides the controls (today's).
+      arrowsWhenFit: createToggleField({ label: 'Keep the arrows when all slides fit' }),
       // T129: the arrows' look; the first option of each is today's.
       arrowVariant: {
         type: 'select' as const,
@@ -165,6 +185,11 @@ export const CAROUSEL_TRACK_FIELDS = {
         ],
       },
       disabledArrowColor: createColorField({ label: 'Disabled arrow color' }),
+      // R19B (T241): the glyph of a solid arrow (white by default), so a light solid arrow can carry a dark glyph.
+      arrowGlyphColor: createColorField({ label: 'Arrow icon color (solid style)' }),
+      // R19B (T242): the arrows and the dots per breakpoint, the block's "Hide on" control for each.
+      hideArrowsOn: hideOnField('Hide the arrows on'),
+      hideDotsOn: hideOnField('Hide the dots on'),
     },
   },
   // T129: a placement per breakpoint, on the Responsive tab (it was `controls.placement`).
@@ -204,8 +229,16 @@ export const CAROUSEL_TRACK_FIELDS = {
   equalHeight: createToggleField({ label: 'Equal slide height', defaultValue: true }),
 };
 
+/** R19B (T242): the block's "Hide on" checkboxes, relabelled for one control (so not the shared "Hide on" key). */
+function hideOnField(label: string): Field<HideOn | undefined> {
+  const { metadata: _shared, ...field } = createHideOnField();
+  return { ...field, label } as Field<HideOn | undefined>;
+}
+
 /** The arrows' look: shown only while the arrows are (R17, T218). */
-const ARROW_LOOK_KEYS = ['arrowVariant', 'arrowShape', 'arrowSize', 'arrowIcon', 'arrowColor', 'nextArrowVariant'] as const;
+const ARROW_LOOK_KEYS = ['arrowVariant', 'arrowShape', 'arrowSize', 'arrowIcon', 'arrowColor', 'nextArrowVariant', 'hideArrowsOn', 'arrowsWhenFit'] as const;
+/** R19B (T242): the dots' breakpoints, only while the dots show. R23 (T448): their colours follow the scheme. */
+const DOT_KEYS = ['hideDotsOn'] as const;
 /** Where the controls go and how they line up: only while there are controls. */
 const CONTROLS_PLACEMENT_KEYS = ['controlsPlacement', 'controlsAlign', 'controlsAlignTo'] as const;
 
@@ -246,7 +279,8 @@ export function withoutUnusedCarouselFields(
   const controls = props.controls ?? {};
   const arrows = controls.arrows !== false;
   const dots = controls.dots === true;
-  const stops = props.loop === false;
+  // R20F (T314): arrows kept when every slide fits are disabled too, so their look applies to a looping carousel.
+  const stops = props.loop === false || controls.arrowsWhenFit === true;
   if (props.autoplay !== true) delete fields['intervalMs'];
   if (!arrows && !dots) for (const key of CONTROLS_PLACEMENT_KEYS) delete fields[key];
   if ('controls' in fields) {
@@ -254,6 +288,9 @@ export function withoutUnusedCarouselFields(
       if ((ARROW_LOOK_KEYS as readonly string[]).includes(key)) return arrows;
       if (key === 'disabledArrowLook') return arrows && stops;
       if (key === 'disabledArrowColor') return arrows && stops && controls.disabledArrowLook === 'color';
+      if ((DOT_KEYS as readonly string[]).includes(key)) return dots;
+      // R19B (T241): the glyph colour only for a solid arrow (the others draw their glyph in the arrow colour).
+      if (key === 'arrowGlyphColor') return arrows && (controls.arrowVariant === 'solid' || controls.nextArrowVariant === 'solid');
       return true;
     });
   }
@@ -284,6 +321,9 @@ export function carouselHeaderNode(
   const button = options.button !== false && header.button && header.button.label?.trim() ? header.button : null;
   if (!heading && !lead && !button) return null;
   const actionClass = ['cmsc-pb-carousel__header-action', 'cmsc-pb-actions', ...(options.actionClassNames ?? [])].join(' ');
+  // R22I (T379): the heading's line height per breakpoint, written only where chosen — R23 (T435): only from
+  // a breakpoint sized in Custom px (a token brings its own).
+  const leading = tierLeading(customOnlyLeading(props.headingSize, props.headingLineHeight), tier);
   return (
     <>
       <BlockHeading
@@ -292,7 +332,8 @@ export function carouselHeaderNode(
         size={props.headingSize}
         sizePx={props.headingSizePx}
         {...blockHeadingStyle(props)}
-        className="cmsc-pb-carousel__heading"
+        {...(Object.keys(leading.style).length > 0 ? { style: leading.style } : {})}
+        className={['cmsc-pb-carousel__heading', ...leading.classes].join(' ')}
         tier={tier}
       />
       {lead ? <p className="cmsc-pb-carousel__lead">{options.lead ? options.lead(lead) : lead}</p> : null}
@@ -402,24 +443,61 @@ export function carouselShellOptions(
     ...(props.controlsAlign !== undefined ? { controlsAlign: alignOption(props.controlsAlign) } : {}),
     ...(props.controlsAlignTo === 'slide' ? { controlsAlignTo: 'slide' as CarouselControlsAlignTo } : {}),
     ...arrowLook(controls),
+    ...controlsLook(controls),
     ...endsOptions(props.loop, controls),
+    // R20F (T314): only when on, with arrows to keep.
+    ...(controls.arrowsWhenFit === true && controls.arrows !== false ? { keepArrowsWhenFit: true } : {}),
     equalHeight: props.equalHeight !== false,
   };
 }
 
-/** T171: the ends for the shell — only when the carousel does not loop, and a disabled look only when it is not the dimmed one. */
+/**
+ * T171: the ends for the shell — only when the carousel does not loop, and a
+ * disabled look only when it is not the dimmed one. R20F (T314): the look also
+ * for arrows kept (disabled) when every slide fits, on a looping carousel too.
+ */
 function endsOptions(
   loop: boolean | undefined,
   controls: NonNullable<CarouselTrackOptions['controls']>,
 ): { loop?: false; disabledArrowLook?: CarouselDisabledArrowLook; disabledArrowColor?: string } {
-  if (loop !== false) return {};
+  const kept = controls.arrowsWhenFit === true && controls.arrows !== false;
+  if (loop !== false && !kept) return {};
   const look = oneOf(controls.disabledArrowLook, DISABLED_ARROW_LOOKS);
   const color = colorValueToCss(controls.disabledArrowColor);
   return {
-    loop: false,
+    ...(loop === false ? { loop: false as const } : {}),
     ...(look && look !== 'dim' ? { disabledArrowLook: look } : {}),
     ...(look === 'color' && color ? { disabledArrowColor: color } : {}),
   };
+}
+
+/**
+ * R19B (T241, T242): the glyph colour and the breakpoints hiding the arrows or
+ * the dots, only what is set. R23 (T448): the dots follow the colour scheme
+ * (R19B T240's dot colours were removed; a stored one is ignored).
+ */
+function controlsLook(controls: NonNullable<CarouselTrackOptions['controls']>): {
+  arrowGlyphColor?: string;
+  hideArrowsOn?: HideOn;
+  hideDotsOn?: HideOn;
+} {
+  const glyph = colorValueToCss(controls.arrowGlyphColor);
+  const hideArrowsOn = ticked(controls.hideArrowsOn);
+  const hideDotsOn = ticked(controls.hideDotsOn);
+  return {
+    ...(glyph ? { arrowGlyphColor: glyph } : {}),
+    ...(hideArrowsOn ? { hideArrowsOn } : {}),
+    ...(hideDotsOn ? { hideDotsOn } : {}),
+  };
+}
+
+/** The ticked breakpoints of a "Hide on" value, or `undefined` when none is. */
+function ticked(value: unknown): HideOn | undefined {
+  if (value === null || typeof value !== 'object') return undefined;
+  const stored = value as Record<string, unknown>;
+  const out: HideOn = {};
+  for (const tier of ['mobile', 'tablet', 'desktop'] as const) if (stored[tier] === true) out[tier] = true;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** The arrows' look for the shell: only what is set (T129). */

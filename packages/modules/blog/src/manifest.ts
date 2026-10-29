@@ -256,6 +256,8 @@ export const manifest = defineModuleManifest({
         'cardPadding', 'cardPaddingPx', 'cardTextPadding', 'cardTextPaddingPx', 'imageRatio', 'cardTitleSize', 'cardTitleSizePx', 'cardTitleWeight',
         'leadSize', 'leadSizePx', 'headerButtonPlacement', 'headerButtonFullWidth',
         'headingWeight',
+        // R22I.
+        'headingLineHeight',
       ],
       weight: 60,
     },

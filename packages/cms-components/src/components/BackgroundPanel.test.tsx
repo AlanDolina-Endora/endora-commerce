@@ -87,4 +87,24 @@ describe('cms.BackgroundPanel (T046)', () => {
     expect(icon).not.toBeNull();
     expect(icon!.style.backgroundColor).toBe('currentcolor');
   });
+
+  // R19C (T264): the text box may let the image show through; unset, today's opaque box.
+  it('paints the text box with the scheme unless it is transparent', async () => {
+    expect(defaults).not.toHaveProperty('textBoxTransparent');
+    expect(dom().querySelector('.cmsc-pb-panel')!.hasAttribute('data-text-box')).toBe(false);
+    expect(dom({ textBoxTransparent: false }).querySelector('.cmsc-pb-panel')!.hasAttribute('data-text-box')).toBe(false);
+    expect(dom({ textBoxTransparent: true }).querySelector('.cmsc-pb-panel')!.getAttribute('data-text-box')).toBe('transparent');
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const css = readFileSync(resolve(process.cwd(), 'styles/cms-components.css'), 'utf8');
+    expect(css).toMatch(/\.cmsc-pb-panel\[data-text-box='transparent'\] > \.cmsc-pb-panel__content \{\s*background-color: transparent;/);
+  });
+
+  it('offers the transparent text box as a switch after the text placement', () => {
+    const fields = Object.keys((config.components['cms.BackgroundPanel']?.fields ?? {}) as Record<string, unknown>);
+    expect(fields).toContain('textBoxTransparent');
+    expect(fields.indexOf('textBoxTransparent')).toBeGreaterThan(fields.indexOf('mobileTextPosition'));
+    const field = (config.components['cms.BackgroundPanel']?.fields as Record<string, { type?: string }>)['textBoxTransparent'];
+    expect(field?.type).toBe('custom');
+  });
 });

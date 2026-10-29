@@ -3,6 +3,7 @@ import {
   createBackgroundField,
   createColorField,
   createSpacingField,
+  createToggleField,
   DEFAULT_BORDER,
   DEFAULT_SPACING,
   PB_RESPONSIVE_METADATA,
@@ -164,3 +165,23 @@ export const COLUMN_SPAN_OPTIONS = Array.from({ length: 12 }, (_, index) => {
   const n = index + 1;
   return { label: n === 12 ? '12/12 (full)' : `${n}/12`, value: n };
 });
+
+/**
+ * R20E (T296): the look options of one button — `cms.Button`'s since R19B —
+ * as the fields of a block-embedded `ButtonSpec` (and of `cms.Button`'s pill),
+ * translated once (`pageBuilder.sharedFields.button…`). The pill applies to
+ * an icon-only button; the outline switch to an outline fill. R23 (T447): no
+ * px size or pill width — the size option and 1.15 times the height.
+ */
+export const BUTTON_LOOK_FIELDS = {
+  transparentOutline: withSharedFieldLabel('buttonTransparentOutline', createToggleField({ label: 'Transparent outline fill' })),
+  borderColor: withSharedFieldLabel('buttonBorderColor', createColorField({ label: 'Border color' })),
+  iconOnlyShape: withSharedFieldLabel('buttonIconOnlyShape', {
+    type: 'select' as const,
+    label: 'Icon-only button shape',
+    options: [
+      { label: 'Circle', value: 'circle' },
+      { label: 'Pill', value: 'pill' },
+    ],
+  }),
+};

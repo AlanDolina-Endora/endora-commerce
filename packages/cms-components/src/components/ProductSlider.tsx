@@ -25,6 +25,7 @@ import {
   carouselPlacementMoved,
   withoutUnusedCarouselFields,
 } from './carousel/carousel-parts.js';
+import { LISTING_LEAD_FIELDS, listingLeadOptions } from './listing-lead.js';
 import { ProductSliderSkeleton } from './catalog/CatalogSkeletons.js';
 import {
   PRODUCT_LISTING_CARD_FIELDS,
@@ -148,7 +149,8 @@ function ProductSliderBody({
     <BoxStyled {...box} {...(editing ? { previewTier: tier } : {})}>
       <CarouselShell
         {...carouselShellOptions(props, { slidesPerView: DEFAULT_SLIDES_PER_VIEW, intervalMs: 5000 })}
-        header={carouselHeaderNode(props, headerTier)}
+        // R21G (T338): the lead's own look, when one is chosen.
+        header={carouselHeaderNode(props, headerTier, listingLeadOptions(props, headerTier))}
         {...(label ? { label } : {})}
         editorPreview={editing}
         previewPage={editing ? previewPage : 0}
@@ -191,6 +193,8 @@ const PRODUCT_SLIDER_FIELDS = {
   searchQuery: { type: 'text' as const, label: 'Search query', metadata: CATALOG_DATA_FIELD_META },
   limit: { type: 'number' as const, label: 'Limit', min: 1, max: 24, metadata: CATALOG_DATA_FIELD_META },
   ...CAROUSEL_HEADER_FIELDS,
+  // R21G (T338): the header lead's size, weight and colour.
+  ...LISTING_LEAD_FIELDS,
   ...PRODUCT_LISTING_CARD_FIELDS,
   ...CAROUSEL_TRACK_FIELDS,
   ...PRODUCT_LISTING_FOOTER_FIELDS,
@@ -236,7 +240,10 @@ const productSliderConfig: ComponentConfig<ProductSliderProps> = {
     const resolved = resolveProductSourceFields(fields as never, props.source ?? 'manual') as Record<string, unknown>;
     if (!usesCustom(props.gap)) delete resolved['gapPx'];
     if (!usesCustom(props.headingSize)) delete resolved['headingSizePx'];
+    // R23 (T435): the heading's line height with a Custom px size only.
+    if (!usesCustom(props.headingSize)) delete resolved['headingLineHeight'];
     if (!usesCustom(props.headingMaxWidth)) delete resolved['headingMaxWidthPx'];
+    if (!usesCustom(props.leadSize)) delete resolved['leadSizePx'];
     if (props.effect === 'fade') delete resolved['slidesPerView'];
     withoutUnusedCardFields(resolved, props);
     // R17 (T213): the interval, the arrows' look and the controls' placement only where they apply.

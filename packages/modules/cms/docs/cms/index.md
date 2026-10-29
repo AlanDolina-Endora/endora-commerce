@@ -72,7 +72,7 @@ added, reshaped and removed blocks; the last column says what changed.
 | `cms.Icons`, `cms.Social`, `cms.Spacer` | Icons, Social, Spacer / Divider | Unchanged. |
 | `cms.Hero` | Hero / CTA banner | **Reshaped.** Media (solid colour, gradient, image with a mobile alternative, or self-hosted video with a poster and a **Video aspect ratio** per breakpoint for a video above the text, 16:9 by default) behind or above the text; eyebrow, title, subheading and statement, each with its own level and size; rich body text; up to six buttons; social proof (image and caption); **Overlay (darkens the background media)**, minimum height, alignment and an optional entrance reveal; the overlay's **Type** is none, solid or gradient, and only the settings that type uses are shown (the strength for solid and gradient, the direction for a gradient). **Elements: order and spacing** puts the eyebrow, title, subheading, statement, text, buttons and social proof in any order (unlisted ones follow in the default order), and each listed element can take a **Space after** it (a spacing size or a **Custom** px value); left on **Default**, an element keeps **Space between items**, or the default spacing when that is not set. **Media width: Full window width** lets an image or video reach the window's edges while the text stays in the hero. A video's mobile alternative is a library video, or a **Mobile video URL** with the URL source. **Poster source** sets where both stills come from: the **Asset library** (**Poster image**, **Mobile poster image**) or **URL** (**Poster URL**, **Mobile poster URL**); the mobile poster is the still shown before the mobile video plays, so a video of another shape is not shown cropped. The title takes a **Title weight** and a **Title max width** per breakpoint: see [Headings: weight and width](#headings-weight-and-width). |
 | `cms.MediaText` | Media and text | **New.** Image or video (from the Assets Library or, with **Video source: URL**, by address, each with an optional mobile video shown below the tablet width, and with a **Video aspect ratio** per breakpoint, 16:9 by default) beside text, with side, mobile order, column split, vertical alignment, feature items with icons, buttons, a footnote, and repeated rows that can alternate sides. A video takes an optional **Mobile poster image** or **Mobile poster URL** for the mobile video. **Item title size** (a type-scale size or **Custom (px)**, per breakpoint) and **Item title weight** (300–800) restyle every feature item's title; left on **Default**, the titles stay 16 px semibold. |
-| `cms.BackgroundPanel` | Background image panel | **New.** An image with a text panel on one side. To take it edge to edge, put it in a Section with the **Bleed** or **Full** width. |
+| `cms.BackgroundPanel` | Background image panel | **New.** An image with a text panel on one side. To take it edge to edge, put it in a Section with the **Bleed** or **Full** width. **Transparent text box** (off by default) leaves the text panel without its scheme background, so the image shows through behind the text; choose the scheme so the text reads on the image. |
 | `cms.CtaCard` | Call-to-action card | **New.** A boxed call to action in its own colour scheme, with a list, buttons, an optional image and the brand's decorative backdrop. |
 | `cms.Statement` | Statement | **New.** A large statement or quote, optionally over an image that fills the block, with an optional word-by-word reveal and a maximum text width per breakpoint. A Section with the **Bleed** width takes it edge to edge. |
 | `cms.LinkList` | Link list | **New.** Rows of title, description and button, with an optional divider. |
@@ -127,7 +127,7 @@ is not migrated in the database, and it does not need to be:
 The **Section** block (`cms.Section`) carries the section settings — anchor,
 colour scheme, background, spacing, width, content position and an entrance
 reveal — and a slot that holds any other blocks. Each setting is a field of
-its own. Space above, Space below, Content position and Overlap with the
+its own. Width, Space above, Space below, Content position and Overlap with the
 previous section are set per breakpoint on the editor's **Responsive** tab: choose Base (mobile), Tablet or Desktop in
 its **Scope settings** and edit the value for that breakpoint, as on a Row. The
 other settings are on the **General** tab, with the anchor and the entrance
@@ -145,9 +145,9 @@ set, a Section is neutral: no colour, the contained width and the `l` spacing.
 | --- | --- |
 | Anchor | A fragment name such as `contact`, so that `/page#contact` scrolls to the section. See [Anchors](#anchors). |
 | Color scheme | Inherit, Light, Muted, Dark. The scheme sets the text, heading, link, border and button colours of every block inside the section. |
-| Background | None, solid colour, gradient, image or video. An image takes an optional mobile image, a focal position, a **size** (Cover, the default; Contain, the whole image; Natural size; or a width in px or %) and a **repeat** (none, the default; tile; across; down); a video takes a poster and an optional mobile video. An overlay (solid or gradient, with direction and strength) can sit above the media. On the dark scheme, **Decorative backdrop** paints the brand's decorative image; with it switched on, **Backdrop size**, **Backdrop repeat** and **Backdrop position** set how it is drawn (Cover from the top centre, not repeated, until changed). A size in px keeps the image or backdrop that size on every screen width. |
+| Background | None, solid colour, gradient, image or video. An image takes an optional mobile image, a focal position, a **size** (Cover, the default; Contain, the whole image; Natural size; or a width in px or %) and a **repeat** (none, the default; tile; across; down); a video takes a poster and an optional mobile video. An overlay (solid or gradient, with direction and strength) can sit above the media. On the dark scheme, **Decorative backdrop** paints the brand's decorative image; with it switched on, **Backdrop size**, **Backdrop repeat** and **Backdrop position** set how it is drawn (Cover from the top centre, not repeated, until changed). A size in px keeps the image or backdrop that size on every screen width. With a mobile image or mobile video, **Mobile image or video shown on** sets where it gives way to the desktop one: **Phones (below 768 px)**, the default, or **Phones and tablets (below 1024 px)**. |
 | Space above / Space below | Responsive tab. A step of the brand spacing scale (`none`, `xs`, `s`, `m`, `l`, `xl`, `xxl`) or a pixel value, per breakpoint; a breakpoint left on **Inherit** takes the one below it. Spacing is padding, so two adjacent dark sections touch and read as one dark area. |
-| Width | Contained, Wide, Full, Viewport (the full viewport wide and at least the full viewport tall), Bleed (content to the edges) or Custom, which shows **Max width (px)**: one maximum width in pixels. |
+| Width | Responsive tab. Contained, Wide, Full, Viewport (the full viewport wide and at least the full viewport tall), Bleed (content to the edges) or Custom, which shows **Custom max width (px)**: one maximum width in pixels. Set it per breakpoint for a section that is, say, **Bleed** on phones (a box edge to edge) and **Contained** from the desktop up; a width chosen once applies at every breakpoint, as before. A Custom width wider than the page container widens the section beyond the container, centred, up to the window less the page's side margin; narrower than the container, it stays inside it. |
 | Content width | Shown with Full, Viewport or Bleed: the background keeps that extent and the content sits in the page container, the wide frame, to the edges or in a custom max width. A dark band across the whole screen with its content in the container is **Bleed** with content width **Page container**; only **Viewport** also makes the section the full screen tall. Left unset, the width's own content frame applies. |
 | Content position | Responsive tab. Top, Middle or Bottom, per breakpoint: where the content sits when the section is taller than it, as a Viewport section is. |
 | Overlap with the previous section | Responsive tab. A step of the brand spacing scale or a pixel value, per breakpoint; **None** until set. The section's content moves up by that much over the bottom of the section before it and is drawn above that section's background, while this section's own background stays in place, for example an image that rises into a dark band of features. Keep it within the previous section's space below, or its content is covered. The first block of a page overlaps nothing. In the editor the content is not moved, so the previous section stays easy to select; a hatched band at the top of the section shows how far it will overlap on the previewed breakpoint. |
@@ -269,21 +269,67 @@ with the blocks they build, and their copy is in the `cms` bundle under
 The page editor's **Breadcrumbs** card sets:
 
 - **Parent page** — the page shown before this one in the breadcrumb trail.
-  It does not change the page's address. A page cannot be its own parent or
+  It changes the page's address only with the option below. A page cannot be its own parent or
   be placed under one of its subpages, and the tree is at most eight levels
   deep; a refused choice answers `422 CMS_PAGE_PARENT_CYCLE`. Deleting the
   parent clears the field on its children.
+- **Include the parent page's path in the address** — off by default, so a
+  page keeps its flat `/<slug>`. On, the page is served under its parent's
+  address: `/<parent path>/<slug>`. The parent's own address follows the same
+  rule, so a tree whose lower pages all opt in gives addresses such as
+  `/services/consulting/workshops`. See *Nested page
+  addresses* below.
 - **Show breadcrumbs** — on by default.
 - **Breadcrumb color scheme** — light (the default, which paints nothing),
-  muted or dark.
+  muted or dark. On muted and dark the links take the scheme's muted text
+  colour (its text colour on hover) and the current page its text colour.
+- **Show the breadcrumbs over the first section** — off by default. On, the
+  trail lies over the top of the page's first section (a hero, for example)
+  instead of in a band above it, and nothing on the page moves down: no band is
+  painted, and the trail keeps the brand's page container and side margin.
+  Choose the **dark** scheme for a light trail on a dark image. The first
+  section is not padded for the trail automatically — give it enough top
+  padding (its **Space above**, or the hero's own) so the trail does not cover
+  its content.
 
-The storefront renders *Home › ancestors › page*. An ancestor that is not
+The storefront renders *Home › ancestors › page*. Every crumb is labelled with
+the page's **name** — the current page's and each ancestor's alike (until
+2026-10-27 an ancestor showed its meta title instead). An ancestor that is not
 published in the request's sales channel is shown as plain text, not as a
-link, and its slug never leaks across channels. The trail's
-`BreadcrumbList` structured data uses absolute URLs. The four fields are
+link, and its slug never leaks across channels. The trail sits in the brand's
+page container and side margin, so it lines up with the page content. On the
+muted or dark scheme the painted band holds its own space below the trail, so
+a dark first section follows it with no light strip in between. The trail's
+`BreadcrumbList` structured data uses absolute URLs. The fields are
 stored on `cms_pages` (`parent_page_id`, `breadcrumbs_visible`,
-`breadcrumbs_scheme`, `share_image_asset_id`) and are part of the
-`cms_page.update` audit entry.
+`breadcrumbs_scheme`, `breadcrumbs_overlay`, `share_image_asset_id`) and are
+part of the `cms_page.update` audit entry.
+
+### Nested page addresses
+
+A page's **public path** is its own slug, or — when **Include the parent
+page's path in the address** is on (`parentPathInUrl`, stored as
+`cms_pages.parent_path_in_url`) — its parent's public path, a `/` and its
+slug. The path is computed when the page is read, per sales channel, from the
+slug each channel serves a page under; it is never stored. So:
+
+- **Renaming or moving a parent moves every nested page below it.** The old
+  address stops answering; there is no automatic redirect from it.
+- **The page's own slug keeps answering**, with a permanent (308) redirect to
+  its path, so links made before the option was switched on keep working.
+- **A parent the channel does not serve** leaves the page at its own slug in
+  that channel.
+- **Two pages cannot share an address in one channel.** A save that would
+  give a page — or a nested page below it — an address another page already
+  has is refused with `409 CMS_SLUG_CONFLICT`, and nothing is written.
+- The first segment of a nested address is the top page's slug, which the
+  reserved-segment rule already checks, so a nested page cannot shadow a
+  storefront route such as `/p/…`, `/c/…`, `/cart` or `/account`.
+
+The page editor shows the resulting address under **Public address**. The
+storefront's breadcrumb links, canonical link, `og:url` and sitemap use the
+path, and a Page Builder link to a page is rendered at the page's path in the
+request's channel.
 
 ### Sharing image and search metadata
 
@@ -366,6 +412,99 @@ the other blocks with a rich body — follow the **type scale** of the
 (mobile and desktop), line height, weight and letter spacing. Until a type scale
 is set for a heading level, headings of that level keep their look as before.
 
+### Text sizes, line heights and spacing in blocks
+
+The smaller texts of the content blocks take their own look, each option empty
+or on **Default** until you choose otherwise, so a block already on a page keeps
+its look. Three rules hold for every block:
+
+- **A size is a step of the type scale or Custom (px).** A step (**Body**,
+  **Lead**, **Heading 4** …) brings the brand's line height, weight and letter
+  spacing of that step with it, at every breakpoint — so a text set to **Body**
+  looks like body text everywhere. Sizes are set per breakpoint on the
+  **Responsive** tab.
+- **A line height is offered with a Custom (px) size only.** A step already has
+  its own; a line height (a multiple of the size, for example 1.5) applies only
+  at a breakpoint whose size is Custom (px).
+- **A weight is one value for every breakpoint.** It wins over the step's own
+  weight. A weight saved per breakpoint by an earlier version of these options
+  is read as its desktop value, else its base value.
+
+Spaces inside a block are one step of the brand spacing scale (**None**,
+**XS** … **XXL**), not a pixel value per element; a step has its own phone and
+desktop size, so it follows the breakpoints and the brand.
+
+- **Feature list**: **Text size**, **Text weight** and **Text line height** for
+  every item's text (by default a small, muted line); **Title line height**
+  with a Custom title size; **Space inside each item** — the space after the
+  icon, below the title and between the paragraphs. **Icon position: Beside
+  the title** puts the icon at the start of the title, and the title and the
+  text hang beside it: a wrapped line starts under the text, not under the
+  icon.
+- **Hero**: the subheading and the statement take a **weight**, a **line
+  height** (with a Custom size) and a **max width**, like the title; the text
+  takes a **Text size** (16 px by default), **weight**, **line height** and
+  **max width**. The hero has one **Text color** for all its texts; the eyebrow
+  may take its own **Eyebrow color** as an accent. **Space between items**
+  offers **Custom (px)**. With media **Above the content**, **Space below the
+  media** sets the space between the image or video and the texts (none by
+  default). The social-proof image keeps its 40 px height.
+- **Statement**: **Heading line height** (with a Custom heading size), and the
+  supporting text's **size**, **weight** and **line height**. Over a background
+  image, **Minimum height** (**Default** is 60 % of the screen's height; also
+  half, three quarters, the full screen, **Auto** or **Custom (px)**).
+- **Stats**: the labels' **size** and **weight** (their colour is the scheme's
+  muted text; **Value color** stays the figures' accent). Beside an image, from
+  the tablet up, **Layout (image – figures)** places the image and the figures
+  on 12 columns (see *Layouts on 12 columns* below), and **Figures vertical
+  position**: **Center** (default), **Top**, **Bottom** or **Spread over the
+  image height**.
+- **Link list**: **Row title size** and **Row title weight**.
+- **Call-to-action card**: **Rounded corners** (**Default** keeps today's) and
+  **Image inset**: the card's padding by default, **None** (the image reaches
+  the card's edges) or **Custom (px)**, one value for every breakpoint.
+- **Media and text**: **Side by side from** the tablet (768 px, default) or the
+  desktop (1024 px); below it the media and the text stack, in the **Order on
+  mobile**.
+- **Rich content**: **Text size** and **Text weight** for the whole text; its
+  lists follow them.
+- **Row**: **Space between rows (px)** is set per breakpoint; one value saved
+  before applies at every width.
+
+In any rich text, the toolbar's **Text size** sizes the selected words with a
+step of the type scale, and **List marker** chooses the markers of a bulleted
+list: **Disc** (default), **Check mark**, **Chevron** or **None**. The page and
+the editor render both the same. Words sized in pixels by an earlier version of
+the toolbar keep their size until a step is chosen for them. A check mark is
+drawn in the brand's primary colour and a chevron in the text's colour; a
+block's **List marker color** (Rich content, Media and text) gives both
+markers a colour of their own, for example white ticks on a dark Section.
+
+A **Simple Text** block takes bold, italic, links and highlights: its text is
+edited like a heading's. A text saved before keeps its plain text until it is
+edited.
+
+A heading that starts with an icon can hang its text beside the icon:
+**Hanging indent after a leading icon** keeps a wrapped line under the text,
+which starts 0.35 em after the icon.
+
+#### Layouts on 12 columns
+
+Media and its text side by side — the **Carousel split slide**, **Stats**
+beside an image and the **Call-to-action card** with an image — take a
+**Layout** from the side-by-side width up: **Default** (two equal halves, as
+before) or a preset of columns of 12, named media first — **6 – 6**, **7 – 5**,
+**5 – 7**, **8 – 4**, **4 – 8**, and **5 – 1 – 6** or **6 – 1 – 5** with a
+column between (not on the card). With the media on the right the layout is
+mirrored. **Advanced layout (columns of 12)** shows the widths in columns, the
+columns between and **Columns aligned to** instead, and they win over the
+preset while the switch is on; widths saved before the switch existed open with
+it on. **Media and text** keeps its **Split (media – text)** as the layout and
+offers the same switch for its widths in columns of 12.
+
+A **gradient highlight** that wraps onto several lines is one gradient across
+the whole phrase: each line continues it rather than starting it again.
+
 ### Carousels: controls, grid and filter
 
 The options below are on the Carousel; the arrow placement, style,
@@ -443,6 +582,120 @@ set for one breakpoint applies from that breakpoint up until a wider one has
 its own; a breakpoint below the first one with a weight, or left on
 **Default**, keeps the usual weight. A weight set before this option existed is
 the weight of every breakpoint, as before.
+
+### Carousel controls, buttons, download tiles and image cards: look options
+
+Every option below is unset by default, and a page saved before them looks as
+it did.
+
+**Carousel controls** (the Carousel, the product slider and the latest posts
+carousel, under **Controls**):
+
+| Option | What it does |
+| --- | --- |
+| **Arrow icon color (solid style)** | The glyph of a **Solid** arrow (or a solid next arrow), white by default — so a white solid arrow can carry a black icon. Shown once an arrow style is Solid. |
+| **Hide the arrows on**, **Hide the dots on** | The breakpoints (mobile, tablet, desktop) where the arrows or the dots are not shown, for example arrows only from the desktop up while phones and tablets swipe. A row of controls left with nothing to show there is removed, so it leaves no gap. |
+
+The dots follow the colour scheme: in a dark Section the current dot is the
+scheme's light text colour over faint dots, so it stays visibly current.
+
+Arrows placed **In the header** show even when the carousel has no heading:
+the header then holds only the arrows, at its end, as beside a heading. The
+Carousel's **Arrow placement** also offers **Inside each split slide (under
+its text)**: every **Carousel split slide** shows the arrows and dots at the
+end of its text column, and only the slide on screen has working controls (the
+others are hidden from the keyboard and screen readers). Like the other
+placements it is chosen per breakpoint, for example below the slides on a
+phone and under the text from the tablet up. A carousel whose items are not
+split slides keeps its controls below the slides there. Free-content slides
+(**Slide**) cannot hold the controls.
+
+The product slider's and product grid's **Button below the products** takes a
+**Button alignment**: **Left** (default), **Center** or **Right**.
+
+**Button** (`cms.Button`):
+
+- Its **Outline** fill is filled with the Section's background, as the
+  `secondary` button it replaced was. **Transparent outline fill** lets the
+  background show through instead (offered with an outline fill).
+- **Border color** replaces the fill's border colour, for example a grey ring
+  around an icon-only outline button. An **Icon only** button is as large as
+  its **Size** option (small, medium or large, from the brand's button heights).
+
+**Download tile**: **Card color scheme** (as the Section, light, muted or
+dark), **Card background**, **Card border** (on by default), **Rounded
+corners**, **Card padding** (a step of the spacing scale), **Title size** (a
+step of the type scale or **Custom (px)**, per breakpoint) and **Show the file
+type** (on by default). **Image on hover** is the default **Faint tint** or
+**Full image with a dark gradient**, the text turning white over it. **Link
+look** is the default **Text label** or a 48 px **Round icon button** at the
+bottom end, ringed in the text colour; its label is still read by screen
+readers. The whole tile stays one download link, and tiles in a carousel row
+keep equal heights.
+
+**Carousel image**: a **Read-more label** (for example "Read more") shown over
+the image in a corner of its own — **Read-more label placement**, bottom right
+by default — apart from the caption, with an optional **Read-more label
+icon**. It is 14 px semibold, 12 px from its corner, takes the caption's text
+colour when one is set and is part of the item's link.
+
+**Image** caption: **Caption placement** is chosen per breakpoint (for example
+below the image on phones and beside it from the tablet up), and the caption
+takes a **Caption size** (a step of the type scale or **Custom (px)**) and a
+**Caption alignment** per breakpoint; it keeps the scheme's muted text colour.
+
+### Buttons in blocks, hero texts, download tiles and image captions: more options
+
+Every option below is unset by default, and a page saved before them looks as
+it did.
+
+**Buttons inside blocks** — a Hero's buttons, a card's or a panel's, a
+section or listing header's button, the buttons of Media and text — take the
+look options the **Button** block has: **Transparent outline fill** and
+**Border color**. An icon-only button can also be a **Pill** instead of a
+**Circle** (**Icon-only button shape**), 1.15 times as wide as it is tall — for
+example a "scroll down" control slightly wider than tall. The Button block
+offers the pill too; its other look options stay where they were.
+
+**Hero**:
+
+- **Title line height** per breakpoint, with a Custom title size. The hero's
+  **Text color** colours all its texts; **Eyebrow color** gives the eyebrow an
+  accent of its own.
+- The eyebrow can serve as a label above the body: **Eyebrow size** (a step of
+  the type scale or **Custom (px)**, per breakpoint, with an **Eyebrow line
+  height** for a Custom size) and **Eyebrow in capitals** (on by default)
+  switched off for a label in its own case. Put it where it belongs and set the
+  space after it in **Elements: order and spacing**, as for any element.
+- The **Social proof** caption: **Social proof caption placement** beside the
+  image (default) or below it, per breakpoint — for example below on phones and
+  beside from the tablet up —, and a **Custom social proof caption max width
+  (px)** per breakpoint. It keeps the small, muted text.
+
+**Download tile**:
+
+- **Links to** a file (default) or **A page or URL**: the tile then takes a
+  **Link** (a page, a product, a category, a file or a URL) instead of a file,
+  has no file-type badge, and its round icon button points onwards. A tile
+  whose link leads nowhere is not shown to customers; the editor shows a
+  warning in its place.
+- **Custom minimum height (px)**, one value for every breakpoint (180 px by
+  default).
+- A Custom title size now applies from the tablet up as well (it was read on
+  phones only).
+
+**Carousel image**: a caption on the same edge as the read-more label — both
+at the bottom, or both at the top — now sits above the label's line instead of
+sharing it, so the two never overlap on a narrow card.
+
+**Image** caption: **Custom caption max width (px)**, per breakpoint. A
+caption placed below the image on phones and
+beside it from a wider breakpoint now gets a column of its own there, beside an
+image of a set width, instead of being squeezed into the image's width.
+
+An inline heading left empty — a Heading block, a Media and text heading, a
+Hero's title — writes no empty heading element on the page; a Heading block
+keeps its spacing.
 
 ### Tabs: a panel in columns
 
@@ -559,6 +812,237 @@ order they are placed in the editor, so place them in an order that also reads
 well. The editor canvas keeps the placed order and the widths, without the
 placement, so dragging columns works on what the outline shows; the published
 page shows the placement per breakpoint.
+
+### Columns: a background wider than the column
+
+A Column's **Background outset (px)**, on the **Responsive** tab, makes its box
+— its background, border and shadow — reach that many pixels past the column
+on each side, while the column's content stays where it was: a grey box a
+little wider than the text column beside it. Set it per breakpoint, for example
+**0** on phones, where the column already spans the screen, and **24** from the
+desktop up. Left at 0 (the default) the box is as wide as the column. The
+outset reaches into the gap between the columns and past the Row's edge, so
+keep it within the space around the column. The column box's own **Outer
+spacing** at the sides still applies on top of the outset, at every
+breakpoint — a breakpoint whose outset is 0 shows the box with its own margins.
+
+### Mobile images: phones only, or phones and tablets
+
+An image with a **Mobile image** — the **Image** block, a Hero, a Media and
+text block, any block whose image field offers one — shows the mobile image on
+phones and the main image from the tablet width up (768 px). **Mobile image
+shown on** (offered once a mobile image is set) moves that switch to the
+desktop width: **Phones and tablets (below 1024 px)** keeps the mobile art on
+tablets too, for a tall image that suits a tablet better than the wide desktop
+one. A Section's or Section group's background has the same setting, **Mobile
+image or video shown on**, for its mobile image or mobile video. Left at
+**Phones (below 768 px)** nothing is stored and the image switches as before.
+
+### Split slides, carousel controls and block spacing
+
+Every option below is empty or off by default, and a page saved before them
+looks as it did. Options marked *per breakpoint* are set on the **Responsive**
+tab; a breakpoint without its own value takes the one below it, and a
+breakpoint no value reaches keeps the block's own look.
+
+**Carousel split slide**:
+
+- **Side by side from** the tablet (768 px, default) or the desktop (1024 px);
+  below it the media and the text stack, media first.
+- **Layout (media – text)** on 12 columns from the side-by-side width up (see
+  *Layouts on 12 columns*); **Default** keeps two equal halves.
+- **Rounded corners** of the media (8 px by default; **None** for square).
+- **Title size** and **Text size**, *per breakpoint*, each with a line height
+  for a Custom size, and a **Title weight** and a **Text weight**.
+- **Hanging indent after a leading icon**: a title that starts with an icon
+  (a check mark, for example) hangs beside it, so a wrapped line starts under
+  the text.
+
+**Carousel controls** (the Carousel, the product slider and the latest posts
+carousel):
+
+- **Controls alignment** also offers **Dots at the start, arrows at the end**.
+  Chosen, the alignment applies to the controls inside a split slide too (left
+  unset, those start at the text's left edge).
+- **Keep the arrows when all slides fit** (under **Controls**): when every
+  slide is already on screen the arrows stay, both disabled, and the dots are
+  hidden; off, the controls disappear as before. A disabled arrow takes the
+  **Disabled arrow look**, offered for this case on a looping carousel too.
+
+**Media and text**: **Text size** for every row's text, *per breakpoint*, with
+a **Text line height** for a Custom size; **Space between the heading and the
+paragraphs** and **Space between media and text when stacked**, each a step of
+the spacing scale. Each of **More rows** has its own **Vertical alignment**;
+**Same as the block** (or empty) follows the block's.
+
+**Background image panel**: **Layout on mobile** — **Image and text stacked**
+(default) or **Text over the image**, which keeps the mobile image at its own
+height (a tall mobile image keeps its shape) with the text over its top or
+bottom, by **Text on mobile**.
+
+**Feature list**: **Space between rows (px)**, *per breakpoint*, apart from the
+gap, which then spaces the columns only; **Line height of lists in the text**,
+*per breakpoint*, with a Custom text size.
+
+**Call-to-action card**: **Card padding**, a step of the spacing scale (an
+image inset is measured from it), and with an image a **Layout (image – text)**
+from the tablet up (half the card by default; see *Layouts on 12 columns*).
+
+**Stats**: **Label line height**, *per breakpoint*, with a Custom label size.
+
+**Link list**: **Divider after the last row**, offered while **Divider between
+rows** is on.
+
+### Stacking breakpoints, column layouts and more text options
+
+As above, every option below is empty by default, a page saved before them
+looks as it did, and options marked *per breakpoint* are set on the
+**Responsive** tab.
+
+**Hero**: a social-proof caption placed **Below the image** always starts a
+line of its own, also with a **Custom social proof caption max width (px)**
+narrow enough to fit beside the image.
+
+**Media and text**:
+
+- With **Advanced layout (columns of 12)**, **Media width** and **Text width**
+  in columns of 12 and the **Columns between the media and the text**, from the
+  side-by-side width up — as on the carousel split slide. Any one set lays every
+  row on a 12-column grid (the media 6 columns and none between unless set, the
+  text the rest), mirrored on a row with the media on the right, in place of
+  the **Split (media – text)**; for example 5 and 5 columns one column apart.
+- **Heading line height** (with a Custom heading size, *per breakpoint*), a
+  **Text weight**, and the **List marker color** of the check and chevron lists
+  in every row's text.
+
+**Call-to-action card** (with an image):
+
+- **Image position when stacked**: **Above the text** (default) or **Below the
+  text**; an image inset then runs along the sides and the bottom.
+- **Side by side from** the tablet (768 px, default) or the desktop (1024 px);
+  below it the card stacks as on a phone.
+- **Custom image inset (px)** is one value for every breakpoint.
+- **Text size**, *per breakpoint*, with a Custom (px) size; the list follows
+  it.
+
+**Stats** (with an image): **Side by side from** the tablet (default) or the
+desktop; below it the image sits above the figures.
+
+**Carousel split slide**:
+
+- **Text indent**, offered with the hanging indent on: **Aligned with the title
+  text** starts the text below where the title's text starts, after the
+  leading icon and its space. Only a title that starts with an icon is
+  indented.
+- **Space between media and text when stacked**, and **Space between the
+  title, the text and the controls** (the controls a carousel places inside its
+  slides), each a step of the spacing scale.
+
+**Image**: with a mobile image, **Mobile image shown on** phones only (below
+768 px, default) or phones and tablets (below 1024 px), as for image fields.
+
+**Heading**: **Max text width**, *per breakpoint* — a named measure or a
+Custom (px) width; a centred or right-aligned heading keeps its alignment.
+
+**Rich Content**: **List line height**, *per breakpoint*, with a Custom text
+size.
+
+**Accordion**: **Title line height**, *per breakpoint*, with a Custom title
+size.
+
+**Product grid** and **Product slider**: the header's **Lead size** (a type
+token or Custom px, *per breakpoint*), **Lead weight** and **Lead color**.
+
+**Download tile**: **Title weight**.
+
+### Type sizes per breakpoint
+
+A text whose size is a different type token per breakpoint — for example a
+carousel heading at Heading 3 on phones and Heading 2 on the desktop, a hero
+title, a section heading or a Heading block — now takes each breakpoint's line
+height, weight and letter spacing from that breakpoint's token as well (until
+2026-10-28 they stayed the first breakpoint's). A weight the block sets itself
+still wins; a line height applies at a Custom (px) breakpoint only.
+
+### Column gaps, column anchors, row alignment and more options
+
+As above, every option below is empty by default, a page saved before them
+looks as it did, and options marked *per breakpoint* are set on the
+**Responsive** tab.
+
+**Columns of 12** — on **Media and text**, the **Carousel split slide** and
+**Stats** (with an image), once a layout on 12 columns is chosen:
+
+- **Space between columns (px)**, *per breakpoint*. Left empty, the gap is the
+  page's side gutter, as before; set it (for example 16 px) to keep the
+  columns where you place them whatever the gutter.
+- **Columns aligned to** (**Media and text** and the split slide, with
+  **Advanced layout (columns of 12)**): **The media side** (default) keeps a
+  row with the media on the right ending at column 12 — for example text in
+  columns 2–6 and media in 8–12. **Start (column 1)** starts the pair at column
+  1 on either side — text 1–5 and media 7–11 — and **End (column 12)** ends it
+  at column 12.
+
+**Row**: **Align columns** (top, middle, bottom) now places the columns on a
+published page as it does in the editor; until 2026-10-28 each column stretched
+to the row's height whatever was chosen. A row left on **Stretch** (the
+default) looks as before. A row saved with `center` — the word **Media and
+text** uses for the same choice — is read as middle.
+
+**Call-to-action card**:
+
+- **Side by side from: Desktop (1024 px)** now keeps a two-column list in one
+  column on a tablet as well, while the card is stacked; a card side by side
+  from the tablet keeps its two columns from 768 px.
+- **Space below the heading**, a step of the spacing scale (16 px by default).
+- **Text weight**, and **Max text width** (a named measure or Custom px, *per
+  breakpoint*), for the card's text.
+
+**Stats**: **Value line height**, *per breakpoint*, with a Custom value size. A
+breakpoint below the first Custom one keeps the value size's own line height.
+
+**Media and text**: **Item text size** (a type token or Custom px, *per
+breakpoint*) and **Item text weight** for every feature item's text (15 px and
+muted by default).
+
+**Rich Content**: **Text weight**; its lists follow it.
+
+**Feature list**:
+
+- **Icon position** is set *per breakpoint* — for example beside the title on a
+  tablet and above it from 1024 px. One position saved before applies to every
+  breakpoint.
+- An item's **Width on desktops (columns of 12)**: from 1024 px the list is
+  laid out on 12 columns, that item spans its width and the others keep their
+  share of the **Columns** (for example 6 of 12 with two columns).
+- **Title weight** was already set per breakpoint.
+
+**Carousel**, **Product slider**, **Product grid** and **Latest posts**: the
+header's **Heading line height**, *per breakpoint*, with a Custom heading size;
+a breakpoint below the first Custom one keeps the heading size's own. **Latest
+posts** also takes a **Lead weight**.
+
+**Link list**: **Row title line height**, *per breakpoint*, with a Custom row
+title size.
+
+**Newsletter sign-up**: a **Button icon** from the icon catalog after the
+button's label (none by default).
+
+**Testimonial**: **Quote size** — a type token or Custom px, *per breakpoint*
+(1.15 rem by default).
+
+**Download tile** (with the round icon button): **Icon button icon**, a glyph
+from the icon catalog — for example the cloud download added to the catalog;
+left empty, a file's tile shows the download arrow and a link's tile the arrow
+pointing on.
+
+### Box margins and padding per breakpoint
+
+**Outer spacing** (margin) and **Inner spacing** (padding) of every block that
+has them are set per breakpoint on the **Responsive** tab: choose Base
+(mobile), Tablet or Desktop in its **Scope settings** and enter the values for
+that breakpoint, for example 16 px below a heading on phones and 32 px on the
+desktop. A breakpoint without its own value takes the one below it.
 
 ### Full-width buttons and a chevron "read more"
 
@@ -826,7 +1310,7 @@ page render.
 | GET     | `/pages`                                            | Paginated Page list with filters.               |
 | POST    | `/pages`                                            | Create a Page (always starts as `draft`).       |
 | GET     | `/pages/:id`                                        | Detail with full content envelope + version.    |
-| PATCH   | `/pages/:id`                                        | Edit metadata, including `parentPageId`, `breadcrumbsVisible`, `breadcrumbsScheme` and `shareImageAssetId`; honours `If-Match` via `version`. A cyclic or too-deep parent answers `422 CMS_PAGE_PARENT_CYCLE`. |
+| PATCH   | `/pages/:id`                                        | Edit metadata, including `parentPageId`, `parentPathInUrl`, `breadcrumbsVisible`, `breadcrumbsScheme`, `breadcrumbsOverlay` and `shareImageAssetId`; honours `If-Match` via `version`. A cyclic or too-deep parent answers `422 CMS_PAGE_PARENT_CYCLE`; an address another page has answers `409 CMS_SLUG_CONFLICT`. |
 | PUT     | `/pages/:id/content/:language`                      | Save the Page Builder tree per language. A duplicate or reserved anchor answers `422 CMS_DUPLICATE_ANCHOR` / `CMS_RESERVED_ANCHOR`. |
 | POST    | `/pages/:id/{publish,archive,unarchive}`            | Lifecycle transitions.                          |
 | DELETE  | `/pages/:id`                                        | Hard delete (channels are cascade-unbound).     |
@@ -847,13 +1331,15 @@ page render.
 
 | Method | Path                              | Returns                                                        |
 | ------ | --------------------------------- | -------------------------------------------------------------- |
-| GET    | `/pages/by-slug?slug=…&language=…`| Resolved Page with `embeds.blocks`, `embeds.templates`, assets.|
+| GET    | `/pages/by-slug?slug=…&language=…`| Resolved Page with `embeds.blocks`, `embeds.templates`, assets. `slug` takes the page's whole public path; a nested page's own slug also resolves.|
 | GET    | `/blocks/by-code?code=…&language=…`| Resolved Block (single, channel-filtered, active-only).       |
 | GET    | `/hooks/by-code?code=…&language=…`| Ordered active Block list for the named Hook.                  |
 
-The resolved Page also carries `breadcrumbs` (`visible`, `scheme` and the
-`trail` of ancestors, each `{name, slug}` with `slug: null` for one not
-published in the channel), `share.imageUrl` and `languages`.
+The resolved Page also carries `path` (its public path in the channel),
+`breadcrumbs` (`visible`, `scheme`, `overlay: true` only when the trail lies
+over the first section, and the `trail` of ancestors, each
+`{name, slug, path}` with `slug` and `path` null for one not published in the
+channel), `share.imageUrl` and `languages`.
 
 The brand tokens have their own public read,
 `GET /api/v1/storefront/cms/brand-tokens`: the effective set for the resolved
@@ -908,11 +1394,16 @@ itself by posting the matching tags to the storefront's `/api/revalidate`:
 The manual cache flush on the Settings module's cache screen revalidates the
 same tag through its `cms-brand` namespace.
 
-A saved page is therefore the next request's page. Revalidation needs
-`STOREFRONT_BASE_URL` and `REVALIDATE_SECRET` on the backend and the same
-secret on the storefront; without them it is skipped and the 60-second window
-is the fallback. It is best-effort — a storefront that cannot be reached is
-logged and never fails the save.
+A saved or published page is therefore the next request's page: the write
+dispatches the change in an EventBus scope and answers only once the storefront
+has dropped the tags, so even a request sent the moment the save returns gets
+the new content. Revalidation needs `STOREFRONT_BASE_URL` and
+`REVALIDATE_SECRET` on the backend and **the same** secret on the storefront;
+without them it is skipped and the 60-second window is the fallback (the first
+request after the window then still gets the previous render once, while the
+storefront refetches). It is best-effort: a storefront that cannot be reached,
+does not answer within 3 seconds, or refuses the call is logged and never fails
+the save. A refusal with status 401 means the two secrets differ.
 
 Another module that caches CMS content inside an answer of its own subscribes
 to the same event through `ctx.subscribe`; `megamenu` does, for the blocks a

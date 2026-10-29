@@ -205,10 +205,12 @@ async function cmsPageEntries(ctx: Ctx): Promise<MetadataRoute.Sitemap> {
     // does above: the module is absent, so the shop advertises no CMS URL.
     if (index === null) return [];
     const homeSlug = normalizeCmsUrlPath(homepage.cmsPageSlug ?? '');
+    // R19D: a page's address is its public path; `?? page.slug` covers a
+    // backend that predates the field.
     return index.pages
       .filter((page) => homeSlug === '' || normalizeCmsUrlPath(page.slug) !== homeSlug)
       .map((page) => ({
-        url: absoluteUrl(`/${normalizeCmsUrlPath(page.slug)}`),
+        url: absoluteUrl(`/${normalizeCmsUrlPath(page.path ?? page.slug)}`),
         lastModified: new Date(page.updatedAt),
         changeFrequency: 'monthly' as const,
       }));

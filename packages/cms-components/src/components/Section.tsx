@@ -6,6 +6,7 @@ import {
   SECTION_ANCHOR_RE,
   SECTION_SPACE_FALLBACKS,
   SECTION_WIDTHS_WITH_CONTENT_WIDTH,
+  SECTION_WIDTH_OPTIONS,
   FOCAL_TOKENS,
   backgroundSizeToCss,
   isBackgroundRepeat,
@@ -19,6 +20,8 @@ import {
   type ResponsiveProp,
   type SectionBackgroundValue,
   type SectionContentPosition,
+  type SectionContentWidth,
+  type SectionWidth,
   type SectionDefaults,
   type SectionOverlay,
   type SectionSettingsValue,
@@ -28,7 +31,7 @@ import { useBreakpointVideo } from '../hooks/use-breakpoint-video.js';
 import { useReveal } from '../hooks/use-reveal.js';
 import { colorValueToCss } from '../utils/color-value.js';
 import { absolutizeMediaUrl, resolveImageUrl } from '../utils/resolve-image-url.js';
-import { Picture } from './Picture.js';
+import { Picture, pictureMobileMedia } from './Picture.js';
 import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
 
 export interface SectionFrameProps {
@@ -347,6 +350,8 @@ function SectionMedia({ background }: { background: SectionBackgroundValue }): R
       // T167: `contain` shows the whole image; unset or `cover`, today's crop.
       fit: backgroundSizeToCss(background.size) === 'contain' ? 'contain' : 'cover',
       ...(background.position ? { position: background.position } : {}),
+      // R19C (T263): the tier the desktop image starts at; unset, the tablet tier.
+      ...(background.desktopFrom === 'desktop' ? { desktopFrom: 'desktop' as const } : {}),
     };
     if (image.assetId || image.src || image.mobileAssetId || image.mobileSrc) {
       media = <Picture className="cmsc-section__picture" image={image} />;
@@ -356,14 +361,102 @@ function SectionMedia({ background }: { background: SectionBackgroundValue }): R
   }
 
   if (media === null) return null;
+  // R19C (T263): the stylesheet keeps a tiled mobile image or the mobile video up to the desktop tier.
+  // (A `<picture>` carries its own query.)
+  const desktopFrom = background.desktopFrom === 'desktop' && (background.kind === 'video' || tiled !== null);
   return (
-    <div className="cmsc-section__media" aria-hidden="true">
+    <div className="cmsc-section__media" aria-hidden="true" {...(desktopFrom ? { 'data-desktop-from': 'desktop' } : {})}>
       {media}
       {overlay ? (
         <div className="cmsc-section__overlay" data-kind={background.overlay?.kind} style={overlay} />
       ) : null}
     </div>
   );
+}
+
+/** The page gutter, as every width rule of the stylesheet spells it. */
+const GUTTER = 'var(--pb-page-padding, var(--cmsb-gutter, 24px))';
+const CONTAINER = 'var(--cmsb-container, 1360px)';
+const WIDE = 'var(--cmsb-wide, 1600px)';
+
+function isSectionWidth(value: unknown): value is SectionWidth {
+  return typeof value === 'string' && (SECTION_WIDTH_OPTIONS as readonly string[]).includes(value);
+}
+
+/** The width per tier; a value outside the grammar reads as `contained`, as an unset one does. */
+function widthTiers(value: SectionSettingsValue['width']): { base: SectionWidth; tablet: SectionWidth; desktop: SectionWidth } {
+  const t = tiers<SectionWidth>(value as SectionWidth | Responsive<SectionWidth> | undefined, 'contained');
+  const valid = (width: unknown): SectionWidth => (isSectionWidth(width) ? width : 'contained');
+  return { base: valid(t.base), tablet: valid(t.tablet), desktop: valid(t.desktop) };
+}
+
+/**
+ * R19C (T260, T262): one tier of a section whose width differs per breakpoint —
+ * its box (width, the margin that centres it, the minimum height) and its
+ * content frame (max width, side padding), the same values the stylesheet's
+ * `data-width` rules give that width. R23 (T449): no background outset.
+ */
+function tierLayout(
+  width: SectionWidth,
+  contentWidth: SectionContentWidth | undefined,
+  customPx: number,
+): Record<'w' | 'm' | 'mh' | 'fmax' | 'fpx', string> {
+  const box =
+    width === 'contained'
+      ? '100%'
+      : width === 'custom'
+        ? `max(100%, min(${customPx}px, 100vw - 2 * ${GUTTER}))`
+        : width === 'full'
+          ? `calc(100% + 2 * ${GUTTER})`
+          : '100vw';
+  let frame: [string, string] =
+    width === 'contained'
+      ? [CONTAINER, '0px']
+      : width === 'custom'
+        ? [`${customPx}px`, '0px']
+        : width === 'wide'
+          ? [WIDE, GUTTER]
+          : width === 'bleed'
+            ? ['none', '0px']
+            : [CONTAINER, GUTTER];
+  if (contentWidth !== undefined && SECTION_WIDTHS_WITH_CONTENT_WIDTH.includes(width)) {
+    frame =
+      contentWidth === 'contained'
+        ? [CONTAINER, GUTTER]
+        : contentWidth === 'wide'
+          ? [WIDE, GUTTER]
+          : contentWidth === 'full'
+            ? ['none', '0px']
+            : [`${customPx}px`, GUTTER];
+  }
+  return {
+    w: box,
+    m: `calc((100% - ${box}) / 2)`,
+    mh: width === 'viewport' ? '100svh' : 'auto',
+    fmax: frame[0],
+    fpx: frame[1],
+  };
+}
+
+/** R19C (T260): the box and frame variables of a tiered width, each tier written (`-md`, `-lg` beside the base). */
+function tieredVars(
+  widths: { base: SectionWidth; tablet: SectionWidth; desktop: SectionWidth },
+  settings: SectionSettingsValue | undefined,
+): Record<string, string> {
+  const custom = maxWidthTiers(settings?.customMaxWidthPx);
+  const customPx = (css: string): number => Number.parseFloat(css);
+  const contentWidth = settings?.contentWidth;
+  const layouts = {
+    '': tierLayout(widths.base, contentWidth, customPx(custom.base)),
+    '-md': tierLayout(widths.tablet, contentWidth, customPx(custom.md)),
+    '-lg': tierLayout(widths.desktop, contentWidth, customPx(custom.lg)),
+  };
+  const vars: Record<string, string> = {};
+  const names = { w: 'box-w', m: 'box-m', mh: 'box-mh', fmax: 'frame-max', fpx: 'frame-px' } as const;
+  for (const [suffix, layout] of Object.entries(layouts)) {
+    for (const [key, name] of Object.entries(names)) vars[`--cmsc-section-${name}${suffix}`] = layout[key as keyof typeof names];
+  }
+  return vars;
 }
 
 /** Whether a background paints something of its own: a colour, a gradient, media or the decorative layer. */
@@ -384,13 +477,20 @@ function SectionShell({
 }: SectionFrameProps & { group: SectionGroupInfo | null }): ReactNode {
   const ref = useRef<HTMLElement>(null);
   // Its own background pair only: a block inside it (a hero) plays its own media.
-  useBreakpointVideo(ref, ':scope > .cmsc-section__media video[data-bp]');
+  useBreakpointVideo(ref, ':scope > .cmsc-section__media video[data-bp]', {
+    mobileMedia: pictureMobileMedia(settings?.background?.desktopFrom),
+  });
   // The section reveal fades its frame up (R-21); a word reveal is a block's, so it fades here too.
   useReveal(ref, settings?.reveal, { disabled: editing === true || tier !== undefined });
 
   const anchor = typeof settings?.anchor === 'string' && SECTION_ANCHOR_RE.test(settings.anchor) ? settings.anchor : undefined;
   const scheme = settings?.scheme && settings.scheme !== 'inherit' ? settings.scheme : undefined;
-  const width = settings?.width ?? 'contained';
+  // R19C (T260): the width per breakpoint. The editor canvas renders its tier's
+  // as one value; the page, one value when the tiers agree (a stored single
+  // width included), else `tiered`, each tier's box and frame as variables.
+  const widths = widthTiers(settings?.width);
+  const tiered = tier === undefined && !(widths.base === widths.tablet && widths.tablet === widths.desktop);
+  const width: SectionWidth | 'tiered' = tiered ? 'tiered' : tier === undefined ? widths.base : widths[tier === 'mobile' ? 'base' : tier];
   const background = settings?.background && settings.background.kind ? settings.background : undefined;
   const hasMedia = background !== undefined && (background.kind === 'image' || background.kind === 'video');
 
@@ -406,7 +506,9 @@ function SectionShell({
   const bottom = spacingTiers(settings?.spaceBottom ?? defaults?.spaceBottom, DEFAULT_SECTION_SPACE);
   // T124: a background wider than the page container may hold its content in another frame.
   const contentWidth =
-    settings?.contentWidth !== undefined && SECTION_WIDTHS_WITH_CONTENT_WIDTH.includes(width) ? settings.contentWidth : undefined;
+    settings?.contentWidth !== undefined && width !== 'tiered' && SECTION_WIDTHS_WITH_CONTENT_WIDTH.includes(width)
+      ? settings.contentWidth
+      : undefined;
   const maxWidth = width === 'custom' || contentWidth === 'custom' ? maxWidthTiers(settings?.customMaxWidthPx) : null;
   const overlap = overlapTiers(settings?.overlap, tier);
   // T158: in a painting group, a Section with no background and no other scheme shows the group's paint.
@@ -419,6 +521,7 @@ function SectionShell({
           ...tierVars('pb', bottom),
           ...(maxWidth ? tierVars('max', maxWidth) : {}),
           ...(overlap ? tierVars('overlap', overlap) : {}),
+          ...(tiered ? tieredVars(widths, settings) : {}),
         }
       : {
           '--cmsc-section-pt': pickTier(top, tier),
@@ -517,7 +620,9 @@ const GROUP_SPACE: SpaceValue = 'none';
 
 function SectionGroupShell({ settings, tier, children }: SectionGroupFrameProps): ReactNode {
   const ref = useRef<HTMLDivElement>(null);
-  useBreakpointVideo(ref, ':scope > .cmsc-section-group__paint > .cmsc-section__media video[data-bp]');
+  useBreakpointVideo(ref, ':scope > .cmsc-section-group__paint > .cmsc-section__media video[data-bp]', {
+    mobileMedia: pictureMobileMedia(settings?.background?.desktopFrom),
+  });
 
   const anchor = typeof settings?.anchor === 'string' && SECTION_ANCHOR_RE.test(settings.anchor) ? settings.anchor : undefined;
   const scheme = settings?.scheme && settings.scheme !== 'inherit' ? settings.scheme : undefined;

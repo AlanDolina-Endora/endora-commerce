@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Data } from '@puckeditor/core';
 import {
+  CMS_PAGE_PATH_MAX_LEVELS,
+  cmsPagePublicPaths,
   firstSlugSegment,
   slugify as slugifyText,
   type CmsBreadcrumbsScheme,
+  type CmsPagePathNode,
   type CmsPageDetail,
   type CmsPageSummary,
 } from '@endora-commerce/contracts';
@@ -40,8 +43,12 @@ interface FormState {
   metaDescription: string;
   metaKeywords: string;
   parentPageId: string | null;
+  /** R19D — serve the page under its parent's path. */
+  parentPathInUrl: boolean;
   breadcrumbsVisible: boolean;
   breadcrumbsScheme: CmsBreadcrumbsScheme;
+  /** R21H (T355): the trail over the first section. */
+  breadcrumbsOverlay: boolean;
   /** Feature 163 (FR-033) — `null` means the deployment default applies. */
   shareImageAssetId: string | null;
 }
@@ -55,10 +62,15 @@ const blankForm: FormState = {
   metaDescription: '',
   metaKeywords: '',
   parentPageId: null,
+  parentPathInUrl: false,
   breadcrumbsVisible: true,
   breadcrumbsScheme: 'light',
+  breadcrumbsOverlay: false,
   shareImageAssetId: null,
 };
+
+/** The id the page being edited takes in the path rule before it has one. */
+const UNSAVED_PAGE_ID = 'unsaved-page';
 
 /** Spelled out rather than built, so every label key is a literal a key check can find. */
 const BREADCRUMB_SCHEME_LABEL_KEYS: ReadonlyArray<[CmsBreadcrumbsScheme, string]> = [
@@ -149,6 +161,42 @@ export function PageEditor(): ReactNode {
   const [parentLabel, setParentLabel] = useState('');
   /** The rows the parent picker must not offer: this page and its descendants. */
   const [excludedParentIds, setExcludedParentIds] = useState<readonly string[]>([]);
+  /**
+   * R19D: the ancestors whose slugs the address is built from — the parent,
+   * and further up while each one includes its own parent's path. Read only
+   * while the option is on; a failed read leaves the flat address shown, and
+   * the backend serves the path whatever the preview said.
+   */
+  const [pathAncestors, setPathAncestors] = useState<readonly CmsPagePathNode[]>([]);
+
+  useEffect(() => {
+    if (!form.parentPathInUrl || !form.parentPageId) {
+      setPathAncestors([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const chain: CmsPagePathNode[] = [];
+      let nextId: string | null = form.parentPageId;
+      while (nextId && chain.length < CMS_PAGE_PATH_MAX_LEVELS && !chain.some((node) => node.id === nextId)) {
+        const ancestor = await cmsClient.getPage(nextId);
+        const node: CmsPagePathNode = {
+          id: ancestor.id,
+          slug: ancestor.slug,
+          parentPageId: ancestor.parentPageId ?? null,
+          parentPathInUrl: ancestor.parentPathInUrl ?? false,
+        };
+        chain.push(node);
+        nextId = node.parentPathInUrl ? node.parentPageId : null;
+      }
+      if (!cancelled) setPathAncestors(chain);
+    })().catch(() => {
+      if (!cancelled) setPathAncestors([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.parentPageId, form.parentPathInUrl]);
 
   const load = useCallback(async () => {
     if (isNew || !id) return;
@@ -164,8 +212,10 @@ export function PageEditor(): ReactNode {
       metaDescription: loaded.meta?.['en-US']?.description ?? '',
       metaKeywords: loaded.meta?.['en-US']?.keywords ?? '',
       parentPageId: loaded.parentPageId ?? null,
+      parentPathInUrl: loaded.parentPathInUrl ?? false,
       breadcrumbsVisible: loaded.breadcrumbsVisible ?? true,
       breadcrumbsScheme: loaded.breadcrumbsScheme ?? 'light',
+      breadcrumbsOverlay: loaded.breadcrumbsOverlay ?? false,
       shareImageAssetId: loaded.shareImageAssetId ?? null,
     });
     setScope({ salesChannelIds: loaded.salesChannelIds, languages: loaded.languages });
@@ -222,7 +272,21 @@ export function PageEditor(): ReactNode {
    * value another module owns, so an absolute address here would be either *n*
    * addresses or one arbitrary pick.
    */
-  const publicPath = form.slug.trim().length > 0 ? `/${form.slug.trim()}` : null;
+  const publicPath = useMemo(() => {
+    const slug = form.slug.trim();
+    if (slug.length === 0) return null;
+    // R19D: the address under the parent's path, by the rule the backend
+    // serves it with (`cmsPagePublicPaths`). Read off each page's own slug —
+    // a channel may serve a page under another, which the editor cannot show
+    // for *n* channels at once, as above.
+    const self: CmsPagePathNode = {
+      id: page?.id ?? UNSAVED_PAGE_ID,
+      slug,
+      parentPageId: form.parentPageId,
+      parentPathInUrl: form.parentPathInUrl,
+    };
+    return `/${cmsPagePublicPaths([...pathAncestors, self]).get(self.id) ?? slug}`;
+  }, [form.slug, form.parentPageId, form.parentPathInUrl, page?.id, pathAncestors]);
 
   /** The reserved segment this slug would lose to, or `null` (§5.1, US4.2). */
   const reservedSegment = (() => {
@@ -292,8 +356,10 @@ export function PageEditor(): ReactNode {
         languages: scope.languages,
         ...(meta ? { meta } : {}),
         parentPageId: form.parentPageId,
+        parentPathInUrl: form.parentPathInUrl,
         breadcrumbsVisible: form.breadcrumbsVisible,
         breadcrumbsScheme: form.breadcrumbsScheme,
+        breadcrumbsOverlay: form.breadcrumbsOverlay,
         shareImageAssetId: form.shareImageAssetId,
       });
     }
@@ -308,8 +374,10 @@ export function PageEditor(): ReactNode {
       languages: scope.languages,
       ...(meta ? { meta } : {}),
       parentPageId: form.parentPageId,
+      parentPathInUrl: form.parentPathInUrl,
       breadcrumbsVisible: form.breadcrumbsVisible,
       breadcrumbsScheme: form.breadcrumbsScheme,
+      breadcrumbsOverlay: form.breadcrumbsOverlay,
       shareImageAssetId: form.shareImageAssetId,
       version: page.version,
     });
@@ -556,6 +624,18 @@ export function PageEditor(): ReactNode {
                 />
                 <p className="text-xs text-muted-foreground">{t('pageEditor.breadcrumbs.parentHelp')}</p>
               </div>
+              {/* R19D: off by default, so a stored page keeps its flat address. */}
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.parentPathInUrl}
+                    onChange={(event) => setForm({ ...form, parentPathInUrl: event.target.checked })}
+                  />
+                  {t('pageEditor.parentPathInUrl')}
+                </label>
+                <p className="text-xs text-muted-foreground">{t('pageEditor.parentPathInUrlHelp')}</p>
+              </div>
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -579,6 +659,18 @@ export function PageEditor(): ReactNode {
                     </option>
                   ))}
                 </Select>
+              </div>
+              {/* R21H (T355): the trail over the first section instead of a band above it; off by default. */}
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.breadcrumbsOverlay}
+                    onChange={(event) => setForm({ ...form, breadcrumbsOverlay: event.target.checked })}
+                  />
+                  {t('pageEditor.breadcrumbs.overlay')}
+                </label>
+                <p className="text-xs text-muted-foreground">{t('pageEditor.breadcrumbs.overlayHelp')}</p>
               </div>
             </CardContent>
           </Card>

@@ -36,7 +36,7 @@ the look the blocks had before the screen existed.
 | Typography | The heading font and the body font (see [Fonts](#fonts)), and the type scale: Display, Heading 1–6, Lead, Body and Small, each with a mobile and a desktop size, line height, weight, letter spacing and whether it uses the heading or the body font. Heading 1–6 also apply to the headings written inside rich text (a Rich Content block, a block's rich body). |
 | Buttons | Corner shape (square, rounded or pill), the heights of small, medium and large buttons, the label weight and the label case. |
 | Spacing | The named steps a section's top and bottom spacing is chosen from — none, extra small, small, medium, large, extra large, largest — each with a mobile and a desktop size. |
-| Layout | The content width, the wide content width, and the side margin on mobile and on desktop. |
+| Layout | The content width, the wide content width, and the side margin on mobile and on desktop. The content width is the page container — 1360 px, side margins included, until changed; set it wider for a wider frame on every CMS page: Contained sections, content held in the page container, and the page's breadcrumb trail all follow it. Two optional factors scale the type and the spacing steps between breakpoints: **Type and spacing scale on a tablet (768–1023 px)** multiplies the mobile sizes there (for example 1.15 for 15 % larger), and **Type and spacing scale on a small desktop (1024–1279 px)** the desktop sizes. Empty is 1: nothing changes. Sizes a block sets in pixels of its own (a **Custom (px)** size or space) are not scaled. Two further optional settings, off by default: **Grow the desktop sizes with the window after the small desktop** makes the sizes grow with the window width from the small-desktop factor at 1280 px to the full desktop sizes at **Full desktop sizes from (px, default the page container width)**; **Scale button heights with the type and spacing** applies the factors to the button heights too (an icon-only button follows, as it is sized from them). |
 
 A **Preview** shows a sample in each of the three schemes with the values on
 screen, before you save.
@@ -252,7 +252,32 @@ starting with `/` onto the public API address, as they do a relative video URL.
 | `--cmsb-container`, `--cmsb-wide`, `--cmsb-gutter` | Layout |
 
 Sizes that differ on desktop are rebound inside one
-`@media (min-width: 1024px)` block. For each heading level `h1`–`h6` whose
+`@media (min-width: 1024px)` block. With a tablet factor other than 1
+(`tierScale.tablet`), a `@media (min-width: 768px) and (max-width: 1023.98px)`
+block before it rebinds every `--cmsb-t-<token>-size` and `--cmsb-space-<step>`
+to the mobile value times the factor; with a small-desktop factor
+(`tierScale.smallDesktop`), a `@media (min-width: 1024px) and (max-width:
+1279.98px)` block after it does the same from the desktop values. The gutter
+and the container are not scaled. Without factors neither block is written,
+so the output is byte for byte the same as before. Two further optional
+settings extend these blocks (each writes nothing while unset):
+
+- `tierScale.fluidDesktop: true`, with a small-desktop factor below 1, adds a
+  block from the small-desktop end to `tierScale.fluidUntilPx` (else
+  `layout.containerMaxPx`) where every desktop type size and spacing step is
+  `clamp(<value × factor>px, <value × 100 / end>vw, <value>px)` — the factor
+  rising with the window width to 1 at the end;
+- `tierScale.buttons: true` writes `--cmsb-btn-h-s|m|l` into the tablet,
+  small-desktop and fluid blocks too, scaled the same way.
+
+The small-desktop range always ends at 1279.98 px, as every block's
+stylesheet assumes, and the gutter and the page container are the same at
+every tier between phone and desktop. A block's own **Custom (px)** values are
+written as literal px and are not scaled. Keys an earlier draft of this screen
+stored (`smallDesktopUntilPx`, `blockPx`, `buttonLabels`, the per-tier
+gutters and container, `fluidContainer`, `breadcrumbsPaddingYPx`,
+`trackingMobileEm`) are dropped the next time the brand is saved and write
+nothing meanwhile. For each heading level `h1`–`h6` whose
 type style is set, the output also holds one rule giving that level's headings
 inside rich text (`.cmsc-pb-rich-content`, `.cmsc-pb-rich`,
 `.cmsc-pb-hero__body`, `.cmsc-pb-feature-list__body`) the level's size, line

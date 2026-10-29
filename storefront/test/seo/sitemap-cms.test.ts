@@ -100,6 +100,22 @@ describe('the sitemap tells crawlers the CMS pages exist', () => {
     expect(urls).toContain(`${ORIGIN}/pomoc/zwroty`);
   });
 
+  it('advertises a nested page at its public path, never at its flat slug (163 R19D)', async () => {
+    getCmsPageIndex.mockResolvedValue({
+      pages: [
+        { slug: 'uslugi', path: 'uslugi', updatedAt: '2026-09-01T10:00:00.000Z' },
+        { slug: 'doradztwo', path: 'uslugi/doradztwo', updatedAt: '2026-09-02T10:00:00.000Z' },
+      ],
+    });
+
+    const urls = await sitemapUrls();
+
+    // The flat slug of a nested page answers a permanent redirect to its path,
+    // and a sitemap never advertises a URL that redirects.
+    expect(urls).toContain(`${ORIGIN}/uslugi/doradztwo`);
+    expect(urls).not.toContain(`${ORIGIN}/doradztwo`);
+  });
+
   it('is short rather than a 500 when the backend cannot answer (US3.3)', async () => {
     getCmsPageIndex.mockRejectedValue(new Error('connect ECONNREFUSED'));
 

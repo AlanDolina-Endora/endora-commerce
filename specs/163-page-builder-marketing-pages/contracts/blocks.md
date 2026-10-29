@@ -1209,3 +1209,572 @@ translatable prose (links, gaps, alignment, weights, sources, colours).
   before T216, so unset cannot mean "inherit"). Other colour fields: a stored `currentColor` /
   `inherit` reads as inherited, an emptied box stores nothing as before; the `transparent`
   placeholder is translated (`pageBuilder.fieldText.color.transparent`).
+
+## R19A: text and content options (T223–T239)
+
+Every option is optional; unset (or `default`) writes nothing, so a stored block's markup is
+byte-identical. Sizes are a type token or `custom` + `…Px`; sizes, weights, line heights, max
+widths and px spaces are per breakpoint (Responsive tab, declared in `responsiveFields`).
+
+- **Shared text style (T223, `textStyleAttrs`).** Size (font size only: the token's
+  `var(--cmsb-t-<token>-size, <px>)` or the px), weight (300–800), line height (0.8–3) and colour
+  on the text element: one value for every breakpoint is inline; values that differ add
+  `cmsc-pb-ts-size` / `-weight` / `-leading` and `--pb-ts-<name>(-md|-lg)`, every tier written, a
+  tier on Default carrying the block's own value. The rules close the stylesheet.
+- **`cms.FeatureList` (T224, T225).** `bodySize`/`bodySizePx`, `bodyWeight`, `bodyLineHeight`,
+  `bodyColor` on `.cmsc-pb-feature-list__body`; `titleLineHeight` on the title; `iconSpacePx` /
+  `titleSpacePx` as `--cmsc-fl-icon-space` / `--cmsc-fl-title-space(-md|-lg)` on the list (today's
+  8 px / 4 px as fallbacks); `iconPosition: 'beside'` writes `data-icon-position="beside"` on the
+  list: each item is a two-column grid, the icon spanning the title and the text rows, baseline
+  aligned, the gap `--cmsc-fl-icon-space` (12 px fallback).
+- **Hanging inline icon (T226).** `InlineRich`'s `hangingIcon`: a text whose first node is an
+  inline icon renders `<span class="cmsc-hang"><span class="cmsc-hang__icon">…</span><span
+  class="cmsc-hang__text">…</span></span>` (the whitespace after the icon dropped; inline-flex,
+  baseline, gap `--cmsc-hang-gap`, 0.35em). `cms.Heading.hangingIcon` (switch) and
+  `hangingIconGapPx` (shown with it on).
+- **`cms.Hero` (T227–T230).** `subheadingWeight` / `statementWeight`, `…LineHeight`,
+  `…MaxWidth` / `…MaxWidthPx` (as the title's); `bodySize` (Default = today's 16 px) /
+  `bodySizePx`, `bodyWeight`, `bodyLineHeight`, `bodyMaxWidth` / `bodyMaxWidthPx` on
+  `.cmsc-pb-hero__body`. `gaps` offers `custom` with `gapsPx` (a Custom tier with no px reads as
+  `m`, as an unknown value always did). With image or video media `above`, `mediaSpace` (spacing
+  token or `custom` + `mediaSpacePx`) writes `--cmsc-hero-media-space(-md|-lg)`, read as the
+  media's `margin-bottom` (0 fallback); the fields show only then. The social-proof image's 40 px
+  height now out-ranks `.cmsc-picture > img` (`.cmsc-pb-hero__proof > .cmsc-pb-hero__proof-image
+  > img`).
+- **`cms.Statement` (T231).** Over a background image, `minHeight` (`default` = 60vh, `auto`,
+  `half`, `tall`, `screen`, `custom` + `minHeightPx`) as `--cmsc-statement-min-h(-md|-lg)` on the
+  root; `headingLineHeight`; `bodySize`/`bodySizePx` (Default 18 px), `bodyWeight`,
+  `bodyLineHeight`, `bodyColor`.
+- **`cms.Text` (T232).** `text` is the inline rich-text field (`canvas: true`); a document renders
+  through `InlineRich` in the same `<p>`, a stored string as before. Translatable path `text`
+  becomes `format: 'tiptap'`.
+- **Rich text (T233).** Mark `textSize` (`attrs.size`): a type token →
+  `<span class="cmsc-fs cmsc-fs--<token>">`, `'<8–200>px'` → `<span class="cmsc-fs"
+  style="font-size: Npx">` (the sanitizer keeps `font-size` in px on a `<span>` only). Bullet list
+  `listStyle`: `check` (as before), `chevron` (`›`), `none` → `cmsc-list--<marker>`. The editor's
+  toolbar: **Text size** select (+ px input) and **List marker** select (core
+  `pageBuilder.fieldText.textSize*` / `listMarker*`). `cms.RichContent.textSize` / `textSizePx`
+  size the prose.
+- **Gradient emphasis (T234).** `.cmsc-em--gradient` uses `box-decoration-break: slice`: one
+  gradient across a wrapped run (a one-line run renders as before).
+- **`cms.Stats` (T235).** `labelSize`/`labelSizePx`, `labelWeight`, `labelColor`; with an image,
+  from 768 px: `imageSpan`, `figuresSpan`, `figuresOffset` (any set →
+  `cmsc-pb-stats-block--columns`, a 12-column grid with `--cmsc-stats-media-col` /
+  `--cmsc-stats-figures-col`, mirrored for `imageSide: 'end'`; unset ones: image 6, offset 0,
+  figures the rest) and `figuresAlign` (`data-figures-align`: `start`, `end`, `spread` — the grid's
+  rows `space-between` over the image's height; `center`/unset writes nothing).
+- **`cms.LinkList` (T236).** `titleSize`/`titleSizePx`, `titleWeight` (Default 600 at the text
+  size) on `.cmsc-pb-link-list__title`.
+- **`cms.CtaCard` (T237).** `cardRadius` (`default` = 12 px, or `none`/`small`/`medium`/`large`)
+  inline; `imageInset` (`none` = 0, `custom` + `imageInsetPx`) adds `cmsc-pb-cta-card--image-inset`
+  and `--cmsc-cta-image-inset`: negative margins take the image to that distance from the card's
+  edges (the card's own padding is 32/24 px, 48 px from 768 px).
+- **`cms.MediaText` (T238).** `sideBySide: 'desktop'` writes `data-side-by-side="desktop"`: the rows
+  stay stacked (in `mobileOrder`) between 768 and 1023 px.
+- **`cms.Row` (T239).** `rowGap` already took a value per breakpoint (`--pb-row-gap(-md|-lg)`); a
+  single stored number applies at every width. No code change; a test now holds it.
+
+## R19B: carousel controls, buttons, download tiles, image cards, sign-up layout (T240–T259)
+
+Widening only (plan § *Extend, don't narrow*): every option is optional, nothing is in any
+`defaultProps`, an unset option renders today's markup byte for byte (each test file has an
+"unset renders today's markup" case). Only `cms.CarouselImage.moreLabel` is translatable
+(`translatable: [..., { path: 'moreLabel' }]`); every other prop below is carried as non-prose in
+`cms/block-declarations.test.ts`. Labels en + pl in the declaring module's bundle (`cms`,
+`catalog`, `blog`, `newsletter`).
+
+| Prop / shape | Blocks | Shape | Default |
+| --- | --- | --- | --- |
+| `controls.dotColor` / `controls.activeDotColor` | Carousel, `catalog.ProductSlider`, `blog.LatestPosts` | colour value (hex or `token:<role>`) | unset = the scheme's (`--cmsc-dot`, `--cmsc-dot-active`; the dark scheme draws light dots, the active one `--cmsb-fg`), else today's greys |
+| `controls.arrowGlyphColor` | same | colour value; read by the `solid` look and a solid next arrow | unset = today's white |
+| `controls.hideArrowsOn` / `controls.hideDotsOn` | same | `HideOn` (`{ mobile?, tablet?, desktop? }`, the block "Hide on" control relabelled) | unset = shown wherever on |
+| `controlsPlacement` value `slide` | `cms.ContentSlider` only (`CONTENT_SLIDER_PLACEMENT_OPTIONS`) | one more `CarouselControlsPlacement`, per breakpoint | — |
+| `footerButtonAlign` | `catalog.ProductSlider`, `catalog.ProductGrid` | `'start' \| 'center' \| 'end'` (Left / Center / Right) | unset / `start` = today's |
+| `transparentOutline` | `cms.Button` | `boolean` (switch, shown with an outline fill) | unset = today's scheme-filled outline |
+| `iconSizePx` | `cms.Button` | `number \| Responsive<number>` (24–200), Responsive tab, icon-only buttons only | unset = the size option's height |
+| `borderColor` | `cms.Button` | colour value | unset = the fill's border |
+| `scheme` | `cms.DownloadTile` | `'inherit' \| 'light' \| 'muted' \| 'dark'` → `data-cmsb-scheme` on the link | unset / `inherit` = the section's |
+| `cardBackground` / `cardBorder` / `cornerRadius` | `cms.DownloadTile` | colour value / `boolean` (`false` = no border) / `CornerRadius` | unset = today's card |
+| `paddingPx` / `titleSizePx` | `cms.DownloadTile` | `number \| Responsive<number>` (0–120 / 10–120), Responsive tab | unset = 20 px / 18 px |
+| `showType` | `cms.DownloadTile` | `boolean` (`false` hides the type badge) | unset = shown |
+| `hoverImageLook` | `cms.DownloadTile` | `'faint' \| 'full'` (`full`: opacity 1 under a dark gradient, white text) | unset / `faint` = today's 18 % |
+| `linkLook` / `iconButtonSizePx` / `iconButtonBorderColor` | `cms.DownloadTile` | `'label' \| 'icon'` / `Responsive<number>` (24–200) / colour value | unset = today's text label |
+| `moreLabel` / `moreLabelPlacement` / `moreLabelSizePx` / `moreLabelIcon` | `cms.CarouselImage` | text (translatable) / `'bottom-right' \| 'bottom-left' \| 'top-right' \| 'top-left'` / `Responsive<number>` (10–64) / icon catalog key | unset = no label; bottom right; 14 px |
+| `captionPaddingPx` | `cms.CarouselImage` | `Responsive<number>` (0–120), replaces `captionStyle.paddingPx` inline | unset = `captionStyle.paddingPx` as today |
+| `captionPlacement` | `cms.Image` | `ImageCaptionPlacement \| Responsive<…>` (was one value), Responsive tab | a stored value = every breakpoint's |
+| `captionSizePx` / `captionAlign` / `captionWeight` / `captionColor` | `cms.Image` | `Responsive<number>` (8–64) / `Responsive<'start' \| 'center' \| 'end'>` / `TextWeight` / colour value | unset = today's small muted caption at the start |
+| `buttonPlacement` / `fieldShape` | `newsletter.Signup` | `'beside' \| 'inside'` / `'rounded' \| 'pill'` (shown with `inside`) | unset = today's button beside the field |
+| `topicsColumns` / `hideEmailLabel` | `newsletter.Signup` | `number` (1–4) / `boolean` | unset = today's wrapping row / visible label |
+
+- **Carousel markup** (`CarouselShell`): `--pb-dot-color`, `--pb-dot-active-color`,
+  `--pb-arrow-glyph` on the root; root classes `cmsc-pb-carousel--arrows-off-sm|md|lg` and
+  `--dots-off-sm|md|lg` (the stylesheet hides the carousel's own arrows / dots there by child
+  combinators); a row of controls (below, header, dots row, the header itself when it holds only
+  the controls) left empty at a breakpoint gets `cmsc-pb-carousel__controls--off-*` there. In the
+  editor a hidden previewed tier hides at every width. A header holding only the controls (no
+  heading, lead or button) puts them at its end (`:first-child` rule) — before, they sat at its
+  start.
+- **Controls inside a split slide** (`controlsPlacement: 'slide'`): `CarouselSlides` provides each
+  slide's position (`SlidePositionContext`, no markup); `CarouselSlideControls` (exported, rendered
+  at the end of `cms.CarouselSplit`'s text column) draws
+  `.cmsc-pb-carousel__controls.cmsc-pb-carousel__controls--slide` with the arrows, dots and pause
+  button; the copies in slides other than the shown page carry `inert` and `aria-hidden`. Where
+  `slide` applies the shell also renders `cmsc-pb-carousel__controls--below
+  cmsc-pb-carousel__controls--slide-fallback`, removed by
+  `.cmsc-pb-carousel:has(> .cmsc-pb-carousel__viewport .cmsc-pb-carousel__controls--slide)`, so a
+  carousel of other items keeps its controls. The editor previews `slide` as `below`. Free-content
+  `cms.Slide`s draw no controls (that would need a controls block of its own).
+- **Button** (`ButtonView` `look` + `tier`): `--cmsc-btn-outline-bg: transparent`,
+  `--cmsc-btn-border: <colour>` inline; an icon-only button with a size gets
+  `cmsc-btn--icon-size` and `--pb-btn-size(-md|-lg)` (published; a tier set only from a breakpoint
+  up falls back to the size option's `var(--cmsb-btn-h-*)`), its icon `calc(var(--cmsc-btn-h) * 0.4)`.
+- **Download tile**: `--pb-dl-bg`, `--pb-dl-radius`, `--pb-dl-pad(-md|-lg)`,
+  `--pb-dl-title(-md|-lg)`, `--pb-dl-btn(-md|-lg)`, `--pb-dl-btn-ring` (only what is set,
+  `responsivePxVars`), classes `--no-border`, `--hover-full`, `--icon-link`; the icon look renders
+  the label as `cmsc-sr-only` and an `aria-hidden` `.cmsc-pb-download-tile__icon-button` with the
+  catalog's `download` icon. The tile stays one `<a download>`.
+- **Carousel image**: `.cmsc-pb-carousel-image__more(--<corner>)` inside
+  `.cmsc-pb-carousel-image__media` (so inside the item's link), colour from `captionStyle.color`,
+  `--pb-more-size(-md|-lg)` on the figure; `captionPaddingPx` adds
+  `cmsc-pb-carousel-image--caption-pad` and `--pb-caption-pad(-md|-lg)`, also the label's inset.
+- **Image caption**: `data-caption` stays the base placement (the editor's previewed one);
+  `data-caption-md` / `data-caption-lg` only where a breakpoint changes it; a styled caption is
+  `cmsc-pb-image__caption--styled` with `--pb-img-caption(-md|-lg)`,
+  `--pb-img-caption-align(-md|-lg)`, an inline `font-weight` and `color`. The figure's width rule
+  follows the base placement.
+- **Sign-up**: `cmsc-pb-signup--button-inside` (+ `--pill`) wraps the input and the one submit
+  button in `.cmsc-pb-signup__control`; `cmsc-pb-signup__topics--columns` with
+  `--pb-topic-cols`; a hidden label is `cmsc-pb-signup__label cmsc-sr-only`. The posted fields are
+  unchanged. `cms.NewsletterSignup` (external endpoint) shares no code with it and is unchanged.
+- **Fields shown only where they apply**: the dot colours and "Hide the dots on" with dots; "Hide
+  the arrows on" with arrows; the glyph colour with a solid arrow; the footer alignment with a
+  labelled footer button; the outline switch with an outline fill; the icon size with an icon-only
+  button; the tile's icon-button settings with the icon look and its hover look with a hover image;
+  the read-more label's look once it has text; the image caption's look with a caption; the field
+  shape with the button inside and the topic columns with topics.
+
+## R19C: section width per breakpoint, background outset, mobile art tier, panel text box (T260–T265)
+
+- **`cms.Section.width` (T260)** is `Responsive<SectionWidth>`, on the Responsive tab; a single
+  stored width is read as it is. Published: when the tiers resolve to one width the markup is
+  today's (`data-width="<width>"`); when they differ, `data-width="tiered"` and, per tier
+  (`''`, `-md`, `-lg`), `--cmsc-section-box-w`, `--cmsc-section-box-m` (the centring margin),
+  `--cmsc-section-box-o` (the outset), `--cmsc-section-box-mh` (min height: `100svh` for
+  `viewport`, else `auto`), `--cmsc-section-frame-max` and `--cmsc-section-frame-px` — the
+  values the `data-width` rules give that width, `contentWidth` applied at the tiers whose width
+  admits one (`full`, `viewport`, `bleed`); no `data-content-width` is written then. The editor
+  canvas renders its tier's width as one value. `contentWidth`, `customMaxWidthPx` and
+  `outsetPx` show when any tier's width takes them.
+- **`custom` wider than the page container (T262):** the stylesheet widens a `custom` section to
+  `max(100%, min(<max>, 100vw - 2 * gutter))`, centred (`--cmsc-section-w`); at or below the
+  container's content width nothing changes.
+- **`cms.Section.outsetPx` (T261):** `Responsive<number>` 0–400, Responsive tab, with a
+  `contained` or `custom` width (ignored with `full`, `viewport`, `wide`, `bleed`). Published:
+  `data-outset="1"` and `--cmsc-section-outset(-md|-lg)` when any tier is above 0; the box grows
+  by `min(outset, (100vw - width) / 2)` per side and its side padding by as much. Unset or 0
+  everywhere: nothing is written.
+- **`cms.Column.outsetPx` (T265):** `Responsive<number>` 0–400, Responsive tab. Published:
+  `data-pb-outset="1"` and `--pb-col-outset(-md|-lg)` on the cell; the box (`> *`) widens by the
+  outset per side with negative side margins, its `.cmsc-pb-bg-content` padded back. Editor: the
+  previewed tier's value as `--pb-col-outset`.
+- **`desktopFrom` (T263)** on `ResponsiveImage` and `SectionBackground`: `'tablet'` (unset, the
+  768 px switch) or `'desktop'`. `Picture` writes `(max-width: 1023.98px)` on the mobile
+  `<source>` for `'desktop'`; a section background's tiled image or video pair marks
+  `.cmsc-section__media[data-desktop-from="desktop"]` and `useBreakpointVideo` watches the 1024 px
+  query. Admin: **Mobile image shown on** (image field) / **Mobile image or video shown on**
+  (background field), shown with a mobile image or video; the default writes nothing.
+- **`cms.BackgroundPanel.textBoxTransparent` (T264):** a switch after the text placement; `true`
+  writes `data-text-box="transparent"` on `.cmsc-pb-panel` and the text box paints no
+  background. Unset: today's markup.
+- **Box margin and padding (T266):** already per breakpoint on every block that has them — the
+  shared fields carry the responsive metadata; a guard test holds that every block offering them
+  lists them in `responsiveFields`.
+
+## R20E: fixes, embedded-button look, hero texts, download tile link, caption measures (T290–T309)
+
+Widening only (plan § *Extend, don't narrow*): every option is optional, nothing is in any
+`defaultProps`, an unset option renders today's markup byte for byte (each test file has an
+"unset" case). Nothing below is translatable. Labels en + pl in the `cms` bundle; the button look
+fields are shared fields, translated once in `core` (`pageBuilder.sharedFields.button*`).
+
+| Prop / shape | Blocks | Shape | Default |
+| --- | --- | --- | --- |
+| `transparentOutline` / `iconSizePx` / `borderColor` | every `ButtonSpec` (Hero, MediaText, CtaCard, BackgroundPanel, Statement, carousel split slides, section and listing headers, listing footers, link rows) | `boolean` / `Responsive<number>` (24–200, icon-only) / colour value | unset = today's |
+| `iconOnlyShape` / `iconOnlyWidthPx` | every `ButtonSpec`, and `cms.Button` (block-level, beside its R19B look) | `'circle' \| 'pill'` / `Responsive<number>` (24–400) | unset = today's circle; a pill without a width is 1.15 × its height |
+| `titleLineHeight` | `cms.Hero` | `Responsive<number>` (0.8–3) | unset = the size's own |
+| `eyebrowColor` / `titleColor` / `subheadingColor` / `statementColor` / `bodyColor` | `cms.Hero` | colour value, inline `color` on the element | unset = the hero's `textColor` |
+| `eyebrowSizePx` / `eyebrowWeight` / `eyebrowLineHeight` / `eyebrowUppercase` | `cms.Hero` | `Responsive<number>` (10–200) / `ResponsiveTextWeight` / `Responsive<number>` / `boolean` (`false` = `cmsc-pb-hero__eyebrow--plain`) | unset = today's 14 px 600 uppercase |
+| `proofCaptionPlacement` | `cms.Hero` | `Responsive<'beside' \| 'below'>` → `data-caption(-md\|-lg)` on `.cmsc-pb-hero__proof` | unset = no attribute (today's wrapping row) |
+| `proofCaptionSizePx` / `proofCaptionMaxWidthPx` / `proofCaptionWeight` / `proofCaptionColor` | `cms.Hero` | `Responsive<number>` (10–200 / 40–1200) / `TextWeight` / colour value | unset = today's 14 px caption |
+| `bodyListMarkerColor` | `cms.Hero` | colour value → `--cmsc-list-marker` on the body | unset = today's markers |
+| `listMarkerColor` | `cms.RichContent` | colour value → `--cmsc-list-marker` on the prose | unset = today's markers |
+| `linkTo` / `link` | `cms.DownloadTile` | `'file' \| 'link'` / `LinkValue` (shown with `link`; the file without it) | unset = a file |
+| `minHeightPx` / `subtitleSizePx` / `subtitleColor` | `cms.DownloadTile` | `Responsive<number>` (0–1200 / 8–64) / colour value | unset = 180 px / 14 px muted |
+| `moreLabelColor` / `moreLabelIconColor` / `moreLabelWeight` | `cms.CarouselImage` | colour value / colour value / `TextWeight` (shown once the label has text) | unset = the caption's colour, 600 |
+| `captionMinWidthPx` / `captionMaxWidthPx` | `cms.Image` | `Responsive<number>` (0–1200 / 40–1200) → `cmsc-pb-image__caption--measure`, `--pb-img-caption-min\|max(-md\|-lg)` | unset = none |
+
+- **One button path (T297)**: `ButtonView` merges the spec's look under the block's own
+  (`cms.Button`'s block-level options win); a pill adds `cmsc-btn--icon-pill` and
+  `--pb-btn-width(-md|-lg)`. `specAtTier` resolves `iconSizePx` and `iconOnlyWidthPx` to the
+  previewed tier. `cms.Button`'s `button` object field omits the look (it stays block-level, as
+  stored); the admin's `createButtonSpecField({ look: false })`.
+- **Download tile link (T303)**: `cmsc-pb-download-tile--page-link`, the link's `href` / `target` /
+  `rel`, no `download` attribute, no type badge, the icon button's `arrowRight`; a link that
+  resolves to nothing renders nothing published and a `role="note"` warning in the preview.
+- **Hero proof caption (T300)**: the caption below is `flex-basis: 100%` in the wrapping row;
+  `cmsc-pb-hero__proof-caption--measure` with `--pb-hero-proof-max(-md|-lg)`; size and weight
+  through `textStyleAttrs` (`cmsc-pb-ts-size` per breakpoint).
+- **Fixes**: the download tile's `--pb-dl-title-md|lg` rules now follow the base title rule (T290;
+  a stylesheet-order test guards every `-md`/`-lg` tier rule); a Column's outset is the cell's
+  negative side margins (`max-width: none`) and the box keeps its own side margins, `width: auto`
+  (T291); a caption on the read-more label's edge gets `cmsc-pb-carousel-image--more-clear-top|bottom`
+  and is lifted by the label's inset plus line box (T292); `cms.Image` with the base caption below
+  and a breakpoint beside, with a set width, becomes `cmsc-pb-image__figure--tiered`
+  (`--pb-img-fig-w`, the media in `.cmsc-pb-image__media`) (T293); `isEmptyInline` treats blank
+  text and hard breaks as empty, and the published `cms.Heading` writes no element for an empty
+  text (T294); `MediaTextMediaFrame` passes the `<video>` key directly (T295).
+- **Fields shown only where they apply**: the eyebrow's look with an eyebrow; the proof caption's
+  with a caption; the pill and its width on `cms.Button` with an icon-only button (the width with
+  the pill); the tile's file or link by `linkTo`; the label's colour and weight once it has text;
+  the image caption's measure with a caption.
+
+## R20F: split-slide layout, carousel controls alignment, block spacing, tier type scale (T310–T324)
+
+Every option is optional; unset writes nothing and the stored markup is unchanged. "Per
+breakpoint" values are `Responsive<…>` on the Responsive tab, each tier inheriting the one below,
+resolved in the block: a tier is written as `--<name>`, `--<name>-md` or `--<name>-lg` only where
+a value reaches it, and the stylesheet reads each with the block's own value at that tier as the
+fallback (`tierVars`, `packages/cms-components/src/components/tier-vars.ts`).
+
+- **`cms.CarouselSplit` (T310–T312):** `sideBySide` (`'tablet' | 'desktop'`; `desktop` writes
+  `data-side-by-side="desktop"`, stacked 768–1023 px); `mediaSpan`, `textSpan` (1–11),
+  `textOffset` (0–10) — any set: `.cmsc-pb-carousel-split--columns` and
+  `--cmsc-split-media-col` / `--cmsc-split-text-col` (`<start> / span <n>` on a 12-column grid
+  from 768 px, gap `--cmsb-gutter`; media 6 and offset 0 unless set, the text the rest; mirrored
+  for `mediaSide: 'end'`); `mediaCornerRadius` (`CornerRadius`, inline `border-radius` on the
+  media; unset 8 px); `titleSize` / `titleSizePx`, `titleWeight`, `titleLineHeight`, `bodySize` /
+  `bodySizePx`, `bodyWeight`, `bodyLineHeight` (per breakpoint, R19A `textStyleAttrs`; the title
+  keeps `cmsc-t--h4`); `titleHangingIcon` (`boolean`, R19A T226's `.cmsc-hang`) with
+  `titleHangingIconGapPx` (per breakpoint, `--cmsc-hang-gap(-md|-lg)` on the title).
+- **Carousel controls (T313, T314; `cms.ContentSlider`, `catalog.ProductSlider`,
+  `blog.LatestPosts`):** `controlsAlign` accepts `'dots-start'` (root
+  `cmsc-pb-carousel--ctl(-md|-lg)-dots-start`; the dots row `order: -1` with
+  `margin-inline-end: auto`, so the arrows sit together at the end; the markup's order is
+  unchanged). A set `controlsAlign` also aligns the row inside a split slide:
+  `cmsc-pb-carousel__controls--al-<v>`, `--al-md-<v>`, `--al-lg-<v>`, every tier written; unset,
+  that row keeps today's start. `controls.arrowsWhenFit` (`boolean`, shown with arrows): when every
+  slide fits the controls stay, both arrows `disabled`, the dots `hidden` (box kept); the disabled
+  look (`disabledArrowLook`) then applies on a looping carousel too. Shell prop
+  `keepArrowsWhenFit`.
+- **`cms.MediaText` (T315):** `headingSpacePx`, `bodySpacePx`, `stackedGapPx` (per breakpoint,
+  0–200; root classes `cmsc-pb-media-text--heading-space|--body-space|--stacked-gap`, properties
+  `--cmsc-mt-heading-space|body-space|stacked-gap`; fallbacks 16 px, 0, 24 px); `bodySize` /
+  `bodySizePx` (per breakpoint), `bodyLineHeight` on every row's text; `rows[].verticalAlign`
+  (`BlockAlign | 'inherit'`; unset or `inherit` is the block's `verticalAlign`).
+- **`cms.BackgroundPanel` (T316):** `mobileLayout` (`'stack' | 'overlay'`; `overlay` writes
+  `data-mobile-layout="overlay"`: below 768 px the image and the text share one grid cell, the
+  image at its own height, the text at its top or, with `mobileTextPosition: 'bottom'`, its
+  bottom); `textBoxMarginPx`, `textBoxPaddingPx` (per breakpoint, 0–200; classes
+  `cmsc-pb-panel--box-margin|--box-padding`, `--cmsc-panel-box-m|p`; fallbacks 0 / 24 px on
+  phones, 32 / 40 px from the tablet).
+- **`cms.FeatureList` (T317):** `rowGapPx` (per breakpoint; `cmsc-pb-feature-list--row-gap`,
+  `--cmsc-fl-row-gap`; `gap` then spaces the columns only), `titleLetterSpacing` (em, −0.1–0.2,
+  inline on the titles), `listLineHeight` (per breakpoint; `--list-leading`, `--cmsc-fl-list-lh`
+  on lists in the item text), `bodySpacePx` (per breakpoint; `--body-space`,
+  `--cmsc-fl-body-space` between the item text's paragraphs; fallback 0.5em).
+- **`cms.CtaCard` (T318):** `paddingPx` (per breakpoint, 0–160; `cmsc-pb-cta-card--padding`,
+  `--cmsc-cta-pad`; the image inset measures from it) and, with an image, `imageColumns` (per
+  breakpoint, 2–10 columns of 12 from the tablet up; `cmsc-pb-cta-card--image-cols`,
+  `--cmsc-cta-cols-md|lg` holding the two tracks, mirrored for `imageSide: 'start'`).
+- **`cms.Stats` (T319):** `labelLineHeight` (per breakpoint).
+- **`cms.LinkList` (T320):** `dividerAfterLast` (`boolean`, with `divider` on;
+  `cmsc-pb-link-list--divided-end` draws the rule under the last row).
+- **`cms.Accordion` (T321):** `icon` accepts `'chevron-circle'` (root `--chevron` and
+  `--chevron-circle`; the chevron drawn in `--cmsb-bg` on a circle 1.5 × the icon size) with
+  `iconCircleColor` (colour value; `--cmsc-acc-icon-circle`; unset, the title colour).
+- **Brand tokens (T322):** optional `tierScale: { tablet?: number; smallDesktop?: number }`
+  (0.5–2). `brandTokensToCss` writes, for a factor other than 1,
+  `@media (min-width: 768px) and (max-width: 1023.98px){:root{…}}` (before the desktop block) with
+  every `--cmsb-t-<token>-size` and `--cmsb-space-<step>` = mobile px × factor, and
+  `@media (min-width: 1024px) and (max-width: 1279.98px){:root{…}}` (after it) from the desktop
+  px; two decimals; gutter and container unscaled. Unset or 1: byte-identical output. Sizes a
+  block sets in its own px (Custom) are not scaled.
+
+## R21G: social-proof caption fix, stacking breakpoints, column layouts, text options (T330–T338)
+
+Every option is optional; unset writes nothing and the stored markup is unchanged (as R20F: per
+breakpoint values written only where a value reaches the tier, `tierVars` / R19A
+`textStyleAttrs`).
+
+- **`cms.Hero` (T330, fix; T331):** with `proofCaptionPlacement` `'below'` at a tier, the caption
+  starts a line of its own whatever its `proofCaptionMaxWidthPx`: the proof row draws a
+  zero-height `::before` of `flex-basis: 100%` (`order: 1`) between the image (`order: 0`) and the
+  caption (`order: 2`), the row gap becoming the caption's 12 px top margin; `'beside'` at a wider
+  tier undoes it. CSS only, no markup change. `proofCaptionLineHeight` (per breakpoint) on the
+  caption.
+- **`cms.MediaText` (T332, T333):** `mediaSpan`, `textSpan` (1–11), `textOffset` (0–10) — any
+  set: `.cmsc-pb-media-text--columns` and `--cmsc-mt-media-col`, `--cmsc-mt-text-col` (media at
+  the start) and `--cmsc-mt-media-col-end`, `--cmsc-mt-text-col-end` (media at the end) on the
+  root, a 12-column grid from the side-by-side tier in place of `split` (gap `--cmsb-gutter`; the
+  shared `twelveColumns` helper, also `cms.CarouselSplit`'s); stacked 768–1023 px with
+  `sideBySide: 'desktop'`. `listMarkerColor` (`--cmsc-list-marker` on the root), `bodyWeight` and
+  `headingLineHeight` (per breakpoint).
+- **`cms.CtaCard` (T334), with an image:** `mobileImagePosition` (`'above' | 'below'`; `below`
+  writes `data-mobile-image="below"`: while stacked the image follows the text and an inset runs
+  along the sides and the bottom); `sideBySide` (`'tablet' | 'desktop'`; `desktop` writes
+  `data-side-by-side="desktop"`, stacked 768–1023 px with the tablet's padding). `imageInsetPx`
+  becomes per breakpoint: one number (as stored) writes today's one `--cmsc-cta-image-inset`;
+  per-tier values write `--cmsc-cta-image-inset`, `-md`, `-lg` only where set, the stylesheet
+  reading the one below. `bodySize` / `bodySizePx` (the text) and `listSize` / `listSizePx` (the
+  list) per breakpoint.
+- **`cms.Stats` (T335):** `sideBySide` (`'tablet' | 'desktop'`, with an image;
+  `data-side-by-side="desktop"` stacks image and figures 768–1023 px).
+- **`cms.CarouselSplit` (T336):** `bodyIndent` (`'none' | 'title'`; offered with
+  `titleHangingIcon`): `title` with a title that starts with an inline icon writes
+  `cmsc-pb-carousel-split--body-indent` — the text column a two-column grid (`auto` and the rest,
+  column gap `--cmsc-hang-gap(-md|-lg)`, now also written on the column), the title a subgrid whose
+  items are the hanging icon and text (`.cmsc-hang` `display: contents`), the body in the second
+  column. `stackedGapPx`, `titleSpacePx`, `controlsSpacePx` (per breakpoint, 0–200; root classes
+  `--stacked-gap|--title-space|--controls-space`, `--cmsc-split-stacked-gap|title-space|controls-space`;
+  fallbacks 24, 12, 24 px; the controls' space is the slide controls' top margin).
+- **`cms.Image` (T337):** `desktopFrom` (`'tablet' | 'desktop'`, with a mobile image; R19C's
+  `pictureMobileMedia`: `desktop` keeps the mobile source below 1024 px).
+- **`cms.Heading` (T337):** `textMaxWidth` / `textMaxWidthPx` (per breakpoint, T134's measure:
+  `cmsc-text-max` and `--cmsc-text-max(-md|-lg)`; the editor previews it inline).
+- **`cms.RichContent` (T338):** `listLineHeight` (per breakpoint;
+  `cmsc-pb-rich-content--list-leading`, `--cmsc-rc-list-lh` on `ul` and `ol`).
+- **`cms.Accordion` (T338):** `titleLineHeight` (per breakpoint; one value inline on each title,
+  values per tier as `cmsc-pb-accordion--title-leading` and `--cmsc-acc-title-lh(-md|-lg)`, every
+  tier written, today's — the size token's or inherited — where none is chosen).
+- **`newsletter.Signup` (T338):** `buttonHeightPx` (per breakpoint, 24–120;
+  `cmsc-pb-signup--button-height`, `--cmsc-signup-btn-h`; fallbacks 44 px, 36 px inside the
+  field), `buttonTextSizePx` (per breakpoint) and `buttonWeight` on the button.
+- **`catalog.ProductGrid`, `catalog.ProductSlider` (T338):** `leadSize` / `leadSizePx`,
+  `leadWeight` (per breakpoint) and `leadColor`: the lead's text wrapped in
+  `<span class="cmsc-pb-carousel__lead-text">` through the shared header's `lead` hook
+  (`listingLeadOptions`); the header itself is unchanged.
+- **`cms.DownloadTile` (T338):** `titleWeight` (inline on the title).
+- **Not done:** a brand bold weight (`fonts.boldWeight`) — see tasks.md T339.
+
+## R21H: breakpoint tiers, breadcrumbs over the first section, carousel small-desktop tier (T350–T357)
+
+Every option is optional; unset renders today's markup and today's brand CSS byte for byte.
+
+- **Per-breakpoint type token (T350, bug):** a text sized by a different type token per tier
+  (`sizedTextProps` — carousel header heading, section heading, item texts; `HeroText`;
+  `cms.Heading`) adds `cmsc-pb-text-token` and `--pb-text-lh|w|ls` (`-md`, `-lg`) =
+  `var(--cmsb-t-<tier token>-lh|w|ls, <built-in>)`; a Custom px tier reads the class token. The
+  rule sits after `.cmsc-t--*` and before `.cmsc-pb-text-weight` / `.cmsc-pb-text-leading`, so a
+  block's own weight or line height still wins. One token at every tier: nothing new. **Visible
+  change** for stored texts with a mixed token (their line height / weight / tracking now follow the
+  tier's token).
+- **Brand tier range (T351):** `tierScale.smallDesktopUntilPx` (integer 1024–3840; unset 1279)
+  ends the small-desktop block at `<value>.98px`; `tierScale.fluidDesktop` (+ `fluidUntilPx`, else
+  `layout.containerMaxPx`) adds `@media (min-width: <until+1>px) and (max-width: <end-1>.98px)`
+  with `clamp(<px × factor>px, <px × 100 / end>vw, <px>px)` per desktop type size and spacing step
+  (only with a small-desktop factor below 1).
+- **Buttons (T352):** `tierScale.buttons: true` adds `--cmsb-btn-h-s|m|l` to the tablet,
+  small-desktop and fluid blocks (height × factor); icon-only and pill buttons follow (sized from
+  `--cmsc-btn-h`).
+- **Frame per tier (T353):** `layout.gutterTabletPx` (tablet block `--cmsb-gutter`),
+  `layout.gutterSmallDesktopPx` and `layout.containerSmallDesktopPx` (small-desktop block
+  `--cmsb-gutter`, `--cmsb-container`). Every consumer of the two variables follows.
+- **Carousel small-desktop tier (T354):** `slidesPerViewSmallDesktop` (number 1–8, step 0.25) and
+  `gapSmallDesktopPx` (number 0–160) on every carousel (`CAROUSEL_TRACK_FIELDS`: ContentSlider,
+  ProductSlider, LatestPosts), layout fields after `gapPx`. **Decision:** dedicated props, not a
+  fourth `Responsive<T>` key — the type has three tiers everywhere (fields, editor preview,
+  manifests), and a fourth would be a global change. Published: `--pb-spv-sd` / `--pb-gap-sd` on
+  the root (not for a fade carousel), read by
+  `@media (min-width: 1024px) and (max-width: 1279.98px)` (`var(--pb-spv-sd, <desktop chain>)`);
+  a brand with `smallDesktopUntilPx` rebinds the moved range in its own CSS
+  (`:root .cmsc-pb-carousel`). The editor preview shows the desktop values.
+- **Breadcrumbs over the first section (T355):** page-level `breadcrumbsOverlay` (see
+  storefront-and-admin-api.md §2, data-model §1.1). Storefront: a zero-height
+  `relative z-20 h-0` layer (`data-cmsb-scheme`, `data-breadcrumbs-overlay`) holding the trail
+  absolutely in the brand container; no band, nothing below moves. The first section's top padding
+  is the editor's (documented), not added automatically.
+
+## R22I: 12-column gaps and anchors, row alignment, list columns and block options (T370–T382)
+
+Every option is optional; unset writes nothing and the stored markup is unchanged, except the two
+fixes marked **visible**.
+
+- **12-column gap (T370, bug):** `.cmsc-pb-stats-block--columns`,
+  `.cmsc-pb-carousel-split--columns` and `.cmsc-pb-media-text--columns .cmsc-pb-media-text__row`
+  read `column-gap: var(--cmsc-grid-gap(-md|-lg), var(--cmsb-grid-gap, var(--cmsb-gutter, 24px)))`
+  (768 px and 1024 px rules) instead of the bare side gutter; the Row's `.cmsc-pb-gap` fallback
+  reads the same chain (a Row always writes its own gap, so it is never reached). New
+  `columnGapPx` (per breakpoint, 0–200) on `cms.Stats` (with an image's columns),
+  `cms.MediaText` and `cms.CarouselSplit` (with their columns of 12) writes
+  `--cmsc-grid-gap`, `-md`, `-lg` (`tierVars`) beside the column variables; offered only with the
+  columns of 12. **Decision:** the default is unchanged — the brand writes no `--cmsb-grid-gap`
+  today, so every render keeps today's gutter. `--cmsb-grid-gap` is the hook for a brand that sets
+  a per-tier gutter (`layout.gutterTabletPx`, `gutterSmallDesktopPx`, R21H) to keep the base
+  tier's gutter as the grids' gap there; writing it is the brand CSS's (not done here).
+- **Columns anchor (T371):** `columnsAnchor` (`'media' | 'start' | 'end'`) on `cms.MediaText` and
+  `cms.CarouselSplit`, offered with the columns of 12, read by `twelveColumns`: `media` (unset,
+  today's) anchors the pair at the media's side (media at the end ends at column 12); `start`
+  starts it at column 1 and `end` ends it at column 12 whatever the side (e.g. 5 / 1 / 5 with
+  media at the end: `start` gives text `1 / span 5`, media `7 / span 5`).
+- **Card list columns (T372, bug, visible):** `@media (768–1023.98px)`
+  `.cmsc-pb-cta-card[data-side-by-side='desktop'] > .cmsc-pb-cta-card__text >
+  .cmsc-pb-cta-card__list[data-columns='2']` is one column: the two-column list follows the card's
+  side-by-side tier (a card stacked to the desktop showed two columns from 768 px). CSS only.
+- **Row alignment (T373, bug, visible):** `cms.Column` no longer carries `cmsc:self-stretch`, so
+  the Row's `align-items` (`.cmsc-pb-cols-align[data-align*]`, inline in the editor) places its
+  columns on published pages too; `stretch` (default) is unchanged. `rowVerticalAlign` reads a
+  stored `'center'` (`cms.MediaText`'s wording) as `'middle'`, per tier, in render and editor.
+- **`cms.CtaCard` (T374):** `headingSpacePx` (per breakpoint, 0–200;
+  `cmsc-pb-cta-card--heading-space`, `--cmsc-cta-heading-space(-md|-lg)`, fallback 16 px),
+  `bodyWeight` (per breakpoint, `textStyleAttrs` on the text), `textMaxWidth` / `textMaxWidthPx`
+  (per breakpoint, T134's measure on `.cmsc-pb-cta-card__body`).
+- **`cms.Stats` (T375):** `valueLineHeight` (per breakpoint) through the new `tierLeading`: one
+  value inline; values per tier as `cmsc-pb-lh`, `cmsc-pb-lh-md`, `cmsc-pb-lh-lg` with
+  `--pb-lh(-md|-lg)`, **each class written only for a tier a value reaches**, so a tier below the
+  first set keeps the size token's line height. The rules double the class and sit last in the
+  stylesheet (they beat `.cmsc-pb-text-token` and a block's own rule).
+- **`cms.MediaText` (T376):** `featureBodySize` / `featureBodySizePx`, `featureBodyWeight` (per
+  breakpoint) and `featureBodyColor` on `.cmsc-pb-media-text__feature-body` (`textStyleAttrs`,
+  today's 15 px / 1.55).
+- **`cms.RichContent` (T377):** `textWeight` (per breakpoint, on the prose wrapper) and
+  `listWeight` (per breakpoint; `cmsc-pb-rich-content--list-weight`, `--cmsc-rc-list-w(-md|-lg)`
+  on `ul` and `ol`, fallback `inherit`).
+- **`cms.FeatureList` (T378):** `iconPosition` becomes per breakpoint: one position (stored or the
+  same at every tier) is today's `data-icon-position="beside"` (or nothing); positions that differ
+  write `data-icon-position`, `-md`, `-lg` (`above` | `beside`), the stylesheet placing the icon
+  beside or undoing it per tier. `items[].span` (1–12): any item with one adds
+  `cmsc-pb-feature-list--spans` and `--cmsc-fl-default-span` (12 ÷ desktop columns) on the list,
+  `--cmsc-fl-span` on the item; from 1024 px the list has 12 tracks and each item spans its width.
+  `titleWeight` was already per breakpoint (type corrected to `ResponsiveTextWeight`).
+- **Carousel header (T379):** `headingLineHeight` (per breakpoint, `tierLeading` as T375) in
+  `CAROUSEL_HEADER_FIELDS` — `cms.ContentSlider`, `catalog.ProductSlider`,
+  `catalog.ProductGrid`, `blog.LatestPosts`. `cms.LinkList` `titleLineHeight` (per breakpoint,
+  `textStyleAttrs` on the row titles). `blog.LatestPosts` `leadWeight` (per breakpoint, on the
+  lead's `ItemText` span).
+- **`newsletter.Signup` (T380):** `topicLabelSizePx` (per breakpoint, 10–40, offered with topics;
+  `cmsc-pb-signup__topics--label-size`, `--cmsc-signup-topic-size(-md|-lg)` on the fieldset,
+  fallback 0.875 rem); `buttonIcon` (an icon-catalog name): the glyph after the label
+  (`svg.cmsc-pb-signup__button-icon`, `aria-hidden`), the button `cmsc-pb-signup__button--icon`
+  (inline-flex, 8 px gap). The sign-up's button is not a `ButtonSpec`, so the catalog name is its
+  own prop.
+- **`cms.Testimonial` (T381):** `quoteSize` / `quoteSizePx` (per breakpoint, `textStyleAttrs` on
+  the quote; today's 1.15 rem / 1.55).
+- **`cms.DownloadTile` (T382):** `iconButtonIcon` (an icon-catalog name, offered with
+  `linkLook: 'icon'`): the icon button's glyph; unset or unknown, today's (download, or an arrow
+  for a link). The icon catalog gains `cloudDownload`.
+
+## R22J: fluid frame, block px scaling, button labels, breadcrumbs (T390–T409)
+
+Brand opt-in flags (`cms-brand.ts`, data-model §2). Unset, the brand CSS is today's byte for byte
+and the page's markup is today's wherever a block sets no Custom px value.
+
+- **Fluid container (T390):** `layout.fluidContainer: true` — in the fluid range
+  (`tierScale.fluidDesktop`, a small-desktop factor below 1) `--cmsb-container` is
+  `clamp(<floor>px, <containerMaxPx × 100 / until>vw, <containerMaxPx>px)`, the floor
+  `containerSmallDesktopPx`, else `containerMaxPx × factor`; `--cmsb-gutter` grows the same way from
+  `gutterSmallDesktopPx` to `gutterDesktopPx` when the first is narrower. Every reader of the two
+  variables (the page shell, Contained sections, row inners, the breadcrumb trail) follows.
+- **Block px scaling (T391–T392):** every block's own **Custom (px)** value for a size, a space, a
+  gap, a padding, a minimum height or a maximum width is written by `blockPx(n)`
+  (`components/block-px.ts`) as `calc(<n> * var(--cmsb-px, 1px))` (zero stays `0px`);
+  `tierScale.blockPx: true` makes the brand write `--cmsb-px` per tier (`<factor>px`; fluid:
+  `clamp(<factor>px, <100 / until>vw, 1px)`). **Decision:** the wrapping is unconditional — a block
+  renders without knowing the brand, and a render context threaded into every helper call was
+  rejected as far more invasive — so a block value that is **set** changes form in the markup
+  (`24px` → `calc(24 * var(--cmsb-px, 1px))`), while its computed value is identical whenever
+  `--cmsb-px` is unset (no brand, the flag off, phones, desktops past the fluid end). Unset options
+  still write nothing; a caller's code default (a section default spacing, a fallback px) stays
+  literal. `fallback-parity.test.tsx` holds computed values (its `resolveVars` computes the
+  scaled-pixel product as a browser does). `--cmsb-px` is a length, not a factor, because the
+  fluid value is a `vw` length and CSS cannot divide a length into a number portably.
+  Covered: `pxCss` / `tierVars` / `pxTierOption`, `responsivePxVars`, `textStyleAttrs` (Custom px
+  size), `gapCss` and the item/heading Custom sizes in `section-parts.tsx`, `cms.Heading` (Custom
+  size, hanging-icon gap), `cms.Hero` (Custom sizes, min height, gaps, space after), the Section
+  frame and Section group (editor `{px}` spacing, overlap, custom max width, outset), `cms.Spacer`,
+  `cms.Statement` min height, `textMaxWidth` Custom px, `ButtonView` icon-only size and pill width,
+  the carousel gap (`CarouselShell`), `cms.Image` custom width, `cms.Accordion` icon size,
+  `CmsProductCard` max width and image height, `CarouselImage` caption padding, `LogoStrip` logo
+  height, `cms.Map` height — and every block that writes through the shared helpers above.
+  Not covered (literal px): `cms.Row` / `cms.Column` own gaps, max width and outset
+  (`Row.tsx`, `Column.tsx`), `CtaCard`'s local `pxOrNull`, `DownloadTile`'s radius, `FeatureList`'s
+  local `px`, `ItemIcon` sizes, the core
+  `buildResponsiveNumberVars` / `buildResponsiveSpacingVars` / `spacingToCss` (box padding and
+  margin, always written with their defaults), radii and border widths (by design), the
+  editor-only `editingTypographyStyle` font size, `CategoryList` depth indent, `ContactFormEmbed`
+  height, and the catalog skeletons.
+- **Button labels (T393):** `tierScale.buttonLabels: true` writes `--cmsb-btn-px` per tier; the
+  stylesheet sizes `.cmsc-btn` labels `calc(14 * var(--cmsb-btn-px, 1px))` (small 13, large 16);
+  the icon (`1.15em`) follows. A separate flag rather than widening `tierScale.buttons`, so a brand
+  stored with `buttons: true` keeps its output.
+- **Breadcrumb colours (T394, bug):** on a painted trail (`muted`, `dark`; band or overlay) the
+  links take `--cmsb-fg-muted` (hover `--cmsb-fg`) and the current page `--cmsb-fg`; the link colour
+  is no longer used there. Light is unchanged.
+- **Breadcrumb band padding (T395):** brand `layout.breadcrumbsPaddingYPx` (integer 0–64) pads the
+  painted band above and below at every breakpoint (inline `padding-top` / `padding-bottom`
+  replacing `pt-[24px] pb-[16px] max-md:pt-[16px]`). **Decision:** brand-level, not page-level —
+  one band look per site, no migration; the light trail and the overlay are not bands and keep
+  their spacing.
+- **Tracking below desktop (T396):** `typeScale.<token>.trackingMobileEm` (−0.1–0.2) is the
+  token's `-ls` below 1024 px; `trackingEm` then rebinds in the desktop block.
+
+## R22K: merge follow-ups (T410–T414)
+
+- **Brand grid gap (T410, R22I's T384):** `brandTokensToCss` writes `--cmsb-grid-gap` beside a
+  per-tier gutter — tablet block with `layout.gutterTabletPx` (the phone gutter, else 24 px),
+  small-desktop block with `layout.gutterSmallDesktopPx` (the desktop gutter, else the phone one,
+  else 24 px), fluid block beside a growing gutter (the desktop gutter). The grids' chain
+  `var(--cmsc-grid-gap…, var(--cmsb-grid-gap, var(--cmsb-gutter, 24px)))` therefore keeps the base
+  gutter where the side gutter changes. No per-tier gutter: nothing written.
+- **Row and Column px (T411, R22J's T400 in part):** `cms.Row` writes `--pb-gap`, `--pb-row-gap`
+  and `--pb-row-max-width` (`-md`, `-lg`) through `scaledNumberVars` (`block-px.ts`): a stored value
+  as `calc(N * var(--cmsb-px, 1px))`, an unstored one as today's literal default; the editor's
+  inner max width the same. `cms.Column` writes `--pb-col-outset(-md|-lg)` through `blockPx` (zero
+  stays `0px`). The Row's `minHeight` and the box padding and margins stay literal.
+
+## R23: simplification of the R19–R22 options (T430–T469)
+
+**Pixel-matching options removed per owner decision** (data-model §7 holds the full lists of added,
+removed and narrowed props). The R19–R22 sections above describe what was built; where they name a
+prop listed here, R23 governs. Nothing of R19–R22 was released: no migration, and readers never
+crash on a removed prop — it is ignored data. Anything stored before R19 renders byte for byte as
+before (`option-parity.test.ts`, `fallback-parity.test.tsx`, and an offline render of a pre-R19 tree
+against the pre-R19 renderer).
+
+- **No block px scaling (T431):** R22J's `blockPx` / `--cmsb-px` and R22K's Row/Column scaled vars
+  are gone; every block writes its Custom px as a literal px, as before R22J. `buttonLabels` /
+  `--cmsb-btn-px` are gone; button labels are today's 14/13/16 px.
+- **Brand (T432–T433):** no `smallDesktopUntilPx` (the small-desktop tier ends at 1279 px), no
+  per-tier gutter or container, no `fluidContainer`, no `breadcrumbsPaddingYPx` (the painted band
+  keeps `pt-[24px] pb-[16px] max-md:pt-[16px]`), no `trackingMobileEm`; no `--cmsb-grid-gap` — the
+  grids read `var(--cmsc-grid-gap…, var(--cmsb-gutter, 24px))`. The brand schema strips the keys on
+  parse. Kept: `tierScale.tablet`, `smallDesktop`, `fluidDesktop`, `fluidUntilPx`, `buttons`, the
+  T394 trail colours, `breadcrumbsOverlay`.
+- **Carousels (T434, T448):** no small-desktop slides-per-view or gap tier (R21H T354); the dots
+  take the scheme's colours only (no `dotColor` / `activeDotColor`).
+- **One typography rule (T435):** `textStyleAttrs` writes a type-token size's line height, weight
+  and letter spacing (`--cmsb-t-<token>-lh|-w|-ls`, built-in fallbacks) beside its size; a line
+  height is written, and its field shown, only at a breakpoint whose size is Custom px
+  (`customOnlyLeading`, `customLeadingAttrs`). The weights R19–R22 added are one value; a stored
+  per-breakpoint weight reads as `desktop`, else `base` (`singleWeight`).
+- **Colours (T436):** per-text colours fold into the block's text colour; accents stay
+  (`cms.Hero.eyebrowColor`, `cms.Stats.valueColor`, the listings' `leadColor`, list marker colours).
+- **Spacing steps (T437):** the per-element px spaces become one `BlockSpace` select (Default,
+  None, XS–XXL) — `innerSpace`, `stackedGap`, `cardPadding`, `headingSpace` — written as
+  `var(--cmsb-space-<step>, <phone px> | <desktop px>)` per tier.
+- **12-column presets (T438, T440):** `layout` (`'default' | '6-6' | '7-5' | '5-7' | '8-4' | '4-8' |
+  '5-1-6' | '6-1-5'`) on `cms.CarouselSplit`, `cms.Stats` and (two tracks only) `cms.CtaCard`;
+  `cms.MediaText` keeps `split`. `layoutAdvanced` shows the raw numbers, which then win; a stored
+  raw number without the switch and without a preset reads as on (`usesAdvancedLayout`), and
+  `resolveData` stores the switch on so the editor shows them.
+- **Smaller removals (T439, T441–T447, T449):** `cms.Heading.hangingIconGapPx` and
+  `cms.CarouselSplit.titleHangingIconGapPx` (the indent keeps 0.35 em); `cms.Accordion`'s
+  `chevron-circle` (reads as `chevron`) and `iconCircleColor`; the rich-text size mark's Custom px
+  option (a stored px mark still renders and sanitises); `newsletter.Signup`'s button height, label
+  size and weight and topic label size; `cms.DownloadTile`'s icon-button size and border colour and
+  subtitle size and colour; `cms.CarouselImage`'s read-more label size, colours, weight and caption
+  padding; `cms.Image`'s caption weight, colour and minimum width; `ButtonSpec` / `cms.Button`
+  `iconSizePx` and `iconOnlyWidthPx` (a pill is 1.15 × its height); `cms.Section.outsetPx`;
+  `cms.BackgroundPanel` text-box margin and padding px.
+- **Added Custom size selects:** `cms.Hero.eyebrowSize`, `cms.DownloadTile.titleSize`,
+  `cms.Image.captionSize` — a token or Custom px, so the existing `…SizePx` field is the Custom
+  value. A stored px without a size reads as Custom (`resolveData` stores `'custom'`).

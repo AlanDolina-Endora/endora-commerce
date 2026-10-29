@@ -132,6 +132,11 @@ function inlineNodes(value: InlineRichText | string | null | undefined): InlineR
   return Array.isArray(doc?.content) ? (doc.content[0]?.content ?? []) : [];
 }
 
+/** R21G (T336): whether a text begins with an inline icon — what a hanging indent hangs. */
+export function leadsWithInlineIcon(value: InlineRichText | string | null | undefined): boolean {
+  return inlineNodes(value)[0]?.type === 'inlineIcon';
+}
+
 /** How many words the word reveal splits an inline rich text into — where a following text's stagger starts. */
 export function countInlineRichWords(value: InlineRichText | string | null | undefined): number {
   let count = 0;
@@ -150,12 +155,44 @@ export interface InlineRichProps {
    * its marks; whitespace stays text, so the text reads the same.
    */
   wordStart?: number;
+  /**
+   * R19A (T226): a text that begins with an icon hangs the rest beside it —
+   * `<span class="cmsc-hang">` holding the icon and the text in two boxes, so a
+   * wrapped line starts under the text, not under the icon. The whitespace
+   * after the icon becomes the boxes' gap. A text with no leading icon renders
+   * as without it.
+   */
+  hangingIcon?: boolean;
 }
 
-export function InlineRich({ value, wordStart }: InlineRichProps): ReactNode {
+/** The text after a leading icon, its first run's leading whitespace dropped (the gap replaces it). */
+function afterLeadingIcon(nodes: InlineRichNode[]): InlineRichNode[] {
+  const rest = nodes.slice(1);
+  const first = rest[0];
+  if (first?.type === 'text' && typeof first.text === 'string') {
+    const trimmed = first.text.replace(/^\s+/, '');
+    return trimmed === '' ? rest.slice(1) : [{ ...first, text: trimmed }, ...rest.slice(1)];
+  }
+  return rest;
+}
+
+export function InlineRich({ value, wordStart, hangingIcon = false }: InlineRichProps): ReactNode {
   const nodes = inlineNodes(value);
   if (nodes.length === 0) return null;
   const counter = wordStart === undefined ? null : { next: wordStart };
+  const lead = hangingIcon && nodes[0]?.type === 'inlineIcon' ? renderNode(nodes[0], counter) : null;
+  if (lead !== null) {
+    return (
+      <span className="cmsc-hang">
+        <span className="cmsc-hang__icon">{lead}</span>
+        <span className="cmsc-hang__text">
+          {afterLeadingIcon(nodes).map((node, index) => (
+            <Fragment key={index}>{renderNode(node, counter)}</Fragment>
+          ))}
+        </span>
+      </span>
+    );
+  }
   return (
     <>
       {nodes.map((node, index) => (

@@ -133,6 +133,27 @@ export const cmsBrandTokensSchema = z.object({
     gutterMobilePx: z.number().int().min(0).max(160),
     gutterDesktopPx: z.number().int().min(0).max(160),
   }),
+  /**
+   * R20F (T322): optional factors on the type sizes and spacing steps — the
+   * phone values × `tablet` from 768 to 1023 px, the desktop values ×
+   * `smallDesktop` from 1024 to 1279 px. Unset (or 1): today's sizes.
+   */
+  tierScale: z
+    .object({
+      tablet: z.number().min(0.5).max(2).optional(),
+      smallDesktop: z.number().min(0.5).max(2).optional(),
+      /**
+       * R21H (T351): above the small-desktop tier, the desktop sizes grow with
+       * the viewport from the small-desktop factor to 1, reached at
+       * `fluidUntilPx` (unset: `layout.containerMaxPx`). Only with a
+       * small-desktop factor below 1.
+       */
+      fluidDesktop: z.boolean().optional(),
+      fluidUntilPx: z.number().int().min(1025).max(3840).optional(),
+      /** R21H (T352): the brand's button heights follow the factors too. */
+      buttons: z.boolean().optional(),
+    })
+    .optional(),
 });
 export type CmsBrandTokens = z.infer<typeof cmsBrandTokensSchema>;
 

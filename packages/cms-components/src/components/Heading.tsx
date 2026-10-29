@@ -12,6 +12,7 @@ import {
   resolveTextAlignForTier,
   responsiveTextAlignClass,
   textAlignDataAttrs,
+  createToggleField,
   withHideOn,
   type BreakpointTier,
   type ResponsiveProp,
@@ -28,6 +29,8 @@ import type {
 import { logicalAlign, physicalAlign } from './block-align.js';
 import { BoxStyled } from './box-styles.js';
 import { InlineRich } from './InlineRich.js';
+import { isEmptyInline, tokensOf } from './section-parts.js';
+import { textMaxWidthAttrs, textMaxWidthFields, usesCustomTextMaxWidth } from './text-max-width.js';
 import {
   BOX_BORDER_FIELD,
   BOX_MARGIN_FIELD,
@@ -43,6 +46,7 @@ import {
   HEADING_FONT_CSS,
   isTypeToken,
   TYPE_SCALE_FALLBACKS,
+  tokenTierStyle,
   typeTokenSizeCss,
   typographyStyle,
 } from './typography.js';
@@ -186,6 +190,13 @@ function headingLook(props: HeadingProps, tag: HeadingTag, tier: BreakpointTier 
       '--pb-text-size-md': sizeCss(sizes.tablet, 'tablet'),
       '--pb-text-size-lg': sizeCss(sizes.desktop, 'desktop'),
     });
+    // R21H (T350): each tier's token's line height, weight and tracking (a token size only;
+    // a literal size has its own weight and line height below).
+    if (token !== null) {
+      const tiered = tokenTierStyle(tokensOf(sizes), token);
+      classes.push(...tiered.classes);
+      Object.assign(style, tiered.style);
+    }
   }
   if (ownWeight) {
     classes.push('cmsc-pb-text-weight');
@@ -211,16 +222,26 @@ const HeadingEditingRender: PuckComponent<HeadingProps> = (puckProps) => {
   const Tag = normalizeHeadingTag(level);
   const align = renderAlign(props);
   const look = headingLook(props, Tag, tier);
+  // R21G (T337): the measure, the previewed tier's inline, moved with a centred or right-aligned text.
+  const measure = textMaxWidthAttrs(props, tier);
+  const editingAlign = resolveTextAlignForTier(align, tier, 'left');
+  const measureStyle: CSSProperties = measure
+    ? {
+        ...measure.style,
+        ...(editingAlign === 'center' ? { marginLeft: 'auto', marginRight: 'auto' } : {}),
+        ...(editingAlign === 'right' ? { marginLeft: 'auto' } : {}),
+      }
+    : {};
 
   return (
     <BoxStyled previewTier={tier} {...box}>
       <Tag
-        className={`${look.className} cmsc-pb-text-align`}
-        style={{ ...look.style, textAlign: resolveTextAlignForTier(align, tier, 'left') }}
+        className={`${look.className} cmsc-pb-text-align${measure ? ` ${measure.className}` : ''}`}
+        style={{ ...look.style, ...measureStyle, textAlign: editingAlign }}
         {...textAlignDataAttrs(align, 'left')}
       >
         {/* On the editor canvas `text` arrives as its in-place editor (`INLINE_RICH_TEXT_FIELD_TRANSFORMS`). */}
-        {isValidElement(text) ? text : <InlineRich value={text} />}
+        {isValidElement(text) ? text : <InlineRich value={text} hangingIcon={props.hangingIcon === true} />}
       </Tag>
     </BoxStyled>
   );
@@ -232,15 +253,19 @@ const HeadingPublishedRender: PuckComponent<HeadingProps> = (puckProps) => {
   const Tag = normalizeHeadingTag(level);
   const align = renderAlign(props);
   const look = headingLook(props, Tag, null);
+  // R21G (T337): the measure per breakpoint (the class reads the tier variables; alignment moves it).
+  const measure = textMaxWidthAttrs(props, null);
+  // R20E (T294): a heading left empty writes no empty heading element; its box (spacing, background) stays.
+  if (isEmptyInline(text)) return <BoxStyled {...box}>{null}</BoxStyled>;
 
   return (
     <BoxStyled {...box}>
       <Tag
-        className={`${look.className} ${responsiveTextAlignClass(align, 'left')}`}
-        style={look.style}
+        className={`${look.className} ${responsiveTextAlignClass(align, 'left')}${measure ? ` ${measure.className}` : ''}`}
+        style={measure ? { ...look.style, ...(measure.style as CSSProperties) } : look.style}
         {...textAlignDataAttrs(align, 'left')}
       >
-        <InlineRich value={text} />
+        <InlineRich value={text} hangingIcon={props.hangingIcon === true} />
       </Tag>
     </BoxStyled>
   );
@@ -363,7 +388,12 @@ const HEADING_FIELDS = {
       { label: 'Right', value: 'end' },
     ],
   },
+  // R21G (T337): a maximum width per breakpoint, as the other texts'; unset keeps today's full width.
+  ...textMaxWidthFields(),
   color: TEXT_COLOR_FIELD,
+  // R19A (T226): a text led by an inline icon hangs beside it (wrapped lines align with the text).
+  // R23 (T439): the space after the icon is the indent's own (0.35 em); no px field.
+  hangingIcon: createToggleField({ label: 'Hanging indent after a leading icon' }),
   // Advanced: the Custom overrides of the type tokens (plan § Extend, don't narrow, rule 2).
   font: {
     type: 'select' as const,
@@ -434,6 +464,7 @@ const headingConfig: ComponentConfig<{ props: HeadingProps }> = {
     for (const [key, field] of Object.entries((params?.fields as Record<string, unknown> | undefined) ?? HEADING_FIELDS)) {
       if (key === 'fontSize' && !showSize) continue;
       if ((key === 'fontFamily' || key === 'customFontFamily') && !showFont) continue;
+      if (key === 'textMaxWidthPx' && !usesCustomTextMaxWidth(props.textMaxWidth)) continue;
       fields[key] = field;
     }
     return fields as unknown as Fields<HeadingProps>;

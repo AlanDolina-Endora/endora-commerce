@@ -26,6 +26,8 @@ import { PanelBody, panelItemsFromLegacy, panelSlotField } from './panel-slot.js
 import { createItemIndexField, itemIndexFieldFor } from '../fields/item-index-field.js';
 import { useBlockDomId } from './block-dom-id.js';
 import { TYPE_SCALE_FALLBACKS, isTypeToken, textWeightCss, textWeightField } from './typography.js';
+import { customOnlyLeading, lineHeightField, sizeUsesCustom } from './text-style.js';
+import { lineHeightCss } from './tier-vars.js';
 
 /**
  * `cms.Accordion` (`specs/163-page-builder-marketing-pages/` research R-13,
@@ -97,10 +99,18 @@ function isBoxed(props: Pick<AccordionProps, 'itemStyle' | 'variant'>): boolean 
 /** The look classes T175 adds to the root (none when unset). */
 function lookClasses(props: AccordionProps): string[] {
   const classes: string[] = [];
-  if (props.icon === 'chevron') classes.push('cmsc-pb-accordion--chevron');
+  if (isChevron(props.icon)) classes.push('cmsc-pb-accordion--chevron');
   if (props.itemStyle === 'boxed' || props.itemStyle === 'plain') classes.push(`cmsc-pb-accordion--${props.itemStyle}`);
   if (!isBoxed(props) && DIVIDERS.includes(props.dividers as AccordionDividers)) classes.push(`cmsc-pb-accordion--dividers-${props.dividers}`);
   return classes;
+}
+
+/**
+ * The chevron icon. R23 (T441): R20F's `'chevron-circle'` (a chevron on a
+ * filled circle, removed) reads as the plain chevron.
+ */
+function isChevron(icon: unknown): boolean {
+  return icon === 'chevron' || icon === 'chevron-circle';
 }
 
 /** Whether the items carry a line of their own (the one `dividerPosition` may move under the title). */
@@ -173,6 +183,33 @@ function titleWeightOf(
   return { vars };
 }
 
+/**
+ * R21G (T338): the titles' line height, as their weight (T185): one for every
+ * width inline on each title (in the editor, the previewed tier's), or one per
+ * tier on the root, `today` where a tier has none of its own.
+ */
+function titleLeadingOf(value: unknown, tier: BreakpointTier | null, today: string): { inline?: string; vars?: Record<string, string> } {
+  const at = (t: BreakpointTier): string | undefined => lineHeightCss(resolveResponsive<number>(value as never, t, Number.NaN));
+  if (tier !== null) {
+    const own = at(tier);
+    return own !== undefined ? { inline: own } : {};
+  }
+  const chosen = TIERS.map(at);
+  if (chosen.every((leading) => leading === undefined)) return {};
+  if (chosen.every((leading) => leading === chosen[0])) return { inline: chosen[0]! };
+  const vars: Record<string, string> = {};
+  TIERS.forEach((t, index) => {
+    vars[`--cmsc-acc-title-lh${TIER_SUFFIX[t]}`] = chosen[index] ?? today;
+  });
+  return { vars };
+}
+
+/** R21G (T338): a title's own line height today: inherited from the trigger, or its size token's. */
+function todaysTitleLeading(titleClass: string): string {
+  const token = /(?:^| )cmsc-t--([a-z0-9]+)/.exec(titleClass)?.[1];
+  return isTypeToken(token) ? `var(--cmsb-t-${token}-lh, ${TYPE_SCALE_FALLBACKS[token].lineHeight})` : 'inherit';
+}
+
 /** T185: a title's own weight today: the trigger's semibold, or its size token's weight. */
 function todaysTitleWeight(titleClass: string): string {
   const token = /(?:^| )cmsc-t--([a-z0-9]+)/.exec(titleClass)?.[1];
@@ -236,6 +273,7 @@ const AccordionRender: PuckComponent<AccordionProps> = (props) => {
     itemGap,
     itemGapPx,
     titleWeight: _titleWeight,
+    titleLineHeight: _titleLineHeight,
     panelPaddingBottom,
     panelPaddingBottomPx,
     openItemGap: _openItemGap,
@@ -245,7 +283,7 @@ const AccordionRender: PuckComponent<AccordionProps> = (props) => {
   } = props;
   const editing = puck?.isEditing === true;
   const tier = editing ? 'desktop' : null;
-  const chevron = props.icon === 'chevron';
+  const chevron = isChevron(props.icon);
   // T175: the title padding per breakpoint (the editor previews the desktop tier, as the title size).
   const padded = titlePadding !== undefined && titlePadding !== null;
   const padVars = padded
@@ -279,6 +317,8 @@ const AccordionRender: PuckComponent<AccordionProps> = (props) => {
   // The titles' classes, and T183/T185's weight: one inline, or one per breakpoint on the root.
   const title = titleSizing(props as unknown as AccordionProps, tier);
   const weight = titleWeightOf(props.titleWeight, tier, todaysTitleWeight(title.className));
+  // R23 (T435): the line height only from a breakpoint sized in Custom px.
+  const leading = titleLeadingOf(customOnlyLeading(props.titleSize, props.titleLineHeight), tier, todaysTitleLeading(title.className));
   const rootClass = [
     'cmsc-pb-accordion',
     `cmsc-pb-accordion--${variant}`,
@@ -289,6 +329,7 @@ const AccordionRender: PuckComponent<AccordionProps> = (props) => {
     ...(panelGapped ? ['cmsc-pb-accordion--panel-gap'] : []),
     ...(itemGapped ? ['cmsc-pb-accordion--item-gap'] : []),
     ...(weight.vars ? ['cmsc-pb-accordion--title-weight'] : []),
+    ...(leading.vars ? ['cmsc-pb-accordion--title-leading'] : []),
     ...(panelBottomed ? ['cmsc-pb-accordion--panel-bottom'] : []),
     ...(openGapped ? ['cmsc-pb-accordion--open-gap'] : []),
   ].join(' ');
@@ -298,6 +339,7 @@ const AccordionRender: PuckComponent<AccordionProps> = (props) => {
     ...(panelGapVars ?? {}),
     ...(itemGapVars ?? {}),
     ...(weight.vars ?? {}),
+    ...(leading.vars ?? {}),
     ...(panelBottomVars ?? {}),
     ...(openGap ?? {}),
   } as CSSProperties;
@@ -307,7 +349,9 @@ const AccordionRender: PuckComponent<AccordionProps> = (props) => {
   // The WAI-ARIA accordion pattern: with a level, each trigger button sits inside a heading.
   const Heading = titleLevelOf(props.titleLevel);
   // T183: one weight over the trigger's semibold (and a size token's own weight), inline on every title.
-  const titleStyle = weight.inline !== undefined ? { ...(title.style ?? {}), fontWeight: weight.inline } : title.style;
+  const weighted = weight.inline !== undefined ? { ...(title.style ?? {}), fontWeight: weight.inline } : title.style;
+  // R21G (T338): one line height, inline on every title.
+  const titleStyle = leading.inline !== undefined ? { ...(weighted ?? {}), lineHeight: leading.inline } : weighted;
   // The block's id, not `useId()` alone: the same on the server and on hydration (T149).
   const baseId = useBlockDomId('pb-accordion', props.id);
   const [open, setOpen] = useState<Set<number>>(() => initiallyOpen(defaultOpen, allowMultiple));
@@ -443,6 +487,8 @@ const ACCORDION_FIELDS = {
   titleColor: createColorField({ label: 'Title color' }),
   // T183: the titles' weight; Default keeps today's. T185: per breakpoint (Responsive tab).
   titleWeight: { ...textWeightField('Title weight'), metadata: PB_RESPONSIVE_METADATA },
+  // R21G (T338): the titles' line height per breakpoint; empty keeps today's.
+  titleLineHeight: lineHeightField('Title line height'),
   // T175: the look. Each unset by default — today's plus/minus, the style's own lines and box, 12 px.
   icon: {
     type: 'select' as const,
@@ -534,6 +580,8 @@ const accordionConfig: ComponentConfig<AccordionProps> = {
       // R17 (T218): the divider position only where the items carry a line it could move.
       if (key === 'dividerPosition' && !hasItemLines(props)) continue;
       if (key === 'iconSizePx' && props.iconSize !== 'custom') continue;
+      // R23 (T435): a line height with a Custom px size only.
+      if (key === 'titleLineHeight' && !sizeUsesCustom(props.titleSize)) continue;
       fields[key] =
         key === 'defaultOpen'
           ? itemIndexFieldFor(field, (props.items ?? []).map((item) => (typeof item?.title === 'string' ? item.title : '')))

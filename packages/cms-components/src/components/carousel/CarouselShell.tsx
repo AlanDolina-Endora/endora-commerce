@@ -20,6 +20,7 @@ import {
   normalizeResponsive,
   resolveResponsive,
   type BreakpointTier,
+  type HideOn,
   type ResponsiveProp,
 } from '@endora-commerce/page-builder-core';
 import { setEditorCarouselPage } from '@endora-commerce/page-builder-core/editor/carousel-preview';
@@ -89,17 +90,26 @@ import {
  * disabled hands its focus to the other one, autoplay stops on the last page.
  * `disabledArrowLook` styles a disabled arrow: dimmed (default), a light
  * outline or a colour (root classes `--arrow-off-light|color`).
+ *
+ * R20F (T313, T314): **`dots-start`** puts the dots at the start and both
+ * arrows together at the end (a stylesheet order; the markup is unchanged).
+ * A chosen alignment also applies to the row inside a split slide, every
+ * breakpoint written on the row (`__controls--al-<value>`, `-al-md-`,
+ * `-al-lg-`); unset, that row keeps today's start. **`keepArrowsWhenFit`**
+ * keeps the controls when every slide fits: both arrows disabled, the dots
+ * hidden (their box kept); off, the controls hide as before.
  */
 
 export type CarouselEffect = 'slide' | 'fade';
-export type CarouselControlsPlacement = 'header' | 'below' | 'overlay';
+/** R19B (T253): `slide` puts the controls inside each slide that draws them (`CarouselSlideControls`). */
+export type CarouselControlsPlacement = 'header' | 'below' | 'overlay' | 'slide';
 export type CarouselBleed = 'none' | 'end' | 'both';
 export type CarouselLayout = 'carousel' | 'grid';
 export type CarouselArrowVariant = 'default' | 'outline' | 'solid';
 export type CarouselArrowShape = 'round' | 'square';
 export type CarouselArrowSize = 's' | 'm' | 'l';
 export type CarouselArrowIcon = 'chevron' | 'arrow';
-export type CarouselControlsAlign = 'center' | 'start' | 'end' | 'between' | 'split';
+export type CarouselControlsAlign = 'center' | 'start' | 'end' | 'between' | 'split' | 'dots-start';
 export type CarouselNextArrowVariant = 'same' | CarouselArrowVariant;
 export type CarouselControlsAlignTo = 'container' | 'slide';
 export type CarouselDisabledArrowLook = 'dim' | 'outline-light' | 'color';
@@ -194,6 +204,17 @@ export interface CarouselShellProps {
   disabledArrowLook?: CarouselDisabledArrowLook;
   /** T171: a CSS colour from code (a hex or a brand variable) for `disabledArrowLook: 'color'`. */
   disabledArrowColor?: string;
+  /** R19B (T241): a solid arrow's glyph, a CSS colour from code; unset is today's white. */
+  arrowGlyphColor?: string;
+  /**
+   * R19B (T242): the breakpoints the arrows / the dots are hidden on (root
+   * classes `--arrows-off-sm|md|lg`, `--dots-off-sm|md|lg`); a row of
+   * controls left with nothing to show there is removed there too.
+   */
+  hideArrowsOn?: HideOn;
+  hideDotsOn?: HideOn;
+  /** R20F (T314): keep the arrows (both disabled, the dots hidden) when every slide fits; off (default) hides the controls. */
+  keepArrowsWhenFit?: boolean;
   /** A carousel (today) or a grid of `columns` per breakpoint. */
   layout?: CarouselLayout;
   /** The grid's columns per breakpoint (1–6). */
@@ -246,8 +267,8 @@ const MAX_COLUMNS = 6;
 const DEFAULT_COLUMNS = { base: 1, tablet: 2, desktop: 3 };
 const TIERS: readonly BreakpointTier[] = ['mobile', 'tablet', 'desktop'];
 const TIER_CLASS: Record<BreakpointTier, string> = { mobile: 'sm', tablet: 'md', desktop: 'lg' };
-const PLACEMENTS: readonly CarouselControlsPlacement[] = ['header', 'below', 'overlay'];
-const ALIGNS: readonly CarouselControlsAlign[] = ['center', 'start', 'end', 'between', 'split'];
+const PLACEMENTS: readonly CarouselControlsPlacement[] = ['header', 'below', 'overlay', 'slide'];
+const ALIGNS: readonly CarouselControlsAlign[] = ['center', 'start', 'end', 'between', 'split', 'dots-start'];
 
 /**
  * T147: the alignment classes — the base tier's unless centred, then a
@@ -270,6 +291,37 @@ function alignClasses(value: CarouselShellProps['controlsAlign'], previewTier: B
   if (tablet !== mobile) out.push(`cmsc-pb-carousel--ctl-md-${tablet}`);
   if (desktop !== tablet) out.push(`cmsc-pb-carousel--ctl-lg-${desktop}`);
   return out;
+}
+
+/**
+ * R20F (T313): the alignment of the row inside a split slide — nothing while
+ * unset (today's start), else every breakpoint's class, since the row's own
+ * default (the start) is not the rows below the track' (the centre).
+ */
+function slideAlignClasses(value: CarouselShellProps['controlsAlign'], previewTier: BreakpointTier | null): string[] {
+  if (value === undefined) return [];
+  const valid = (entry: CarouselControlsAlign): CarouselControlsAlign => (ALIGNS.includes(entry) ? entry : 'center');
+  const [mobile, tablet, desktop] = tierValues<CarouselControlsAlign>(value, 'center').map(valid) as [
+    CarouselControlsAlign,
+    CarouselControlsAlign,
+    CarouselControlsAlign,
+  ];
+  if (previewTier !== null) {
+    const at = previewTier === 'desktop' ? desktop : previewTier === 'tablet' ? tablet : mobile;
+    return [`cmsc-pb-carousel__controls--al-${at}`];
+  }
+  return [`cmsc-pb-carousel__controls--al-${mobile}`, `cmsc-pb-carousel__controls--al-md-${tablet}`, `cmsc-pb-carousel__controls--al-lg-${desktop}`];
+}
+
+/**
+ * R19B (T242): the breakpoints a "Hide on" choice hides; in the editor (the
+ * previewed tier set) every one when the previewed tier is hidden, else none,
+ * as the editor shows one placement for every width.
+ */
+function hiddenTiers(hideOn: HideOn | undefined, previewTier: BreakpointTier | null): BreakpointTier[] {
+  if (!hideOn) return [];
+  if (previewTier !== null) return hideOn[previewTier] === true ? [...TIERS] : [];
+  return TIERS.filter((tier) => hideOn[tier] === true);
 }
 
 function clampColumns(value: unknown): number {
@@ -384,6 +436,28 @@ const SlidesContext = createContext<SlidesContextValue>({
   hidden: NO_HIDDEN,
 });
 
+/**
+ * R19B (T253): the controls a slide draws inside itself, by its position — set
+ * by the shell where `controlsPlacement` holds `slide`, `null` everywhere else.
+ */
+const SlideControlsContext = createContext<((position: number) => ReactNode) | null>(null);
+
+/** R19B (T253): a slide's position among the shown slides, set by `CarouselSlides` for each one. */
+const SlidePositionContext = createContext<number | null>(null);
+
+/**
+ * R19B (T253): the carousel's arrows and dots, drawn **inside a slide** (a
+ * split slide's text column) when the carousel places its controls there;
+ * nothing outside a carousel, or with another placement. Only the shown
+ * slide's copy is operable, the others `inert`.
+ */
+export function CarouselSlideControls(): ReactNode {
+  const render = useContext(SlideControlsContext);
+  const position = useContext(SlidePositionContext);
+  if (!render || position === null) return null;
+  return render(position);
+}
+
 export interface CarouselSlidesProps {
   className?: string;
   style?: CSSProperties;
@@ -423,6 +497,8 @@ export const CarouselSlides = forwardRef<HTMLDivElement, CarouselSlidesProps>(fu
             </div>
           );
         }
+        // R19B (T253): the slide's position, for controls drawn inside it (no markup of its own).
+        const content = isHidden ? child : <SlidePositionContext.Provider value={position}>{child}</SlidePositionContext.Provider>;
         return (
           <div
             key={key}
@@ -434,7 +510,7 @@ export const CarouselSlides = forwardRef<HTMLDivElement, CarouselSlidesProps>(fu
             {...(fade && !isHidden && position !== active ? { 'aria-hidden': true } : {})}
             {...(fade && !isHidden && position === active ? { 'data-active': 'true' } : {})}
           >
-            {child}
+            {content}
           </div>
         );
       })}
@@ -513,6 +589,10 @@ export function CarouselShell({
   loop = true,
   disabledArrowLook = 'dim',
   disabledArrowColor,
+  arrowGlyphColor,
+  hideArrowsOn,
+  hideDotsOn,
+  keepArrowsWhenFit = false,
   layout = 'carousel',
   columns,
   filter,
@@ -733,8 +813,10 @@ export function CarouselShell({
 
   // T171: not looping, the arrow at an end is disabled (the last page is known once measured);
   // an arrow disabled while it has focus hands the focus to the other arrow of its group.
-  const prevOff = !loop && displayPage <= 0;
-  const nextOff = !loop && measured && displayPage >= pages - 1;
+  // R20F (T314): arrows kept while every slide fits have nowhere to go.
+  const keptOff = keepArrowsWhenFit && showArrows && fits && !editorPreview && !grid;
+  const prevOff = (!loop && displayPage <= 0) || keptOff;
+  const nextOff = (!loop && measured && displayPage >= pages - 1) || keptOff;
   useEffect(() => {
     const arrow = focusedArrowRef.current;
     if (!arrow?.disabled || !rootRef.current?.contains(arrow)) return;
@@ -759,26 +841,49 @@ export function CarouselShell({
   if (color && !grid) vars['--pb-arrow-color'] = color;
   // T171: the disabled arrows' look, only where arrows can be disabled; a colour look needs its colour.
   const offColor = disabledArrowColor?.trim() ? colorToCss(disabledArrowColor.trim()) : '';
-  const offLook = loop || grid ? 'dim' : disabledArrowLook === 'outline-light' ? 'light' : disabledArrowLook === 'color' && offColor ? 'color' : 'dim';
+  const offLook =
+    (loop && !keepArrowsWhenFit) || grid
+      ? 'dim'
+      : disabledArrowLook === 'outline-light'
+        ? 'light'
+        : disabledArrowLook === 'color' && offColor
+          ? 'color'
+          : 'dim';
   if (offLook === 'color') vars['--pb-arrow-off-color'] = offColor;
+  // R19B (T241): the glyph of a solid arrow, only when chosen.
+  const glyph = arrowGlyphColor?.trim() ? colorToCss(arrowGlyphColor.trim()) : '';
+  if (glyph && !grid) vars['--pb-arrow-glyph'] = glyph;
 
   // The placement at each breakpoint; the editor shows the previewed one's only.
   const perTier = placementsPerTier(controlsPlacement, 'overlay');
   if (editorPreview) {
-    const at = perTier[previewTier ?? 'desktop'];
+    // R19B (T253): the editor's slides are a dropzone, not slide groups: controls inside a slide show below there.
+    const previewed = perTier[previewTier ?? 'desktop'];
+    const at = previewed === 'slide' ? 'below' : previewed;
     perTier.mobile = at;
     perTier.tablet = at;
     perTier.desktop = at;
   }
   const used = PLACEMENTS.filter((placement) => TIERS.some((tier) => perTier[tier] === placement));
-  /** The breakpoint classes that remove a control group where its placement does not apply. */
-  const offClasses = (applies: (placement: CarouselControlsPlacement) => boolean): string =>
-    TIERS.filter((tier) => !applies(perTier[tier]))
-      .map((tier) => ` cmsc-pb-carousel__controls--off-${TIER_CLASS[tier]}`)
-      .join('');
   const arrows = showArrows && !editorPreview && !grid;
   const dotCount = editorPreview ? editorPages : measured ? pages : 0;
   const dots = showDots && !grid && (editorPreview ? editorPages > 1 : true);
+  // R19B (T242): the arrows and the dots per breakpoint; in the editor, the previewed tier's only.
+  const arrowsOff = hiddenTiers(hideArrowsOn, editorPreview ? (previewTier ?? 'desktop') : null);
+  const dotsOff = hiddenTiers(hideDotsOn, editorPreview ? (previewTier ?? 'desktop') : null);
+  const arrowsAt = (tier: BreakpointTier): boolean => arrows && !arrowsOff.includes(tier);
+  const dotsAt = (tier: BreakpointTier): boolean => dots && !dotsOff.includes(tier);
+  /**
+   * The breakpoint classes that remove a control group where its placement
+   * does not apply, or (T242) where it is left with nothing to show.
+   */
+  const offClasses = (
+    applies: (placement: CarouselControlsPlacement) => boolean,
+    shows: (tier: BreakpointTier) => boolean = () => true,
+  ): string =>
+    TIERS.filter((tier) => !applies(perTier[tier]) || !shows(tier))
+      .map((tier) => ` cmsc-pb-carousel__controls--off-${TIER_CLASS[tier]}`)
+      .join('');
 
   const carouselClass = [
     'cmsc-pb-carousel',
@@ -794,6 +899,8 @@ export function CarouselShell({
     ...(grid ? [] : alignClasses(controlsAlign, editorPreview ? (previewTier ?? 'desktop') : null)),
     !grid && controlsAlignTo === 'slide' ? 'cmsc-pb-carousel--ctl-to-slide' : '',
     offLook !== 'dim' ? `cmsc-pb-carousel--arrow-off-${offLook}` : '',
+    ...(grid ? [] : arrowsOff.map((tier) => `cmsc-pb-carousel--arrows-off-${TIER_CLASS[tier]}`)),
+    ...(grid ? [] : dotsOff.map((tier) => `cmsc-pb-carousel--dots-off-${TIER_CLASS[tier]}`)),
     editorPreview ? 'cmsc-pb-carousel--editor-preview' : '',
     equalHeight ? 'cmsc-pb-carousel--equal-height' : '',
     className,
@@ -837,7 +944,7 @@ export function CarouselShell({
   ) : null;
 
   const dotList = dots ? (
-    <div className="cmsc-pb-carousel__dots">
+    <div className="cmsc-pb-carousel__dots" {...(keptOff ? { hidden: true } : {})}>
       {Array.from({ length: dotCount }, (_, index) => (
         <button
           key={index}
@@ -852,31 +959,33 @@ export function CarouselShell({
     </div>
   ) : null;
 
-  const controlsHidden = fits && !editorPreview;
+  const controlsHidden = fits && !editorPreview && !keptOff;
   const headerRow =
     header !== undefined && header !== null && header !== false ? (
       <div className="cmsc-pb-carousel__header-content">{header}</div>
     ) : null;
+  const headerShows = (tier: BreakpointTier): boolean => arrowsAt(tier) || pauseButton !== null;
+  const headerOff = offClasses((p) => p === 'header', headerShows);
   const headerControls =
     used.includes('header') && (arrows || pauseButton) ? (
-      <div
-        className={`cmsc-pb-carousel__controls cmsc-pb-carousel__controls--header${offClasses((p) => p === 'header')}`}
-        hidden={controlsHidden}
-      >
+      <div className={`cmsc-pb-carousel__controls cmsc-pb-carousel__controls--header${headerOff}`} hidden={controlsHidden}>
         {arrows ? arrowButton(-1) : null}
         {pauseButton}
         {arrows ? arrowButton(1) : null}
       </div>
     ) : null;
 
-  // The dots row under the track, once per placement other than "below" (which holds its own).
+  // The dots row under the track, once per placement other than "below" and "slide" (which hold their own).
   const dotRows = used
-    .filter((placement) => placement !== 'below')
+    .filter((placement) => placement !== 'below' && placement !== 'slide')
     .filter((placement) => dots || (placement === 'overlay' && pauseButton))
     .map((placement) => (
       <div
         key={placement}
-        className={`cmsc-pb-carousel__controls cmsc-pb-carousel__controls--dots${offClasses((p) => p === placement)}`}
+        className={`cmsc-pb-carousel__controls cmsc-pb-carousel__controls--dots${offClasses(
+          (p) => p === placement,
+          (tier) => dotsAt(tier) || (placement === 'overlay' && pauseButton !== null),
+        )}`}
         hidden={controlsHidden}
       >
         {dotList}
@@ -905,9 +1014,34 @@ export function CarouselShell({
   ) : null;
 
   const slidesContext: SlidesContextValue = { fade, active: displayPage, labels, grid, hidden: hiddenItems };
+  // R19B (T253): the controls a slide draws inside itself where the placement is `slide`; only the shown slide's copy is operable.
+  const usesSlide = !grid && used.includes('slide') && (arrows || dots || pauseButton !== null);
+  const slideAlign = slideAlignClasses(controlsAlign, editorPreview ? (previewTier ?? 'desktop') : null);
+  const slideControls = usesSlide
+    ? (position: number): ReactNode => {
+        const shown = position === displayPage;
+        return (
+          <div
+            className={`cmsc-pb-carousel__controls cmsc-pb-carousel__controls--slide${offClasses(
+              (p) => p === 'slide',
+              (tier) => arrowsAt(tier) || dotsAt(tier) || pauseButton !== null,
+            )}${slideAlign.map((name) => ` ${name}`).join('')}`}
+            hidden={controlsHidden}
+            {...(shown ? {} : { inert: true, 'aria-hidden': true })}
+          >
+            {arrows ? arrowButton(-1) : null}
+            {dotList}
+            {pauseButton}
+            {arrows ? arrowButton(1) : null}
+          </div>
+        );
+      }
+    : null;
   const slideList = (
     <SlidesContext.Provider value={slidesContext}>
-      {slotMode ? children : <CarouselSlides>{children}</CarouselSlides>}
+      <SlideControlsContext.Provider value={slideControls}>
+        {slotMode ? children : <CarouselSlides>{children}</CarouselSlides>}
+      </SlideControlsContext.Provider>
     </SlidesContext.Provider>
   );
 
@@ -942,7 +1076,8 @@ export function CarouselShell({
     >
       {editorPreviewStyle ? <style>{editorPreviewStyle}</style> : null}
       {headerRow || headerControls ? (
-        <div className="cmsc-pb-carousel__header">
+        // T242: a header holding only the controls goes where they are hidden (only once a breakpoint hides the arrows).
+        <div className={`cmsc-pb-carousel__header${!headerRow && arrowsOff.length > 0 ? headerOff : ''}`}>
           {headerRow}
           {headerControls}
         </div>
@@ -970,7 +1105,26 @@ export function CarouselShell({
       </div>
       {used.includes('below') && (arrows || dots || pauseButton) ? (
         <div
-          className={`cmsc-pb-carousel__controls cmsc-pb-carousel__controls--below${offClasses((p) => p === 'below')}`}
+          className={`cmsc-pb-carousel__controls cmsc-pb-carousel__controls--below${offClasses(
+            (p) => p === 'below',
+            (tier) => arrowsAt(tier) || dotsAt(tier) || pauseButton !== null,
+          )}`}
+          hidden={controlsHidden}
+        >
+          {arrows ? arrowButton(-1) : null}
+          {dotList}
+          {pauseButton}
+          {arrows ? arrowButton(1) : null}
+        </div>
+      ) : null}
+      {usesSlide ? (
+        // R19B (T253): under the track where the placement is `slide`, for slides that draw no controls;
+        // the stylesheet removes it once a slide of this carousel holds them.
+        <div
+          className={`cmsc-pb-carousel__controls cmsc-pb-carousel__controls--below cmsc-pb-carousel__controls--slide-fallback${offClasses(
+            (p) => p === 'slide',
+            (tier) => arrowsAt(tier) || dotsAt(tier) || pauseButton !== null,
+          )}`}
           hidden={controlsHidden}
         >
           {arrows ? arrowButton(-1) : null}

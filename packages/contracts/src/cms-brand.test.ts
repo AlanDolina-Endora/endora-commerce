@@ -108,6 +108,43 @@ describe('cmsBrandTokensSchema', () => {
     expect(cmsBrandTokensSchema.safeParse(faces(9)).success).toBe(false);
     expect(cmsBrandTokensSchema.safeParse(faces(0)).success).toBe(false);
   });
+
+  it('R20F (T322): accepts an optional tier scale — a tablet and a small-desktop factor, each 0.5–2 — and keeps it', () => {
+    const tokens = { ...DEFAULT_BRAND_TOKENS, tierScale: { tablet: 1.15, smallDesktop: 0.9 } };
+    expect(cmsBrandTokensSchema.parse(tokens).tierScale).toEqual({ tablet: 1.15, smallDesktop: 0.9 });
+    expect(cmsBrandTokensSchema.parse({ ...DEFAULT_BRAND_TOKENS, tierScale: {} }).tierScale).toEqual({});
+    expect(cmsBrandTokensSchema.parse(DEFAULT_BRAND_TOKENS)).not.toHaveProperty('tierScale');
+    expect(cmsBrandTokensSchema.safeParse({ ...DEFAULT_BRAND_TOKENS, tierScale: { tablet: 3 } }).success).toBe(false);
+    expect(cmsBrandTokensSchema.safeParse({ ...DEFAULT_BRAND_TOKENS, tierScale: { smallDesktop: 0.2 } }).success).toBe(false);
+  });
+
+  it('R21H (T351, T352): fluid desktop and button scaling — all optional', () => {
+    const tierScale = { smallDesktop: 0.9, fluidDesktop: true, fluidUntilPx: 1440, buttons: true };
+    expect(cmsBrandTokensSchema.parse({ ...DEFAULT_BRAND_TOKENS, tierScale }).tierScale).toEqual(tierScale);
+    expect(cmsBrandTokensSchema.parse(DEFAULT_BRAND_TOKENS).layout).toEqual(DEFAULT_BRAND_TOKENS.layout);
+    const refused = [{ tierScale: { fluidUntilPx: 900 } }, { tierScale: { fluidDesktop: 'yes' } }];
+    for (const change of refused) expect(cmsBrandTokensSchema.safeParse({ ...DEFAULT_BRAND_TOKENS, ...change }).success, JSON.stringify(change)).toBe(false);
+  });
+
+  it('R23 (T432): the keys R19–R22 added and R23 removed are stripped on parse, never refused', () => {
+    const stale = {
+      ...DEFAULT_BRAND_TOKENS,
+      layout: {
+        ...DEFAULT_BRAND_TOKENS.layout,
+        gutterTabletPx: 32,
+        gutterSmallDesktopPx: 72,
+        containerSmallDesktopPx: 1100,
+        fluidContainer: true,
+        breadcrumbsPaddingYPx: 7,
+      },
+      tierScale: { smallDesktop: 0.9, smallDesktopUntilPx: 1439, blockPx: true, buttonLabels: true },
+      typeScale: { ...DEFAULT_BRAND_TOKENS.typeScale, body: { ...DEFAULT_BRAND_TOKENS.typeScale.body, trackingMobileEm: -0.02 } },
+    };
+    const parsed = cmsBrandTokensSchema.parse(stale);
+    expect(parsed.layout).toEqual(DEFAULT_BRAND_TOKENS.layout);
+    expect(parsed.tierScale).toEqual({ smallDesktop: 0.9 });
+    expect(parsed.typeScale.body).toEqual(DEFAULT_BRAND_TOKENS.typeScale.body);
+  });
 });
 
 describe('contrastRatio', () => {

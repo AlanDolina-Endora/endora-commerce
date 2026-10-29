@@ -6,7 +6,9 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { EMPHASIS_VARIANTS, normalizeAnchor, useFieldText, useImagePicker, type EmphasisVariant } from '@endora-commerce/page-builder-core';
 import {
+  LIST_MARKERS,
   READ_MORE_POSITIONS,
+  TEXT_SIZE_TOKENS,
   RICH_CONTENT_PROSE_CLASS,
   RICH_IMAGE_ALIGNS,
   RICH_IMAGE_SIZE_RE,
@@ -530,6 +532,18 @@ function Toolbar({
     else chain.setNode('heading', { level: Number(value.slice(1)) }).run();
   };
 
+  // R19A (T233): the bullet list's marker around the caret, and the run's text size.
+  const inBulletList = editor.isActive('bulletList');
+  const listStyle = editor.getAttributes('bulletList').listStyle as unknown;
+  const listMarker = inBulletList && (LIST_MARKERS as readonly unknown[]).includes(listStyle) ? (listStyle as string) : 'disc';
+  const runSize = editor.getAttributes('textSize').size as unknown;
+  // R23 (T442): a type token only; a Custom px stored by R19A shows as Default until a token replaces it.
+  const sizeToken = typeof runSize === 'string' && (TEXT_SIZE_TOKENS as readonly string[]).includes(runSize) ? runSize : '';
+  const applyTextSize = (value: string) => {
+    if (value === '') editor.chain().focus().unsetTextSize().run();
+    else editor.chain().focus().setTextSize(value).run();
+  };
+
   const textColor = (editor.getAttributes('textStyle').color as string | undefined) ?? '#243447';
   const highlightColor =
     (editor.getAttributes('highlight').color as string | undefined) ?? '#fef08c';
@@ -605,6 +619,20 @@ function Toolbar({
 
         <Divider />
 
+        <select
+          value={sizeToken}
+          title={text('textSize')}
+          aria-label={text('textSize')}
+          onChange={(event) => applyTextSize(event.target.value)}
+          className="cmsc:font-sans cmsc:h-[30px] cmsc:text-[13px] cmsc:text-[#334155] cmsc:bg-white cmsc:border cmsc:border-solid cmsc:border-[#d9e0e7] cmsc:rounded-[6px] cmsc:px-[6px] cmsc:cursor-pointer"
+        >
+          <option value="">{text('textSize.default')}</option>
+          {TEXT_SIZE_TOKENS.map((token) => (
+            <option key={token} value={token}>
+              {text(`textSize.${token}`)}
+            </option>
+          ))}
+        </select>
         <label
           title="Text color"
           className="cmsc:inline-flex cmsc:h-[30px] cmsc:items-center cmsc:gap-[4px] cmsc:rounded-[6px] cmsc:px-[4px] cmsc:text-[12px] cmsc:text-[#64748b]"
@@ -640,6 +668,26 @@ function Toolbar({
         <ToolbarButton title="Check list" active={editor.isActive('bulletList', { listStyle: 'check' })} onClick={toggleCheckList}>
           ✓
         </ToolbarButton>
+        <select
+          value={listMarker}
+          disabled={!inBulletList}
+          title={text('listMarker')}
+          aria-label={text('listMarker')}
+          onChange={(event) =>
+            editor
+              .chain()
+              .focus()
+              .updateAttributes('bulletList', { listStyle: event.target.value === 'disc' ? null : event.target.value })
+              .run()
+          }
+          className="cmsc:font-sans cmsc:h-[30px] cmsc:text-[13px] cmsc:text-[#334155] cmsc:bg-white cmsc:border cmsc:border-solid cmsc:border-[#d9e0e7] cmsc:rounded-[6px] cmsc:px-[6px] cmsc:cursor-pointer cmsc:disabled:cursor-not-allowed cmsc:disabled:opacity-35"
+        >
+          {(['disc', ...LIST_MARKERS] as const).map((marker) => (
+            <option key={marker} value={marker}>
+              {text(`listMarker.${marker}`)}
+            </option>
+          ))}
+        </select>
         <ToolbarButton title="Numbered list" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
           1.
         </ToolbarButton>

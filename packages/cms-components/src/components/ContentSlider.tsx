@@ -20,6 +20,7 @@ import { CarouselShell, CarouselSlides } from './carousel/CarouselShell.js';
 import {
   CAROUSEL_HEADER_FIELDS,
   CAROUSEL_TRACK_FIELDS,
+  CONTENT_SLIDER_PLACEMENT_OPTIONS,
   carouselHeaderNode,
   carouselPlacementMoved,
   carouselShellOptions,
@@ -195,6 +196,8 @@ const CONTENT_SLIDER_FIELDS = {
   },
   columns: { type: 'number' as const, label: 'Columns', min: 1, max: 6, metadata: PB_RESPONSIVE_METADATA },
   ...CAROUSEL_TRACK_FIELDS,
+  // R19B (T253): the shared placements and "inside each split slide".
+  controlsPlacement: { ...CAROUSEL_TRACK_FIELDS.controlsPlacement, options: CONTENT_SLIDER_PLACEMENT_OPTIONS },
   // T131: an optional filter bar over the items' tags.
   filter: {
     type: 'object' as const,
@@ -296,6 +299,8 @@ const contentSliderConfig: ComponentConfig<{ props: ContentSliderProps }> = {
     for (const [key, field] of Object.entries((params?.fields as Record<string, unknown> | undefined) ?? CONTENT_SLIDER_FIELDS)) {
       if (key === 'gapPx' && !usesCustom(props.gap)) continue;
       if (key === 'headingSizePx' && !usesCustom(props.headingSize)) continue;
+      // R23 (T435): the heading's line height with a Custom px size only.
+      if (key === 'headingLineHeight' && !usesCustom(props.headingSize)) continue;
       if (isUnusedHeadingMaxWidthPx(key, props)) continue;
       if (key === 'slidesPerView' && props.effect === 'fade') continue;
       if (props.layout === 'grid' && CAROUSEL_ONLY.has(key)) continue;

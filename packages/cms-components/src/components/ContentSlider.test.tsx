@@ -145,7 +145,8 @@ describe('cms.ContentSlider — controls, grid and filter (T129–T131)', () => 
   it('the arrow placement is a value per breakpoint on the Responsive tab, with every placement of T054', () => {
     expect(fields['controlsPlacement']?.type).toBe('select');
     expect(fields['controlsPlacement']?.metadata).toEqual(expect.objectContaining({ pageBuilder: expect.objectContaining({ responsive: true }) }));
-    expect(values(fields['controlsPlacement']).sort()).toEqual(['below', 'header', 'overlay']);
+    // R19B (T253, deliberately widened): the controls may also go inside each split slide.
+    expect(values(fields['controlsPlacement']).sort()).toEqual(['below', 'header', 'overlay', 'slide']);
     expect(Object.keys(fields['controls']?.objectFields ?? {})).not.toContain('placement');
     const registered = (config.components['cms.ContentSlider'] as { responsiveFields?: string[] }).responsiveFields;
     expect(registered ?? []).toEqual(expect.arrayContaining(['controlsPlacement', 'columns']));
@@ -268,7 +269,8 @@ describe('cms.ContentSlider — filter style, controls alignment and the next ar
   it('the controls\' alignment is a value per breakpoint on the Responsive tab, centred (today) first; hidden for a grid', async () => {
     expect(fields['controlsAlign']?.type).toBe('select');
     expect(fields['controlsAlign']?.metadata).toEqual(expect.objectContaining({ pageBuilder: expect.objectContaining({ responsive: true }) }));
-    expect(values(fields['controlsAlign'])).toEqual(['center', 'start', 'end', 'between', 'split']);
+    // R20F (T313): extended with the dots at the start, the arrows at the end.
+    expect(values(fields['controlsAlign'])).toEqual(['center', 'start', 'end', 'between', 'split', 'dots-start']);
     expect(defaults).not.toHaveProperty('controlsAlign');
     const registered = (config.components['cms.ContentSlider'] as { responsiveFields?: string[] }).responsiveFields;
     expect(registered ?? []).toContain('controlsAlign');

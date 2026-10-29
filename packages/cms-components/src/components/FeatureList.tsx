@@ -2,7 +2,14 @@
 
 import type { CSSProperties, ReactNode } from 'react';
 import type { ComponentConfig, Fields, PuckComponent } from '@puckeditor/core';
-import { createColorField, isResponsiveProp, PB_RESPONSIVE_METADATA, withHideOn, type BreakpointTier } from '@endora-commerce/page-builder-core';
+import {
+  createColorField,
+  isResponsiveProp,
+  PB_RESPONSIVE_METADATA,
+  resolveResponsive,
+  withHideOn,
+  type BreakpointTier,
+} from '@endora-commerce/page-builder-core';
 import { usePreviewBreakpointTier } from '@endora-commerce/page-builder-core/client';
 import type { FeatureListIconSize, FeatureListItem, FeatureListProps } from '../schema/component-types.js';
 import { BoxStyled } from './box-styles.js';
@@ -40,6 +47,9 @@ import {
   blockHeadingStyleFields,
 } from './section-parts.js';
 import { iconColorProps } from '../utils/color-value.js';
+import { customLeadingAttrs, lineHeightField, sizeUsesCustom, textStyleAttrs } from './text-style.js';
+import { spaceTokenField, spaceTokenOf, spaceTokenVars } from './space-token.js';
+import { lineHeightCss, pxCss, tierVars } from './tier-vars.js';
 
 /**
  * `cms.FeatureList` — `specs/163-page-builder-marketing-pages/`
@@ -59,6 +69,11 @@ import { iconColorProps } from '../utils/color-value.js';
  * its `description` is the item's body, its px gap and icon size are the
  * Custom (px) cases, its alignment the logical one, and with no title size its
  * titles keep today's look.
+ *
+ * R20F (T317), each unset writes nothing: a row gap per breakpoint apart from
+ * the gap (which then spaces the columns only), the titles' letter spacing,
+ * and in an item's text the line height of its lists and the space between
+ * its paragraphs, per breakpoint.
  */
 
 // ── Stored before the reshape ────────────────────────────────────────
@@ -122,14 +137,25 @@ function columnsCss(value: number): string {
   return String(Number.isFinite(n) ? Math.max(1, Math.min(4, n)) : DEFAULT_COLUMNS);
 }
 
+/** Today's item text (`.cmsc-pb-feature-list__desc`): 0.9 rem at 1.45, read by a breakpoint left on Default (R19A). */
+const BODY_TODAY = { size: '0.9rem', lineHeight: '1.45' };
+/** Today's title: 1.05 rem at weight 600 (no size token), the inherited line height. */
+const TITLE_TODAY = { size: '1.05rem', weight: '600', lineHeight: 'inherit' };
+
 function ItemTitle({ item, props, tier }: { item: FeatureListItem; props: FeatureListProps; tier: BreakpointTier | null }): ReactNode {
   // T151: a chosen weight over the title's own; R17 (T211): per breakpoint.
   const weighed = responsiveWeightProps(props.titleWeight, tier);
-  const weightStyle: Record<string, string> = weighed.inline;
+  // R19A (T225): the title's own line height (inline, or `cmsc-pb-ts-leading` when it differs per breakpoint).
+  // R23 (T435): only with a Custom px title size — a token brings its own.
+  const leading = customLeadingAttrs(props.titleSize, props.titleLineHeight, tier, TITLE_TODAY.lineHeight);
+  const weightStyle: Record<string, string> = { ...leading.style, ...weighed.inline };
   // No title size: today's title look (`.cmsc-pb-feature-list__title`).
   if (isDefaultSize(props.titleSize)) {
     return (
-      <h3 className="cmsc-pb-feature-list__title" {...(Object.keys(weightStyle).length > 0 ? { style: weightStyle as CSSProperties } : {})}>
+      <h3
+        className={['cmsc-pb-feature-list__title', ...leading.classes].join(' ')}
+        {...(Object.keys(weightStyle).length > 0 ? { style: weightStyle as CSSProperties } : {})}
+      >
         <WeightSpan vars={weighed.span}>
           <InlineRich value={item.title as never} />
         </WeightSpan>
@@ -140,7 +166,7 @@ function ItemTitle({ item, props, tier }: { item: FeatureListItem; props: Featur
   const style = { ...sized.style, ...weightStyle };
   return (
     <h3
-      className={['cmsc-pb-feature-list__title', 'cmsc-pb-feature-list__title--token', ...sized.classes].join(' ')}
+      className={['cmsc-pb-feature-list__title', 'cmsc-pb-feature-list__title--token', ...sized.classes, ...leading.classes].join(' ')}
       {...(Object.keys(style).length > 0 ? { style: style as CSSProperties } : {})}
     >
       <WeightSpan vars={weighed.span}>
@@ -150,9 +176,49 @@ function ItemTitle({ item, props, tier }: { item: FeatureListItem; props: Featur
   );
 }
 
-/** The body in today's description look (`.cmsc-pb-feature-list__desc`); a stored description arrives here as the body. */
-function ItemBody({ item }: { item: FeatureListItem }): ReactNode {
-  return <RichBody value={item.body} className="cmsc-pb-feature-list__desc cmsc-pb-feature-list__body" />;
+/**
+ * The body in today's description look (`.cmsc-pb-feature-list__desc`); a
+ * stored description arrives here as the body. R19A (T224): its own size,
+ * weight and line height, written only when chosen.
+ */
+function ItemBody({ item, text }: { item: FeatureListItem; text: { classes: string[]; style: Record<string, string> } }): ReactNode {
+  return (
+    <RichBody
+      value={item.body}
+      className={['cmsc-pb-feature-list__desc', 'cmsc-pb-feature-list__body', ...text.classes].join(' ')}
+      {...(Object.keys(text.style).length > 0 ? { style: text.style } : {})}
+    />
+  );
+}
+
+type IconPosition = 'above' | 'beside';
+
+function iconPositionAt(value: unknown, tier: BreakpointTier): IconPosition {
+  const at = isResponsiveProp(value) ? resolveResponsive<unknown>(value, tier, 'above') : value;
+  return at === 'beside' ? 'beside' : 'above';
+}
+
+/**
+ * R19A (T225), R22I (T378): the icon above the title or beside it, per
+ * breakpoint. One position for every width (in the editor, the previewed
+ * tier's) is today's attribute — `beside` only; positions that differ write
+ * one attribute per tier, which the stylesheet places and unplaces.
+ */
+function iconPositionAttrs(value: unknown, tier: BreakpointTier | null): Record<string, string> {
+  if (tier !== null) return iconPositionAt(value, tier) === 'beside' ? { 'data-icon-position': 'beside' } : {};
+  const [mobile, tablet, desktop] = (['mobile', 'tablet', 'desktop'] as const).map((t) => iconPositionAt(value, t));
+  if (mobile === tablet && tablet === desktop) return mobile === 'beside' ? { 'data-icon-position': 'beside' } : {};
+  return { 'data-icon-position': mobile!, 'data-icon-position-md': tablet!, 'data-icon-position-lg': desktop! };
+}
+
+/** R22I (T378): an item's width in columns of 12 (1–12), or `undefined`. */
+function wholeSpan(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(12, Math.max(1, Math.round(value))) : undefined;
+}
+
+/** The desktop column count (1–4), whose share of 12 an item without a width of its own takes. */
+function desktopColumns(value: FeatureListProps['columns']): number {
+  return Number(columnsCss(resolveResponsive<number>(value, 'desktop', DEFAULT_COLUMNS)));
 }
 
 function FeatureListBody({ props, tier }: { props: FeatureListProps; tier: BreakpointTier | null }): ReactNode {
@@ -163,11 +229,35 @@ function FeatureListBody({ props, tier }: { props: FeatureListProps; tier: Break
   const { margin, padding, border } = props;
   // R17 (T206): the alignment per breakpoint; one alignment stays today's inline `text-align`.
   const aligned = responsiveAlign(props.align, tier, 'start');
+  // R20F (T317): the row gap and the lists' line height, each only where chosen. R23 (T435): the lists'
+  // line height with a Custom px text size only; R23 (T437): one spacing step for the item's inner spaces
+  // (after the icon, below the title, between paragraphs) instead of a px value for each.
+  const innerSpace = spaceTokenOf(props.innerSpace);
+  const extras = [
+    { name: 'cmsc-pb-feature-list--row-gap', vars: tierVars<number>('cmsc-fl-row-gap', props.rowGapPx, tier, pxCss(160)) },
+    {
+      name: 'cmsc-pb-feature-list--list-leading',
+      vars: sizeUsesCustom(props.bodySize) ? tierVars<number>('cmsc-fl-list-lh', props.listLineHeight, tier, lineHeightCss) : {},
+    },
+    { name: 'cmsc-pb-feature-list--body-space', vars: spaceTokenVars('cmsc-fl-body-space', innerSpace, tier) },
+  ].filter((extra) => Object.keys(extra.vars).length > 0);
   const gridStyle = {
+    ...Object.assign({}, ...extras.map((extra) => extra.vars)),
     ...responsiveVars<number>('cmsc-fl-cols', props.columns, DEFAULT_COLUMNS, columnsCss, tier),
     ...gapVars('cmsc-fl-gap', props.gap, props.gapPx, DEFAULT_GAP_PX, tier),
+    ...spaceTokenVars('cmsc-fl-icon-space', innerSpace, tier),
+    ...spaceTokenVars('cmsc-fl-title-space', innerSpace, tier),
     ...(aligned.tiers ? {} : { textAlign: aligned.align }),
   } as CSSProperties;
+  const bodyText = textStyleAttrs(
+    { size: props.bodySize, sizePx: props.bodySizePx, weight: props.bodyWeight, lineHeight: props.bodyLineHeight },
+    tier,
+    BODY_TODAY,
+  );
+  const iconPosition = iconPositionAttrs(props.iconPosition, tier);
+  // R22I (T378): items with their own width in columns of 12 on desktops; the others keep the columns' share.
+  const spans = items.map((item) => wholeSpan(item.span));
+  const withSpans = spans.some((span) => span !== undefined);
 
   return (
     <BoxStyled
@@ -188,21 +278,31 @@ function FeatureListBody({ props, tier }: { props: FeatureListProps; tier: Break
         tier={tier}
       />
       <ul
-        className={aligned.tiers ? 'cmsc-pb-feature-list cmsc-pb-text-align' : 'cmsc-pb-feature-list'}
+        className={[
+          aligned.tiers ? 'cmsc-pb-feature-list cmsc-pb-text-align' : 'cmsc-pb-feature-list',
+          ...extras.map((extra) => extra.name),
+          ...(withSpans ? ['cmsc-pb-feature-list--spans'] : []),
+        ].join(' ')}
         {...(aligned.tiers ? { 'data-align': aligned.align, ...alignTierAttrs(aligned.tiers) } : {})}
-        style={gridStyle}
+        {...iconPosition}
+        style={withSpans ? ({ ...gridStyle, '--cmsc-fl-default-span': String(12 / desktopColumns(props.columns)) } as CSSProperties) : gridStyle}
       >
         {items.map((item, index) => {
           const hasIcon = Boolean(item.iconAssetId) || Boolean(item.icon);
+          const span = spans[index];
           return (
-            <li key={index} className="cmsc-pb-feature-list__item">
+            <li
+              key={index}
+              className="cmsc-pb-feature-list__item"
+              {...(span !== undefined ? { style: { '--cmsc-fl-span': String(span) } as CSSProperties } : {})}
+            >
               {hasIcon ? (
                 <span className="cmsc-pb-feature-list__icon" {...(iconStyle ? { style: iconStyle } : {})}>
                   <ItemIcon icon={item.icon} iconAssetId={item.iconAssetId} size={size} />
                 </span>
               ) : null}
               <ItemTitle item={item} props={props} tier={tier} />
-              <ItemBody item={item} />
+              <ItemBody item={item} text={bodyText} />
             </li>
           );
         })}
@@ -249,6 +349,8 @@ const FEATURE_LIST_FIELDS = {
       ...iconFields(),
       title: createInlineRichTextField({ label: 'Title' }),
       body: createRichTextDocField({ label: 'Text' }),
+      // R22I (T378): this item's width on desktops, in columns of 12; empty keeps the columns' share.
+      span: { type: 'number' as const, label: 'Width on desktops (columns of 12)', min: 1, max: 12, step: 1 },
     },
     defaultItemProps: {
       icon: 'checkCircle2',
@@ -273,12 +375,36 @@ const FEATURE_LIST_FIELDS = {
     ],
   },
   iconSizePx: { type: 'number' as const, label: 'Custom icon size (px)', min: 12, max: 96 },
+  // R19A (T225): the icon above the title (today's) or beside it, the title and the text hanging beside it.
+  // R22I (T378): per breakpoint.
+  iconPosition: {
+    type: 'select' as const,
+    label: 'Icon position',
+    metadata: PB_RESPONSIVE_METADATA,
+    options: [
+      { label: 'Above the title', value: 'above' },
+      { label: 'Beside the title', value: 'beside' },
+    ],
+  },
   // R17 (T206): per breakpoint.
   align: alignField(),
   titleSize: sizeFieldWithDefault('Title size'),
   titleSizePx: sizePxField('Custom title size (px)'),
   // T151: each item title's weight; Default keeps today's. R17 (T211): per breakpoint, beside the size.
   titleWeight: { ...textWeightField('Title weight'), metadata: PB_RESPONSIVE_METADATA },
+  // R19A (T225): the title's line height; T224: the item text's size, weight and line height.
+  // R23 (T435): a line height with a Custom px size only; one weight.
+  titleLineHeight: lineHeightField('Title line height'),
+  bodySize: sizeFieldWithDefault('Text size'),
+  bodySizePx: sizePxField('Custom text size (px)'),
+  bodyWeight: textWeightField('Text weight'),
+  bodyLineHeight: lineHeightField('Text line height'),
+  // R20F (T317): the lists' line height in the text (R23: with a Custom px text size).
+  listLineHeight: lineHeightField('Line height of lists in the text'),
+  // R23 (T437): one spacing step for the item's inner spaces; Default keeps today's.
+  innerSpace: spaceTokenField('Space inside each item'),
+  // R20F (T317): the space between the rows apart from the gap.
+  rowGapPx: { type: 'number' as const, label: 'Space between rows (px)', min: 0, max: 160, step: 1, metadata: PB_RESPONSIVE_METADATA },
   margin: BOX_MARGIN_FIELD,
   padding: BOX_PADDING_FIELD,
   border: BOX_BORDER_FIELD,
@@ -291,6 +417,7 @@ const CUSTOM_FIELDS: Record<string, keyof FeatureListProps> = {
   gapPx: 'gap',
   iconSizePx: 'iconSize',
   titleSizePx: 'titleSize',
+  bodySizePx: 'bodySize',
 };
 
 const featureListConfig: ComponentConfig<{ props: FeatureListProps }> = {
@@ -321,6 +448,9 @@ const featureListConfig: ComponentConfig<{ props: FeatureListProps }> = {
     for (const [key, field] of Object.entries((params?.fields as Record<string, unknown> | undefined) ?? FEATURE_LIST_FIELDS)) {
       const select = CUSTOM_FIELDS[key];
       if (select !== undefined && !usesCustom(props[select])) continue;
+      // R23 (T435): a line height with a Custom px size only.
+      if (key === 'titleLineHeight' && !sizeUsesCustom(props.titleSize)) continue;
+      if ((key === 'bodyLineHeight' || key === 'listLineHeight') && !sizeUsesCustom(props.bodySize)) continue;
       fields[key] = field;
     }
     return fields as unknown as Fields<FeatureListProps>;

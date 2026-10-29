@@ -25,11 +25,14 @@ types are inferred from it.
 | `breadcrumbs_visible` | `boolean not null default true` | |
 | `breadcrumbs_scheme` | `text not null default 'light'` | check `in ('light','muted','dark')` |
 | `share_image_asset_id` | `uuid null` | An asset id. It is not an FK, because assets live in `assets_library`; the column is listed in the `cms` asset-reference scan |
+| `parent_path_in_url` | `boolean not null default false` | **R19D**, its own migration (`Migration20261027T165458CmsPageParentPathInUrl`). On: the public path is the parent's public path, `/` and the page's slug. The path is computed on read, never stored |
+| `breadcrumbs_overlay` | `boolean not null default false` | **R21H** (T355), its own migration (`Migration20261028T090524CmsPageBreadcrumbsOverlay`). On: the storefront draws the trail over the first section instead of in a band above it |
 
 - **Index**: `cms_pages_parent_page_id_idx`.
 - **Entity**: `CmsPage` gains `parentPageId`, `breadcrumbsVisible`, `breadcrumbsScheme` and
   `shareImageAssetId`.
-- **Audit**: the `cms_page.update` Command's before/after state includes the four fields.
+- **Audit**: the `cms_page.update` Command's before/after state includes the four fields,
+  `parentPathInUrl` (R19D) and `breadcrumbsOverlay` (R21H).
 
 ### 1.2 `blog_posts` (module `blog`), one migration
 
@@ -109,6 +112,14 @@ interface BrandTokens {
   };
   spacing: Record<SpaceToken, { mobilePx: number; desktopPx: number }>;  // 0–320
   layout: { containerMaxPx: number; widePx: number; gutterMobilePx: number; gutterDesktopPx: number };
+  tierScale?: { tablet?: number; smallDesktop?: number;  // R20F (T322): 0.5–2; unset or 1 = no scaling
+                fluidDesktop?: boolean;        // R21H (T351): grow from the small-desktop factor to 1
+                fluidUntilPx?: number;         // R21H (T351): 1025–3840 integer; unset = layout.containerMaxPx
+                buttons?: boolean;             // R21H (T352): button heights follow the factors
+              };
+  // R23 (T432): R21H's smallDesktopUntilPx and per-tier gutters/container, R22J's blockPx, buttonLabels,
+  // fluidContainer, breadcrumbsPaddingYPx and typeScale.<token>.trackingMobileEm were removed. The schema is
+  // not strict: a stored key is stripped on the next parse (and so on the next save) and writes nothing.
 }
 
 type TypeToken = 'display' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'lead' | 'body' | 'small';
@@ -132,7 +143,16 @@ type FontSource =
   `h1`–`h6` whose type style is set giving rich-text headings (`.cmsc-pb-rich-content`,
   `.cmsc-pb-rich`, `.cmsc-pb-hero__body`, `.cmsc-pb-feature-list__body`) that level's `-size`,
   `-lh`, `-w` and `-ls` (T163; only the parts that are numbers; none without a type scale) and a
-  `@media (min-width: 1024px)` block for desktop sizes.
+  `@media (min-width: 1024px)` block for desktop sizes. R20F (T322): with `tierScale.tablet`
+  other than 1, a `768–1023.98px` block before it rebinds `t-<token>-size` and `space-<token>` to
+  the mobile px × the factor; with `tierScale.smallDesktop`, a `1024–1279.98px` block after it does
+  the same from the desktop px. Unset: neither block, the output unchanged. R21H (T351, T352): with
+  `fluidDesktop` and a small-desktop factor below 1, a block from 1280 px to `fluidUntilPx - 0.02`
+  writes every desktop size and step as `clamp(px × factor, px × 100 / until vw, px)`; with
+  `buttons`, `btn-h-s|m|l` join the tablet, small-desktop and fluid blocks. Each unset: nothing
+  written. R23 (T431–T433): the small-desktop block always ends at `1279.98px`; no tier rebinds the
+  gutter or the container; no `px`, `btn-px` or `grid-gap` variable is written (blocks write
+  their Custom px as literal px).
 - **Variable names**, all prefixed `--cmsb-`:
   - `color-primary` and the other colour roles;
   - `n-50`…`n-900`;
@@ -171,7 +191,12 @@ renders as no link.
   fill: Responsive<'solid' | 'outline' | 'text'>;      // 'text' is today's `ghost`
   size: 'small' | 'medium' | 'large';
   backgroundColor?: ColorValue; textColor?: ColorValue;  // today's per-button overrides
-  icon?: IconName; iconPosition?: 'start' | 'end' | 'only' }
+  icon?: IconName; iconPosition?: 'start' | 'end' | 'only';
+  // R20E (T296): cms.Button's look on every embedded button; unset = today's
+  transparentOutline?: boolean;                       // the outline fill transparent
+  borderColor?: ColorValue;
+  iconOnlyShape?: 'circle' | 'pill' }                 // unset = circle; a pill is 1.15 × its height
+  // R23 (T447): R20E's iconSizePx and iconOnlyWidthPx were removed (stripped on parse)
 ```
 
 `ColorValue` is `token:<role>` or a hex value (R-6).
@@ -184,7 +209,8 @@ renders as no link.
 ```ts
 { imageSource: 'url' | 'library'; src?: string; assetId?: string;
   mobileSrc?: string; mobileAssetId?: string;
-  alt: string; ratio?: Responsive<AspectToken>; fit?: 'cover' | 'contain'; position?: FocalToken }
+  alt: string; ratio?: Responsive<AspectToken>; fit?: 'cover' | 'contain'; position?: FocalToken;
+  desktopFrom?: 'tablet' | 'desktop' }   // R19C (T263): where the mobile image gives way; unset = 'tablet' (768 px)
 ```
 
 - `AspectToken` is `'auto' | '1:1' | '4:3' | '3:4' | '16:9' | '21:9' | '3:1' | '2:1' | '4:5'`,
@@ -199,7 +225,7 @@ renders as no link.
   background?: SectionBackground;
   spaceTop?: Responsive<SpaceToken | { px: number }>;     // default 'l'
   spaceBottom?: Responsive<SpaceToken | { px: number }>;  // default 'l'
-  width?: 'contained' | 'wide' | 'full' | 'viewport' | 'bleed' | 'custom';  // default 'contained'
+  width?: Responsive<'contained' | 'wide' | 'full' | 'viewport' | 'bleed' | 'custom'>;  // default 'contained'; R19C (T260): per breakpoint, a single stored value read as it is
   contentWidth?: 'contained' | 'wide' | 'full' | 'custom';  // T124: with width full/viewport/bleed only
   customMaxWidthPx?: number;                         // with width or contentWidth 'custom'; one px value
   contentPosition?: Responsive<'start' | 'center' | 'end'>;  // where the frame sits in a taller section
@@ -212,6 +238,12 @@ one `section` object: a value per breakpoint must be edited on the editor's Resp
 `cms.Row`'s are, and Puck gives a field one tab, so a responsive key nested in an object prop
 could not reach it. `spaceTop`, `spaceBottom`, `contentPosition` and `overlap` (T148) are the block's
 `responsiveFields`; the rest are main-tab fields. `customMaxWidthPx` is one px value.
+
+**R19C (2026-10-27).** `width` and `outsetPx` join the `responsiveFields` (Responsive tab). R23
+(T449) removed `outsetPx` (a stored one is stripped on parse and not rendered).
+`SectionBackground` gains `desktopFrom?: 'tablet' | 'desktop'` (T263), as `ResponsiveImage`
+does. A `custom` width wider than the page container widens the section box itself, up to the
+viewport less the gutters (T262); until R19C it was capped at the container.
 
 **Owner ruling 2026-10-23.** `SectionSettings` belongs to one block,
 `cms.Section`, which holds the settings and a slot for any blocks and stands only at the top
@@ -449,12 +481,117 @@ R17 (T198–T220; contracts/blocks.md § "R17: one settings panel"; nothing tran
 `cms.CarouselSplit` media gain `posterSource` (`'library' | 'url'`) and `posterUrl`. No schema,
 migration or API change.
 
+R19A (T223–T239; contracts/blocks.md § "R19A: text and content options"): every addition is
+optional and unset renders today's markup. `TextLineHeight` = `number | Responsive<number>`
+(0.8–3) and `ResponsiveTextWeight` = `TextWeight | Responsive<TextWeight>` are new shared shapes.
+`cms.FeatureList` gains `titleLineHeight`, `bodySize` / `bodySizePx`, `bodyWeight`,
+`bodyLineHeight`, `bodyColor`, `iconPosition` (`'above' | 'beside'`), `iconSpacePx`,
+`titleSpacePx` (`Responsive<number>`); `cms.Hero` gains `subheading…` / `statement…`
+`Weight`, `LineHeight`, `MaxWidth`, `MaxWidthPx`, `bodySize` / `bodySizePx`, `bodyWeight`,
+`bodyLineHeight`, `bodyMaxWidth` / `bodyMaxWidthPx`, and `gaps` widens to `SpaceToken | 'custom'`
+with `gapsPx`, plus `mediaSpace` (`Responsive<SpaceToken | 'custom'>`) with `mediaSpacePx`;
+`cms.Statement` gains `minHeight` (`Responsive<'default' | HeroMinHeight>`) / `minHeightPx`,
+`headingLineHeight`, `bodySize` / `bodySizePx`, `bodyWeight`, `bodyLineHeight`, `bodyColor`;
+`cms.Stats` gains `labelSize` / `labelSizePx`, `labelWeight`, `labelColor`, `imageSpan`,
+`figuresSpan`, `figuresOffset` (numbers, columns of 12) and `figuresAlign`
+(`'center' | 'start' | 'end' | 'spread'`); `cms.LinkList` gains `titleSize` / `titleSizePx`,
+`titleWeight`; `cms.CtaCard` gains `cardRadius` (`'default' | CornerRadius`), `imageInset`
+(`'default' | 'none' | 'custom'`) and `imageInsetPx`; `cms.MediaText` gains `sideBySide`
+(`'tablet' | 'desktop'`); `cms.RichContent` gains `textSize` / `textSizePx`; `cms.Heading` gains
+`hangingIcon` (`boolean`) and `hangingIconGapPx` (`Responsive<number>`); `cms.Text`'s `text`
+widens to `string | InlineRichText` (a stored string is unchanged until edited; its translatable
+path becomes `format: 'tiptap'`, which reads a string as plain text). Rich text (§3.6's
+neighbours): a `textSize` mark (`attrs.size`: a type token or `'<8–200>px'`) and the bullet list's
+`listStyle` widened to `'check' | 'chevron' | 'none'`. No schema, migration or API change.
+
+R19B (T240–T259; contracts/blocks.md § "R19B: carousel controls, buttons, download tiles, image
+cards, sign-up layout"; only `cms.CarouselImage.moreLabel` is translatable): the carousels'
+`controls` gain `dotColor`, `activeDotColor`, `arrowGlyphColor` (colour values) and
+`hideArrowsOn`, `hideDotsOn` (`HideOn`); `cms.ContentSlider.controlsPlacement` accepts `slide`;
+the product listings gain `footerButtonAlign`; `cms.Button` gains `transparentOutline`,
+`iconSizePx` (`Responsive<number>`) and `borderColor`; `cms.DownloadTile` gains `scheme`,
+`cardBackground`, `cardBorder`, `cornerRadius`, `paddingPx`, `titleSizePx`, `showType`,
+`hoverImageLook`, `linkLook`, `iconButtonSizePx`, `iconButtonBorderColor`; `cms.CarouselImage`
+gains `moreLabel`, `moreLabelPlacement`, `moreLabelSizePx`, `moreLabelIcon` and
+`captionPaddingPx`; `cms.Image.captionPlacement` widens to its `Responsive<…>` form (a stored
+value is every breakpoint's) beside `captionSizePx`, `captionAlign`, `captionWeight`,
+`captionColor`; `newsletter.Signup` gains `buttonPlacement`, `fieldShape`, `topicsColumns`,
+`hideEmailLabel`. `ButtonSpec` (§3.2) is unchanged: the button options are `cms.Button`'s own.
+No schema, migration or API change.
+
+R20E (T290–T309; contracts/blocks.md § "R20E"): `ButtonSpec` (§3.2) gains `transparentOutline`,
+`iconSizePx`, `borderColor`, `iconOnlyShape` and `iconOnlyWidthPx` (`buttonSpecSchema`, all
+optional — a button stored before parses to the same value); `cms.Button` gains `iconOnlyShape` and
+`iconOnlyWidthPx` beside its R19B block-level look. `cms.Hero` gains `titleLineHeight`,
+`eyebrowColor`, `titleColor`, `subheadingColor`, `statementColor`, `bodyColor`,
+`bodyListMarkerColor`, `eyebrowSizePx`, `eyebrowWeight`, `eyebrowLineHeight`, `eyebrowUppercase`
+and `proofCaptionPlacement`, `proofCaptionSizePx`, `proofCaptionMaxWidthPx`, `proofCaptionWeight`,
+`proofCaptionColor`; `cms.DownloadTile` gains `linkTo` (`'file' | 'link'`), `link` (`LinkValue`),
+`minHeightPx`, `subtitleSizePx`, `subtitleColor`; `cms.CarouselImage` gains `moreLabelColor`,
+`moreLabelIconColor`, `moreLabelWeight`; `cms.Image` gains `captionMinWidthPx`, `captionMaxWidthPx`;
+`cms.RichContent` gains `listMarkerColor`. Nothing is translatable. No schema, migration or API
+change beyond `buttonSpecSchema`'s optional keys.
+
+R20F (T310–T322; contracts/blocks.md § "R20F: split-slide layout, carousel controls alignment,
+block spacing, tier type scale"; nothing new is translatable): `cms.CarouselSplit` gains
+`sideBySide`, `mediaSpan`, `textSpan`, `textOffset`, `mediaCornerRadius`, `titleSize` /
+`titleSizePx`, `titleWeight`, `titleLineHeight`, `titleHangingIcon`, `titleHangingIconGapPx`,
+`bodySize` / `bodySizePx`, `bodyWeight`, `bodyLineHeight`; the carousels' `controlsAlign` accepts
+`'dots-start'` and `controls` gains `arrowsWhenFit`; `cms.MediaText` gains `headingSpacePx`,
+`bodySpacePx`, `stackedGapPx`, `bodySize` / `bodySizePx`, `bodyLineHeight` and
+`rows[].verticalAlign` (`BlockAlign | 'inherit'`); `cms.BackgroundPanel` gains `mobileLayout`
+(`'stack' | 'overlay'`), `textBoxMarginPx`, `textBoxPaddingPx`; `cms.FeatureList` gains
+`rowGapPx`, `titleLetterSpacing`, `listLineHeight`, `bodySpacePx`; `cms.CtaCard` gains
+`paddingPx`, `imageColumns`; `cms.Stats` gains `labelLineHeight`; `cms.LinkList` gains
+`dividerAfterLast`; `cms.Accordion.icon` accepts `'chevron-circle'` beside `iconCircleColor`. The
+brand tokens (§2) gain the optional `tierScale`, an additive contract change (a set without it
+parses as before). No migration or API change.
+
+R21G (T330–T338; contracts/blocks.md § "R21G: social-proof caption fix, stacking breakpoints,
+column layouts, text options"; nothing new is translatable): `cms.Hero` gains
+`proofCaptionLineHeight`; `cms.MediaText` gains `mediaSpan`, `textSpan`, `textOffset`,
+`listMarkerColor`, `bodyWeight`, `headingLineHeight`; `cms.CtaCard` gains `mobileImagePosition`
+(`'above' | 'below'`), `sideBySide`, `bodySize` / `bodySizePx`, `listSize` / `listSizePx`, and its
+`imageInsetPx` accepts a value per breakpoint (a stored number keeps its meaning); `cms.Stats`
+gains `sideBySide`; `cms.CarouselSplit` gains `bodyIndent` (`'none' | 'title'`), `stackedGapPx`,
+`titleSpacePx`, `controlsSpacePx`; `cms.Image` gains `desktopFrom`; `cms.Heading` gains
+`textMaxWidth` / `textMaxWidthPx`; `cms.RichContent` gains `listLineHeight`; `cms.Accordion` gains
+`titleLineHeight`; `newsletter.Signup` gains `buttonHeightPx`, `buttonTextSizePx`, `buttonWeight`;
+`catalog.ProductGrid` and `catalog.ProductSlider` gain `leadSize` / `leadSizePx`, `leadWeight`,
+`leadColor`; `cms.DownloadTile` gains `titleWeight`. No schema, migration or API change.
+
+R21H (T350–T355; contracts/blocks.md § "R21H"): the carousels' track options gain
+`slidesPerViewSmallDesktop` and `gapSmallDesktopPx` (numbers, dedicated props — `Responsive<T>`
+keeps three tiers); the brand tokens (§2) gain `tierScale.smallDesktopUntilPx`, `fluidDesktop`,
+`fluidUntilPx`, `buttons` and `layout.gutterTabletPx`, `gutterSmallDesktopPx`,
+`containerSmallDesktopPx`, all optional; `cms_pages` gains `breadcrumbs_overlay` (§1.1, a
+migration) and the admin page shapes `breadcrumbsOverlay`; the resolved page's `breadcrumbs`
+gains an optional `overlay` (§5), written only when on.
+
+R22I (T370–T382; contracts/blocks.md § "R22I"; nothing new is translatable): `cms.MediaText`
+gains `columnsAnchor` (`'media' | 'start' | 'end'`), `columnGapPx`, `featureBodySize` /
+`featureBodySizePx`, `featureBodyWeight`, `featureBodyColor`; `cms.CarouselSplit` gains
+`columnsAnchor`, `columnGapPx`; `cms.Stats` gains `columnGapPx`, `valueLineHeight`; `cms.CtaCard`
+gains `headingSpacePx`, `bodyWeight`, `textMaxWidth` / `textMaxWidthPx`; `cms.RichContent` gains
+`textWeight`, `listWeight`; `cms.FeatureList`'s `iconPosition` accepts a value per breakpoint (a
+stored string keeps its meaning) and its items gain `span`; the carousel header
+(`cms.ContentSlider`, `catalog.ProductSlider`, `catalog.ProductGrid`, `blog.LatestPosts`) gains
+`headingLineHeight`; `cms.LinkList` gains `titleLineHeight`; `blog.LatestPosts` gains
+`leadWeight`; `newsletter.Signup` gains `topicLabelSizePx`, `buttonIcon`; `cms.Testimonial` gains
+`quoteSize` / `quoteSizePx`; `cms.DownloadTile` gains `iconButtonIcon`. No schema, migration or API
+change.
+
+R23 (T430–T449; §7 below; contracts/blocks.md § "R23"): the R19–R22 options above are simplified —
+pixel-matching options removed per owner decision. The props it removes stay readable as ignored
+data, the props it adds are listed in §7.
+
 ---
 
 ## 5. Resolved page (storefront read): additions to `cmsResolvedPageSchema`
 
 ```ts
 breadcrumbs: { visible: boolean; scheme: 'light' | 'muted' | 'dark';
+               overlay?: boolean;                                       // R21H (T355): present (true) only when on
                trail: Array<{ name: string; slug: string | null }> };   // root-first; excludes Home and the page itself
 share: { imageUrl: string | null };            // page image, else the default, else null
 languages: string[];                           // the page's languages, for og:locale:alternate
@@ -463,8 +600,29 @@ languages: string[];                           // the page's languages, for og:l
 - **Trail rule.** The resolver walks `parent_page_id` up to 8 levels. For each ancestor it reads
   the channel's slug from `cms_page_sales_channels`. When the ancestor is not published and
   active in the channel, the entry has `slug: null` (FR-030a).
-- **Crumb name.** The name is the ancestor's `metaTitle` in the request language, falling back to
-  its `name`.
+- **Crumb name.** The name is the ancestor's `name`, as the page's own crumb is (R19C, T270; until
+  then it was the ancestor's `metaTitle` in the request language, falling back to its `name`).
+
+### 5.1 Public path (R19D)
+
+```ts
+path?: string;                                  // the page's public path in the channel, no leading '/'
+trail: Array<{ name; slug; path?: string | null }>;  // path: the ancestor's public path; null exactly when slug is
+// GET /api/v1/cms/pages/by-channel entries gain `path?: string`
+```
+
+- **Rule** (`cmsPagePublicPaths`, `packages/contracts/src/cms.ts`, one home for backend, admin and
+  storefront): per channel, from each page's channel slug. A page without `parentPathInUrl`, or
+  whose parent the channel does not serve, is at its own slug. Otherwise it is at its parent's
+  path + `/` + its slug. A stored loop, or a chain of more than 8 slugs, falls back to the slug.
+- **Resolution.** `by-slug?slug=` matches the whole path first, then a page's own channel slug;
+  the answer's `path` is canonical and the storefront redirects (308) when it differs from the
+  request. The optional fields stay optional only for an answer cached before R19D.
+- **Links.** A `LinkValue` of kind `page` keeps storing the flat slug; the resolver rewrites it to
+  the target's path in the request's channel, in the page tree and its inlined embeds.
+- **Moves.** Renaming or moving a parent moves its nested descendants; the old path stops
+  answering (no redirects facility exists to carry it). A write that moves a nested path drops
+  every cached page answer (`CmsContentChange.addressesMoved` → the broad `cms:page` tag).
 
 ---
 
@@ -475,6 +633,7 @@ languages: string[];                           // the page's languages, for og:l
 | Duplicate anchor in one page tree. The set covers the `anchor` prop of each top-level `cms.Section`, of each top-level `cms.SectionGroup` and of each `cms.Section` in such a group's slot (T158), and the rich-text heading anchors at any depth, in every language tree. An anchor may repeat across languages | `CmsPageService.setContent`, `CmsBlockService.setContent`, `CmsTemplateService.setContent` | `CMS_DUPLICATE_ANCHOR` with token `anchor` |
 | Reserved anchor (`main-content`, `cmsb`, and the ids from `storefront/app/reserved-anchors.ts`) | same | `CMS_RESERVED_ANCHOR` with token `anchor` |
 | Parent cycle or depth > 8 | `cms_page.update` Command | `CMS_PAGE_PARENT_CYCLE` |
+| Two pages of one channel at one public path, one of them the written page or a descendant (R19D) | `cms_page.create` / `cms_page.update` Commands, after the write | `409 CMS_SLUG_CONFLICT` with token `path` |
 | Brand-token shape | write route (`cmsBrandTokensSchema`) | `VALIDATION_ERROR` (existing envelope) |
 | Brand-token version mismatch | `cms.brand_tokens.update` Command | `VERSION_CONFLICT` (existing) |
 | Contrast below AA | write route response `warnings[]` | not an error (FR-006b) |
@@ -482,3 +641,94 @@ languages: string[];                           // the page's languages, for og:l
 
 The three new codes are minted through the existing error-code ledger
 (`backend/test/fixtures/error-code-routing/reference-ledgers.ts`).
+
+---
+
+## 7. R23: simplification of the R19–R22 options (2026-10-28)
+
+**Why.** R19–R22 (rounds of fixes found while rebuilding reference pages) added about 200 options.
+Many existed only to match a measured page to the pixel: a size, weight, line height and colour per
+text and per breakpoint, a px space per inner element, 12-column grids typed as numbers, and brand
+switches that scaled every block's own px values in tiers the editor cannot preview. **Pixel-matching
+options removed per owner decision**; every structural capability and every bug fix stays. Nothing
+of R19–R22 was released, so no stored data needs a migration: a removed block prop is ignored data
+(readers never crash on it), a removed brand key is stripped on the next parse. Everything stored
+before R19 renders byte for byte as before (option-parity and fallback-parity tests, and an offline
+render of a pre-R19 tree against the pre-R19 renderer).
+
+**Rules that replace per-element options.**
+
+- *Typography* (T435). A type-token size carries the token's line height, weight and letter spacing
+  wherever a block text takes one (`textStyleAttrs` writes `--cmsb-t-<token>-lh|-w|-ls` with the
+  built-in values as fallbacks; T350's `tokenTierStyle` keeps doing it for the heading helpers). A
+  line height applies, and its field shows, only at a breakpoint whose size is Custom px
+  (`customOnlyLeading` for a heading whose size another helper writes). The weights R19–R22 added
+  are one value (`TextWeight`); a stored per-breakpoint weight reads as its `desktop` value, else
+  its `base` (`singleWeight`). Weights that were per breakpoint before R19 (R17's heading, title,
+  card title and caption weights) stay per breakpoint.
+- *Colours* (T436). A block text takes the block's colour (the scheme's, or the hero's
+  `textColor`); an accent stays where a block has one (`cms.Hero.eyebrowColor`,
+  `cms.Stats.valueColor`, the listings' `leadColor`, list marker colours).
+- *Spacing* (T437). A block's inner spaces are one `BlockSpace` (`'default' | SpaceToken`), one
+  value for every breakpoint, written as the brand's `--cmsb-space-<step>` with the built-in phone
+  and desktop px as fallbacks.
+- *12-column layouts* (T438, T440). A `layout` preset (`'default' | '6-6' | '7-5' | '5-7' | '8-4' |
+  '4-8' | '5-1-6' | '6-1-5'`, media/image first, mirrored with the side; the card offers the five
+  without a column between) and `layoutAdvanced` (boolean). With `layoutAdvanced` on, the raw
+  numbers win; with it off they are not read; with it never stored and no preset, stored raw numbers
+  read as on (and `resolveData` stores it on, so the editor shows them). `cms.MediaText` keeps its
+  `split` as the preset and gains only `layoutAdvanced`.
+
+**Props added** (all optional; unset renders as before):
+
+| Block | Prop | Shape | Replaces |
+| --- | --- | --- | --- |
+| `cms.Hero` | `eyebrowSize` | `SectionTextSize` (`Responsive`) | — (with `eyebrowSizePx`, which now needs `'custom'`; a stored px without a size reads as Custom) |
+| `cms.FeatureList` | `innerSpace` | `BlockSpace` | `iconSpacePx`, `titleSpacePx`, `bodySpacePx` |
+| `cms.MediaText` | `innerSpace`, `stackedGap`, `layoutAdvanced` | `BlockSpace`, `BlockSpace`, boolean | `headingSpacePx` + `bodySpacePx`, `stackedGapPx` |
+| `cms.CarouselSplit` | `layout`, `layoutAdvanced`, `innerSpace`, `stackedGap` | preset, boolean, `BlockSpace`, `BlockSpace` | the raw spans as main field, `titleSpacePx` + `controlsSpacePx`, `stackedGapPx` |
+| `cms.Stats` | `layout`, `layoutAdvanced` | preset, boolean | `imageSpan`/`figuresSpan`/`figuresOffset` as main field |
+| `cms.CtaCard` | `layout`, `layoutAdvanced`, `cardPadding`, `headingSpace` | preset (two tracks), boolean, `BlockSpace`, `BlockSpace` | `imageColumns` as main field, `paddingPx`, `headingSpacePx` |
+| `cms.DownloadTile` | `titleSize`, `cardPadding` | `SectionTextSize` (`Responsive`), `BlockSpace` | `titleSizePx` alone (now the Custom px; a stored px without a size reads as Custom), `paddingPx` |
+| `cms.Image` | `captionSize` | `SectionTextSize` (`Responsive`) | `captionSizePx` alone (as above) |
+
+**Props removed** (stored values ignored):
+
+| Block / area | Removed |
+| --- | --- |
+| Brand (§2) | `tierScale.smallDesktopUntilPx`, `blockPx`, `buttonLabels`; `layout.gutterTabletPx`, `gutterSmallDesktopPx`, `containerSmallDesktopPx`, `fluidContainer`, `breadcrumbsPaddingYPx`; `typeScale.<token>.trackingMobileEm` |
+| `cms.Section` | `outsetPx` |
+| `cms.BackgroundPanel` | `textBoxMarginPx`, `textBoxPaddingPx` |
+| `cms.Hero` | `titleColor`, `subheadingColor`, `statementColor`, `bodyColor`, `bodyListMarkerColor`, `eyebrowWeight`, `proofCaptionSizePx`, `proofCaptionWeight`, `proofCaptionColor`, `proofCaptionLineHeight` |
+| `cms.Heading` | `hangingIconGapPx` (the indent's own 0.35 em) |
+| Rich text | the `textSize` mark's Custom px (a stored px mark still renders) |
+| `cms.RichContent` | `listWeight` |
+| `cms.Statement` | `bodyColor` |
+| `cms.FeatureList` | `bodyColor`, `titleLetterSpacing`, `iconSpacePx`, `titleSpacePx`, `bodySpacePx` |
+| `cms.MediaText` | `headingSpacePx`, `bodySpacePx`, `stackedGapPx`, `featureBodyColor` |
+| `cms.CarouselSplit` | `titleHangingIconGapPx`, `stackedGapPx`, `titleSpacePx`, `controlsSpacePx` |
+| Carousels | `controls.dotColor`, `controls.activeDotColor`, `slidesPerViewSmallDesktop`, `gapSmallDesktopPx` |
+| `cms.Button`, `ButtonSpec` | `iconSizePx`, `iconOnlyWidthPx` |
+| `cms.DownloadTile` | `paddingPx`, `iconButtonSizePx`, `iconButtonBorderColor`, `subtitleSizePx`, `subtitleColor` |
+| `cms.CarouselImage` | `moreLabelSizePx`, `moreLabelColor`, `moreLabelIconColor`, `moreLabelWeight`, `captionPaddingPx` |
+| `cms.Image` | `captionWeight`, `captionColor`, `captionMinWidthPx` |
+| `cms.Stats` | `labelColor` |
+| `cms.CtaCard` | `listSize`, `listSizePx` (the list follows `bodySize`), `paddingPx`, `headingSpacePx` |
+| `cms.Accordion` | `icon: 'chevron-circle'` (reads as `'chevron'`), `iconCircleColor` |
+| `newsletter.Signup` | `buttonHeightPx`, `buttonTextSizePx`, `buttonWeight`, `topicLabelSizePx` |
+
+**Props narrowed to one value** (a stored per-breakpoint value reads as its desktop value, else its
+base): the R19–R22 weights (`cms.Hero` `subheadingWeight`, `statementWeight`, `bodyWeight`;
+`cms.Statement`, `cms.FeatureList`, `cms.MediaText`, `cms.CarouselSplit` `bodyWeight`;
+`cms.MediaText.featureBodyWeight`; `cms.CarouselSplit.titleWeight`; `cms.Stats.labelWeight`;
+`cms.LinkList.titleWeight`; `cms.RichContent.textWeight`; `cms.CtaCard.bodyWeight`; the
+listings' and `blog.LatestPosts`' `leadWeight`), `cms.CtaCard.imageInsetPx` and
+`cms.DownloadTile.minHeightPx`.
+
+**Unchanged and kept**: `tierScale.tablet`, `smallDesktop`, `fluidDesktop`, `fluidUntilPx`,
+`buttons`; `parentPathInUrl` and `breadcrumbsOverlay` (§1.1, their migrations); the section width
+per breakpoint, the Column outset, the art-direction tier, the stacking breakpoints, the controls
+inside a slide, `dots-start`, `arrowsWhenFit`, the transparent outline, the pill shape, the download
+tile link and look, the read-more label, the caption placement per breakpoint, the sign-up layout
+options, the hanging indent, the feature-list icon position and item span, the rich-text token size
+mark and list markers, the measures, and every R19–R22 bug fix.

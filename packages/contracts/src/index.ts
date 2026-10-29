@@ -118,6 +118,10 @@ export {
   // Feature 105, Phase 4 — the reserved set the editor and the refusal share.
   cmsReservedSegmentsResponseSchema,
   firstSlugSegment,
+  // R19D (feature 163) — the public path of a page that includes its parent's.
+  CMS_PAGE_PATH_MAX_LEVELS,
+  cmsPagePublicPaths,
+  type CmsPagePathNode,
   // Feature 151 — the Page Builder translation: the per-block declaration and
   // the two admin routes' shapes.
   translatablePathRe,

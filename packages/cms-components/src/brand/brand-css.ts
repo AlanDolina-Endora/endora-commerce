@@ -219,12 +219,83 @@ function px(value: unknown): string | null {
   return n === null ? null : `${n}px`;
 }
 
+/** R20F (T322): a tier factor the schema admits (0.5–2) other than 1, else `null` (nothing written). */
+function factor(value: unknown): number | null {
+  const n = num(value);
+  return n === null || n < 0.5 || n > 2 || n === 1 ? null : n;
+}
+
+/** `value` px × `scale`, to two decimals, or `null` for a value that is not a number. */
+function scaledPx(value: unknown, scale: number): string | null {
+  const n = num(value);
+  return n === null ? null : `${Math.round(n * scale * 100) / 100}px`;
+}
+
+const BUTTON_HEIGHTS = [
+  ['s', 'small'],
+  ['m', 'medium'],
+  ['l', 'large'],
+] as const;
+
+/**
+ * R20F (T322): one breakpoint's sizes scaled — every type token's size and
+ * every spacing step, from the phone (`mobile`) or the desktop values. The
+ * gutters and the container are widths, not scaled. R21H (T352): with
+ * `buttons`, the brand's button heights too (one value for every breakpoint).
+ */
+function scaledTier(tokens: CmsBrandTokens, from: 'mobilePx' | 'desktopPx', scale: number, buttons: boolean): Declarations {
+  const out = new Declarations();
+  for (const token of TYPE_TOKENS) out.set(`t-${token}-size`, scaledPx(tokens.typeScale?.[token]?.[from], scale));
+  for (const token of SPACE_TOKENS) out.set(`space-${token}`, scaledPx(tokens.spacing?.[token]?.[from], scale));
+  if (buttons) for (const [key, height] of BUTTON_HEIGHTS) out.set(`btn-h-${key}`, scaledPx(tokens.buttons?.heights?.[height], scale));
+  return out;
+}
+
+/**
+ * R21H (T351): a desktop value growing with the viewport — `scale` × the value
+ * at the small-desktop end, the value itself from `untilPx` on, in between the
+ * value × viewport / `untilPx` (`clamp()` of a `vw` length, which every
+ * browser computes; a length divided by a length would not be).
+ */
+function fluidPx(value: unknown, scale: number, untilPx: number): string | null {
+  const n = num(value);
+  if (n === null) return null;
+  const min = Math.round(n * scale * 100) / 100;
+  const vw = Math.round(((n * 100) / untilPx) * 10000) / 10000;
+  return `clamp(${min}px, ${vw}vw, ${n}px)`;
+}
+
+function fluidTier(tokens: CmsBrandTokens, scale: number, untilPx: number, buttons: boolean): Declarations {
+  const out = new Declarations();
+  for (const token of TYPE_TOKENS) out.set(`t-${token}-size`, fluidPx(tokens.typeScale?.[token]?.desktopPx, scale, untilPx));
+  for (const token of SPACE_TOKENS) out.set(`space-${token}`, fluidPx(tokens.spacing?.[token]?.desktopPx, scale, untilPx));
+  if (buttons) for (const [key, height] of BUTTON_HEIGHTS) out.set(`btn-h-${key}`, fluidPx(tokens.buttons?.heights?.[height], scale, untilPx));
+  return out;
+}
+
+/**
+ * The small-desktop tier's last width: 1279 px, as every block stylesheet's
+ * media queries assume. R23 (T432): fixed — the brand no longer moves it.
+ */
+const SMALL_DESKTOP_UNTIL_PX = 1279;
+
+function widthPx(value: unknown, min: number): number | null {
+  const n = num(value);
+  return n === null || !Number.isInteger(n) || n < min || n > 3840 ? null : n;
+}
+
 /**
  * The `:root` variables, one `[data-cmsb-scheme=…]` rule per colour scheme
  * rebinding `--cmsb-fg`, `-bg`, `-fg-muted`, `-border` and `-link`, the
  * `@font-face` rules of asset-library fonts, one rule per rich-text heading
  * level whose type style is set (T163), and one `@media (min-width: 1024px)`
- * block for the desktop sizes.
+ * block for the desktop sizes. R20F (T322): with a tier factor other than 1,
+ * a tablet block (768–1023 px, before the desktop one) and a small-desktop
+ * block (1024–1279 px, after it) rebind the scaled sizes; unset, neither is
+ * written and the output is today's. R21H (T351, T352): a fluid block may
+ * follow the small-desktop one (`fluidDesktop`) and the button heights may
+ * scale (`buttons`). Each writes only when set. R23 (T432): the small-desktop
+ * end is fixed at 1279 px and the frame (gutter, container) is not per tier.
  */
 export function brandTokensToCss(tokens: CmsBrandTokens, options: BrandCssOptions = {}): BrandCss {
   const assetUrl = options.assetUrl ?? DEFAULT_ASSET_URL;
@@ -301,13 +372,32 @@ export function brandTokensToCss(tokens: CmsBrandTokens, options: BrandCssOption
   root.set('gutter', px(tokens.layout?.gutterMobilePx));
   desktop.set('gutter', px(tokens.layout?.gutterDesktopPx));
 
+  const tierScale = tokens.tierScale;
+  const scaleButtons = tierScale?.buttons === true;
+  const tabletFactor = factor(tierScale?.tablet);
+  const smallDesktopFactor = factor(tierScale?.smallDesktop);
+  const smallDesktopUntil = SMALL_DESKTOP_UNTIL_PX;
+  const tablet = tabletFactor === null ? new Declarations() : scaledTier(tokens, 'mobilePx', tabletFactor, scaleButtons);
+  const smallDesktop = smallDesktopFactor === null ? new Declarations() : scaledTier(tokens, 'desktopPx', smallDesktopFactor, scaleButtons);
+  // R21H (T351): from the small-desktop end the sizes grow to the desktop ones, reached at `fluidUntil`.
+  const fluidUntil = widthPx(tierScale?.fluidUntilPx, 1025) ?? widthPx(tokens.layout?.containerMaxPx, 320);
+  const fluid =
+    tierScale?.fluidDesktop === true && smallDesktopFactor !== null && smallDesktopFactor < 1 && fluidUntil !== null && fluidUntil > smallDesktopUntil + 1
+      ? fluidTier(tokens, smallDesktopFactor, fluidUntil, scaleButtons)
+      : null;
+
   const faces = [...new Set([...heading.faces, ...body.faces])];
   const css = [
     ...faces,
     `:root{${root.toString()}}`,
     ...schemeRules,
     ...richHeadings,
+    ...(tablet.empty ? [] : [`@media (min-width: 768px) and (max-width: 1023.98px){:root{${tablet.toString()}}}`]),
     ...(desktop.empty ? [] : [`@media (min-width: 1024px){:root{${desktop.toString()}}}`]),
+    ...(smallDesktop.empty ? [] : [`@media (min-width: 1024px) and (max-width: ${smallDesktopUntil}.98px){:root{${smallDesktop.toString()}}}`]),
+    ...(fluid && !fluid.empty
+      ? [`@media (min-width: ${smallDesktopUntil + 1}px) and (max-width: ${fluidUntil! - 1}.98px){:root{${fluid.toString()}}}`]
+      : []),
   ]
     .join('\n')
     // Belt and braces: nothing above can produce `<`, and nothing may.

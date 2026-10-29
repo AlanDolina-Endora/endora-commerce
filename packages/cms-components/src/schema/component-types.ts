@@ -53,6 +53,8 @@ export interface ColumnProps extends HideOnProps, BoxStyleProps, AppearanceProps
   columnStart?: ColumnTrackStart | ResponsiveProp<ColumnTrackStart>;
   /** T165: the grid row the column starts at, per breakpoint; unset or `auto` is the next free place. */
   rowStart?: ColumnRowStart | ResponsiveProp<ColumnRowStart>;
+  /** R19C (T265): the box's outset past the column track on each side, px per breakpoint; unset, none. */
+  outsetPx?: number | ResponsiveProp<number>;
 }
 
 /** T165: a Column's row span in its Row's grid. */
@@ -151,10 +153,15 @@ type LegacyAlign = 'left' | 'center' | 'right';
  * stays as the Custom overrides of the tokens. A heading stored before has no
  * `font` and no `size`, and renders exactly as it did.
  */
-export interface HeadingProps extends HideOnProps, BoxStyleProps, TypographyProps {
+export interface HeadingProps extends HideOnProps, BoxStyleProps, TypographyProps, TextMaxWidthProps {
   level: HeadingTag;
   /** A one-paragraph document; a plain string stored before is read as one. */
   text: InlineRichText | string;
+  /**
+   * R19A (T226): a text that begins with an inline icon hangs the rest beside it — a
+   * wrapped line starts under the text, not under the icon. Unset or `false` is today's.
+   */
+  hangingIcon?: boolean;
   size?: HeadingSize | ResponsiveProp<HeadingSize>;
   font?: HeadingFont;
   /** Any CSS font family, with `font: 'custom'`; it wins over `fontFamily`. */
@@ -173,7 +180,12 @@ export interface TextMaxWidthProps {
 }
 
 export interface TextProps extends HideOnProps, BoxStyleProps, TypographyProps, TextMaxWidthProps {
-  text?: string;
+  /**
+   * A plain string (as stored before R19A), or — R19A (T232) — a one-paragraph
+   * inline rich text with bold, italic, links and the emphasis marks. A stored
+   * string renders as it did; the editor writes a document once it is edited.
+   */
+  text?: string | InlineRichText;
   /** Legacy rows saved before Simple Text — read-only fallback at render time. */
   tiptapContent?: { type?: string; content?: unknown[] } | null;
   /** Legacy rows saved before Simple Text — read-only fallback at render time. */
@@ -254,8 +266,24 @@ export interface ImageProps extends HideOnProps, BoxStyleProps {
   overlay?: SectionOverlay;
   /** An optional caption, translatable; below the image or beside it. */
   caption?: string;
-  captionPlacement?: ImageCaptionPlacement;
+  /** R19B (T251): one placement or one per breakpoint. */
+  captionPlacement?: ImageCaptionPlacement | ResponsiveProp<ImageCaptionPlacement>;
+  /**
+   * R23 (T446): the caption's size — a type token or Custom px (`captionSizePx`, per breakpoint); unset is
+   * today's small text size. R19B stored a Custom px without a size, which reads as Custom.
+   */
+  captionSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  captionSizePx?: number | ResponsiveProp<number>;
+  /** R19B (T251): the caption's alignment per breakpoint; unset is the start. R23 (T446): its weight, colour and minimum width were removed. */
+  captionAlign?: ImageCaptionAlign | ResponsiveProp<ImageCaptionAlign>;
+  /** R20E (T293): the caption's maximum width in px per breakpoint; unset is none. */
+  captionMaxWidthPx?: number | ResponsiveProp<number>;
+  /** R21G (T337): with a mobile image, the tier the desktop image starts at; unset or `tablet`, 768 px (today's). */
+  desktopFrom?: 'tablet' | 'desktop';
 }
+
+/** R19B (T251): a caption's alignment. */
+export type ImageCaptionAlign = 'start' | 'center' | 'end';
 
 export type ImageCaptionPlacement = 'below' | 'beside';
 
@@ -263,6 +291,18 @@ export interface RichContentProps extends HideOnProps, BoxStyleProps, TextMaxWid
   content: import('@tiptap/core').JSONContent | null;
   /** Synced from TipTap in resolveData — not shown as an author-facing field. */
   html: string;
+  /** R19A (T233): the text's size per breakpoint (a type token or Custom px); unset or `default` is today's. */
+  textSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  textSizePx?: number | ResponsiveProp<number>;
+  /** R20E (T307): the check and chevron list markers' colour (`#rrggbb` or `token:<role>`); unset is today's. */
+  listMarkerColor?: string;
+  /** R21G (T338): the line height of the text's lists per breakpoint; unset, the text's. */
+  listLineHeight?: TextLineHeight;
+  /**
+   * R22I (T377): the text's weight; unset or `default`, today's. R23 (T435): one value (a stored per-breakpoint
+   * one reads as its desktop value, else its base); the lists follow it (R22I's `listWeight` was removed).
+   */
+  textWeight?: ResponsiveTextWeight;
 }
 
 /**
@@ -284,6 +324,15 @@ export interface ButtonProps extends HideOnProps, BoxStyleProps {
   align?: BlockAlign | ResponsiveProp<BlockAlign>;
   /** T168: the full width per breakpoint (top level, Responsive tab); unset is today's. */
   fullWidth?: ButtonWidth | ResponsiveProp<ButtonWidth>;
+  /** R19B (T245): the outline fill transparent; unset keeps today's scheme-filled outline. */
+  transparentOutline?: boolean;
+  /** R19B (T246): the border's colour (`#rrggbb` or `token:<role>`); unset is the fill's. */
+  borderColor?: string;
+  /**
+   * R20E (T296): an icon-only button's shape; unset is today's circle, a pill is 1.15 times its height wide.
+   * R23 (T447): R19B's `iconSizePx` and R20E's `iconOnlyWidthPx` were removed (stored values are ignored).
+   */
+  iconOnlyShape?: 'circle' | 'pill';
   /** @deprecated stored before feature 163 — read as `button.label`. */
   label?: string;
   /** @deprecated stored before feature 163 — read as `button.link`. */
@@ -365,7 +414,8 @@ export interface VideoProps extends HideOnProps, BoxStyleProps {
 }
 
 export type CarouselEffect = 'slide' | 'fade';
-export type CarouselControlsPlacement = 'header' | 'below' | 'overlay';
+/** R19B (T253): `slide` draws the controls inside each split slide, under its text. */
+export type CarouselControlsPlacement = 'header' | 'below' | 'overlay' | 'slide';
 export type CarouselBleed = 'none' | 'end' | 'both';
 /** Feature 163, T129: the arrows' look; `default` (white, light border), `round` and `m` are today's. */
 export type CarouselArrowVariant = 'default' | 'outline' | 'solid';
@@ -379,8 +429,9 @@ export type CarouselLayout = 'carousel' | 'grid';
  * Feature 163, T147: how the controls below the track are aligned — centred
  * (today), at the start or the end, spread (`between`), or `split`: the
  * previous and next arrows at the two ends with the dots centred between.
+ * R20F (T313): `dots-start` — the dots at the start, both arrows together at the end.
  */
-export type CarouselControlsAlign = 'center' | 'start' | 'end' | 'between' | 'split';
+export type CarouselControlsAlign = 'center' | 'start' | 'end' | 'between' | 'split' | 'dots-start';
 /** Feature 163, T147: the next arrow's own style, or `same` (the arrows' style). */
 export type CarouselNextArrowVariant = 'same' | CarouselArrowVariant;
 /** Feature 163, T143: the filter bar's look — pills (today) or underlined tabs — and its alignment. */
@@ -390,6 +441,17 @@ export type CarouselFilterAlign = 'start' | 'center' | 'end';
 export type ItemFontRole = 'default' | 'heading' | 'body';
 /** Feature 163, T151: a text's weight — `default` keeps the block's own (today's), else 300–800. */
 export type TextWeight = 'default' | 300 | 400 | 500 | 600 | 700 | 800;
+/** R19A (T223): a line height, a multiplier of the font size (0.8–3), per breakpoint; unset keeps the block's own. */
+export type TextLineHeight = number | ResponsiveProp<number>;
+/** R19A (T223): a weight per breakpoint (R17 T211's shape); unset or `default` keeps the block's own. */
+export type ResponsiveTextWeight = TextWeight | ResponsiveProp<TextWeight>;
+/**
+ * R23 (T437): one spacing step for a block's inner spaces — `default` (unset) keeps the block's own, else a
+ * brand spacing step, whose phone and desktop values follow the breakpoints.
+ */
+export type BlockSpace = 'default' | SpaceToken;
+/** R23 (T438): a 12-column layout preset, media (or image) columns – columns between – text columns. */
+export type TwelveColumnLayout = '6-6' | '7-5' | '5-7' | '8-4' | '4-8' | '5-1-6' | '6-1-5';
 /** Feature 163, T153: what the controls below a carousel's track line up with — the content edge (today) or the first slide. */
 export type CarouselControlsAlignTo = 'container' | 'slide';
 /**
@@ -433,6 +495,13 @@ export interface CarouselControls {
   disabledArrowLook?: CarouselDisabledArrowLook;
   /** T171: with `disabledArrowLook: 'color'`, a brand colour token (`token:<role>`) or a hex. */
   disabledArrowColor?: string;
+  /** R19B (T241): a solid arrow's glyph colour (`token:<role>` or a hex); unset is today's white. */
+  arrowGlyphColor?: string;
+  /** R19B (T242): the breakpoints the arrows / the dots are hidden on; unset shows them wherever they are on. */
+  hideArrowsOn?: HideOn;
+  hideDotsOn?: HideOn;
+  /** R20F (T314): keep the arrows (both disabled, the dots hidden) when every slide fits; unset hides the controls (today's). */
+  arrowsWhenFit?: boolean;
 }
 
 /** Feature 163, T131: one tag the Carousel filters by — its key, and the label shown (translatable). */
@@ -473,6 +542,8 @@ export interface ContentSliderProps extends HideOnProps, BoxStyleProps, BlockHea
   headingLevel?: HeadingTag;
   headingSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
   headingSizePx?: number | ResponsiveProp<number>;
+  /** R22I (T379): the heading's line height per breakpoint (the shared header's). */
+  headingLineHeight?: TextLineHeight;
   slides: Slot;
   slidesPerView?: number | ResponsiveProp<number>;
   gap?: SectionGap | number | ResponsiveProp<SectionGap | number>;
@@ -559,6 +630,15 @@ export interface CarouselImageProps extends HideOnProps {
   captionWeight?: TextWeight | ResponsiveProp<TextWeight>;
   /** T172: the caption's colour while the item is hovered or holds focus — a brand colour token or a hex; unset, today's. */
   captionHoverColor?: string;
+  /** R19B (T249): a second line over the image in a corner of its own (e.g. "Read more"); empty shows none. */
+  moreLabel?: string;
+  /** R19B (T249): the corner; unset is the bottom right. */
+  moreLabelPlacement?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  /**
+   * R19B (T249): an icon of the curated catalog after the label. R23 (T445): the label's own size (R19B) and
+   * colour, icon colour and weight (R20E), and the caption's padding per breakpoint (R19B), were removed.
+   */
+  moreLabelIcon?: string;
 }
 
 /** Feature 163 (contracts/blocks.md `cms.CarouselSplit`): media beside an icon, a title, text and buttons. */
@@ -572,6 +652,49 @@ export interface CarouselSplitProps extends HideOnProps, IconChoice, ButtonListW
   hoverZoom?: boolean;
   /** T131: comma-separated tags the Carousel's filter matches. */
   tags?: string;
+  /** R20F (T310): the tier from which media and text sit side by side; unset is `tablet` (768 px, today's). */
+  sideBySide?: 'tablet' | 'desktop';
+  /**
+   * R20F (T310): from the side-by-side tier, the media's and the text's widths
+   * in columns of 12 and the columns between them. Any set: a 12-column grid
+   * (unset ones: media 6, none between, the text the rest); none set: today's
+   * two halves 40 px apart. R23 (T438): applied with `layoutAdvanced` on (raw numbers stored without the
+   * switch and without a `layout` read as on); otherwise the `layout` preset's.
+   */
+  mediaSpan?: number;
+  textSpan?: number;
+  textOffset?: number;
+  /** R22I (T371): where the pair sits on the 12 columns — at the media's side (`media`, unset: today's), from column 1 (`start`) or to column 12 (`end`). */
+  columnsAnchor?: 'media' | 'start' | 'end';
+  /** R23 (T438): a 12-column layout preset (media – between – text); unset or `default`, today's two halves. */
+  layout?: 'default' | TwelveColumnLayout;
+  /** R23 (T438): the raw columns (`mediaSpan`, `textSpan`, `textOffset`, `columnsAnchor`) instead of the preset. */
+  layoutAdvanced?: boolean;
+  /** R22I (T370): with the columns of 12, the space between them in px per breakpoint; unset, today's (the side gutter). */
+  columnGapPx?: number | ResponsiveProp<number>;
+  /** R20F (T310): the media frame's corners; unset is today's 8 px. */
+  mediaCornerRadius?: CornerRadius;
+  /** R20F (T311): the title's size (a type token or Custom px), weight and line height per breakpoint; unset, today's h4 token. */
+  titleSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  titleSizePx?: number | ResponsiveProp<number>;
+  titleWeight?: ResponsiveTextWeight;
+  titleLineHeight?: TextLineHeight;
+  /** R20F (T311): a title led by an inline icon hangs beside it (R19A T226's indent); R23 (T439): the space after the icon is the indent's own. */
+  titleHangingIcon?: boolean;
+  /** R20F (T312): the text's size, weight and line height per breakpoint; unset, today's rich body. */
+  bodySize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  bodySizePx?: number | ResponsiveProp<number>;
+  bodyWeight?: ResponsiveTextWeight;
+  bodyLineHeight?: TextLineHeight;
+  /** R21G (T336): with a hanging title, the text indented to the title's text (`title`); unset or `none`, today's. */
+  bodyIndent?: 'none' | 'title';
+  /**
+   * R23 (T437): one spacing step below the title (today's 12 px) and above the carousel's controls in the
+   * slide (today's 24 px), and one between media and text while stacked (today's 24 px); unset or `default`
+   * writes nothing. Replaces R21G's `titleSpacePx`, `controlsSpacePx` and `stackedGapPx` (stored values ignored).
+   */
+  innerSpace?: BlockSpace;
+  stackedGap?: BlockSpace;
 }
 
 /** Feature 163 (contracts/blocks.md `cms.LinkTile`): an image, a title and a "more" link. */
@@ -620,6 +743,38 @@ export interface DownloadTileProps extends HideOnProps {
   linkLabel?: string;
   /** T131: comma-separated tags the Carousel's filter matches. */
   tags?: string;
+  // R19B (T247, T248): the card's look; every option unset is today's light, bordered 8 px card.
+  /** A colour scheme on the card (`data-cmsb-scheme`); unset or `inherit` is the section's. */
+  scheme?: 'inherit' | 'light' | 'muted' | 'dark';
+  /** `#rrggbb` or `token:<role>`; unset is the scheme's background. */
+  cardBackground?: string;
+  /** `false` removes the border; unset is today's. */
+  cardBorder?: boolean;
+  cornerRadius?: CornerRadius;
+  /** R23 (T437): the card's padding, one spacing step; unset or `default` is today's 20 px (replaces R19B's `paddingPx`). */
+  cardPadding?: BlockSpace;
+  /**
+   * R23 (T444): the title's size, a type token or Custom px (`titleSizePx`); unset is today's 18 px. R19B stored a
+   * Custom px without a size, which reads as Custom.
+   */
+  titleSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  titleSizePx?: number | ResponsiveProp<number>;
+  /** `false` hides the file type badge. */
+  showType?: boolean;
+  /** The hover image as today's faint tint or in full under a dark gradient. */
+  hoverImageLook?: 'faint' | 'full';
+  /** The link as today's text label or a round icon button at the bottom end. */
+  linkLook?: 'label' | 'icon';
+  /** R22I (T382): with the icon look, the button's glyph from the icon catalog; unset or unknown, today's (a download, an arrow for a link). */
+  iconButtonIcon?: string;
+  /** R20E (T303): `link` links the tile to `link` (a page, product, category, URL…) instead of a file; unset is a file. */
+  linkTo?: 'file' | 'link';
+  /** R20E (T303): the tile's link with `linkTo: 'link'`. */
+  link?: LinkValue;
+  /** R20E (T301): the card's minimum height in px; unset is 180 px. R23 (T444): one value (a stored per-breakpoint one reads as its desktop value, else its base). */
+  minHeightPx?: number | ResponsiveProp<number>;
+  /** R21G (T338): the title's weight; unset or `default`, today's. */
+  titleWeight?: TextWeight;
 }
 
 /**
@@ -732,8 +887,11 @@ export interface AccordionProps extends HideOnProps, BoxStyleProps {
   /** T186: the space after an open item, instead of the item gap — a spacing token or Custom (`openItemGapPx`); unset, the item gap. */
   openItemGap?: SpaceToken | 'custom' | ResponsiveProp<SpaceToken | 'custom'>;
   openItemGapPx?: number | ResponsiveProp<number>;
+  /** R21G (T338): the titles' line height per breakpoint; unset, today's (the trigger's, or the size token's). R23: with a Custom px size only. */
+  titleLineHeight?: TextLineHeight;
 }
 
+/** R23 (T441): R20F's `'chevron-circle'` was removed; a stored one reads as `'chevron'`. */
 export type AccordionIcon = 'plus' | 'chevron';
 export type AccordionDividerPosition = 'item' | 'title';
 export type AccordionIconSize = 's' | 'm' | 'l' | 'custom';
@@ -767,6 +925,8 @@ export interface CarouselHeaderOptions extends BlockHeadingStyleProps {
   headingLevel?: HeadingTag;
   headingSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
   headingSizePx?: number | ResponsiveProp<number>;
+  /** R22I (T379): the heading's line height per breakpoint; a breakpoint below the first set keeps the size's own. */
+  headingLineHeight?: TextLineHeight;
 }
 
 /** The Carousel's track options, shared by every block that shows a carousel (feature 163). */
@@ -805,6 +965,14 @@ export interface LinkListProps extends HideOnProps, BlockHeadingStyleProps {
   headingSizePx?: number | ResponsiveProp<number>;
   items?: LinkListItem[];
   divider?: boolean;
+  /** R20F (T320): with `divider` on, a rule under the last row too; unset, between rows only (today's). */
+  dividerAfterLast?: boolean;
+  /** R19A (T236): each row title's size per breakpoint and weight (R23: one value); unset is today's 600 at the text size. */
+  titleSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  titleSizePx?: number | ResponsiveProp<number>;
+  titleWeight?: ResponsiveTextWeight;
+  /** R22I (T379): each row title's line height per breakpoint; unset, today's. R23 (T435): with a Custom px size only. */
+  titleLineHeight?: TextLineHeight;
 }
 
 /**
@@ -844,6 +1012,8 @@ export interface LatestPostsProps extends HideOnProps, CarouselHeaderOptions, Ca
   leadSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
   leadSizePx?: number | ResponsiveProp<number>;
   leadColor?: string;
+  /** R22I (T379): the header lead's weight; unset or `default`, today's. R23 (T435): one value (a stored per-breakpoint one reads as its desktop value, else its base). */
+  leadWeight?: ResponsiveTextWeight;
   /** Where the header's button sits per breakpoint: below the lead (today), at the header's end, or after the posts. */
   headerButtonPlacement?: HeaderButtonPlacement | ResponsiveProp<HeaderButtonPlacement>;
   headerButtonFullWidth?: ButtonWidth | ResponsiveProp<ButtonWidth>;
@@ -887,7 +1057,17 @@ export interface ProductListingAdditions extends CarouselHeaderOptions {
   cardDividerColor?: string;
   ctaLabel?: string;
   footerButton?: ButtonSpec;
+  /** R19B (T244): the footer button's alignment; unset or `start` is today's. */
+  footerButtonAlign?: ProductListingFooterAlign;
+  /** R21G (T338): the header lead's size (a type token or Custom px) and weight per breakpoint, and its colour; unset, today's. */
+  leadSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  leadSizePx?: number | ResponsiveProp<number>;
+  leadWeight?: ResponsiveTextWeight;
+  leadColor?: string;
 }
+
+/** R19B (T244): where the button below a product listing sits. */
+export type ProductListingFooterAlign = 'start' | 'center' | 'end';
 
 export interface ProductGridProps extends HideOnProps, BoxStyleProps, ProductListingAdditions {
   source?: ProductSource;
@@ -996,6 +1176,8 @@ export interface FeatureListItem extends IconChoice {
   body?: import('@tiptap/core').JSONContent | string | null;
   /** @deprecated stored before feature 163 — read as `body`. */
   description?: string;
+  /** R22I (T378): the item's width on desktops in columns of 12 (1–12); unset, its share of the columns. */
+  span?: number;
 }
 
 export type FeatureListIconSize = 'small' | 'medium' | 'large' | 'custom';
@@ -1023,9 +1205,31 @@ export interface FeatureListProps extends HideOnProps, BoxStyleProps, BlockHeadi
   /** Unset or `'default'`: today's title look. */
   titleSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
   titleSizePx?: number | ResponsiveProp<number>;
-  /** T151: each item title's weight; unset or `default` is today's. */
-  titleWeight?: TextWeight;
+  /** T151: each item title's weight; unset or `default` is today's. R17 (T211): per breakpoint. */
+  titleWeight?: ResponsiveTextWeight;
+  /** R19A (T225): each item title's line height. R23 (T435): with a Custom px title size only. */
+  titleLineHeight?: TextLineHeight;
+  /**
+   * R19A (T224): each item text's size (a type token or Custom px), weight and line height; unset is today's.
+   * R23 (T435): one weight; the line height with a Custom px size only; the colour option was removed.
+   */
+  bodySize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  bodySizePx?: number | ResponsiveProp<number>;
+  bodyWeight?: ResponsiveTextWeight;
+  bodyLineHeight?: TextLineHeight;
+  /** R19A (T225): the icon above the title (unset, today's) or beside it, with the title and text hanging beside it. */
+  iconPosition?: 'above' | 'beside' | ResponsiveProp<'above' | 'beside'>;
+  /**
+   * R23 (T437): one spacing step (`none`–`xxl`) for the space after the icon, below the title and between the
+   * paragraphs of an item's text; unset or `default` is today's (8 px, 12 px beside, 4 px, half a line).
+   * Replaces R19A's `iconSpacePx`, `titleSpacePx` and R20F's `bodySpacePx` (stored values are ignored).
+   */
+  innerSpace?: BlockSpace;
   image?: Partial<ResponsiveImage>;
+  /** R20F (T317): the space between rows, px per breakpoint, apart from `gap` (then the columns' only); unset, the gap. */
+  rowGapPx?: number | ResponsiveProp<number>;
+  /** R20F (T317): the line height of lists in an item's text, per breakpoint; unset, the text's. R23: with a Custom px text size only. */
+  listLineHeight?: TextLineHeight;
 }
 
 /**
@@ -1075,7 +1279,8 @@ export type HeroElement = 'eyebrow' | 'title' | 'subheading' | 'statement' | 'bo
 export interface HeroSpaceAfter {
   element?: HeroElement;
   space?: SpaceToken | 'custom';
-  spacePx?: number;
+  /** One number; a value stored per breakpoint is read per breakpoint (the editor writes one number). */
+  spacePx?: number | ResponsiveProp<number>;
 }
 
 /**
@@ -1087,7 +1292,8 @@ export interface HeroSpaceAfter {
 export interface HeroOrderItem {
   element?: HeroElement;
   space?: SpaceToken | 'custom' | 'default';
-  spacePx?: number;
+  /** One number; a value stored per breakpoint is read per breakpoint (the editor writes one number). */
+  spacePx?: number | ResponsiveProp<number>;
 }
 
 /** The social-proof line: a small image (an avatar group, a badge) and a caption. */
@@ -1124,20 +1330,67 @@ export interface HeroProps extends HideOnProps, BoxStyleProps, ButtonListWidthPr
   subheadingLevel?: HeadingTag;
   subheadingSize?: HeroTextSize | ResponsiveProp<HeroTextSize>;
   subheadingSizePx?: number | ResponsiveProp<number>;
+  /**
+   * R19A (T227): the subheading's weight, line height and measure; unset is the size's own and the full width.
+   * R23 (T435): one weight (a stored per-breakpoint one reads as its desktop value, else its base); the
+   * line height applies with a Custom px size only.
+   */
+  subheadingWeight?: ResponsiveTextWeight;
+  subheadingLineHeight?: TextLineHeight;
+  subheadingMaxWidth?: TextMaxWidth | ResponsiveProp<TextMaxWidth>;
+  subheadingMaxWidthPx?: number | ResponsiveProp<number>;
   statement?: InlineRichText | string;
   statementLevel?: HeadingTag;
   statementSize?: HeroTextSize | ResponsiveProp<HeroTextSize>;
   statementSizePx?: number | ResponsiveProp<number>;
+  /** R19A (T227): the statement's weight, line height and measure. */
+  statementWeight?: ResponsiveTextWeight;
+  statementLineHeight?: TextLineHeight;
+  statementMaxWidth?: TextMaxWidth | ResponsiveProp<TextMaxWidth>;
+  statementMaxWidthPx?: number | ResponsiveProp<number>;
   /** A TipTap document. */
   body?: import('@tiptap/core').JSONContent | null;
+  /** R19A (T227): the body's size (unset, today's 16 px), weight, line height and measure. */
+  bodySize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  bodySizePx?: number | ResponsiveProp<number>;
+  bodyWeight?: ResponsiveTextWeight;
+  bodyLineHeight?: TextLineHeight;
+  bodyMaxWidth?: TextMaxWidth | ResponsiveProp<TextMaxWidth>;
+  bodyMaxWidthPx?: number | ResponsiveProp<number>;
   buttons?: ButtonSpec[];
   socialProof?: HeroSocialProof;
+  /** R20E (T298): the title's line height per breakpoint; unset is the size's own. R23 (T435): with a Custom px size only. */
+  titleLineHeight?: TextLineHeight;
+  /**
+   * R20E (T298): the eyebrow's colour (`#rrggbb` or `token:<role>`) over `textColor` — R23 (T436): the
+   * hero's one accent colour; the other texts take `textColor` (their own colours were removed).
+   */
+  eyebrowColor?: string;
+  /**
+   * R23 (T436): the eyebrow's size — a type token or Custom px (`eyebrowSizePx`); unset or `default` is
+   * today's. R20E (T299) stored a Custom px without a size, which reads as Custom.
+   */
+  eyebrowSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  eyebrowSizePx?: number | ResponsiveProp<number>;
+  /** R20E (T299): the eyebrow's line height and case; R23 (T435): the line height with a Custom px size only. */
+  eyebrowLineHeight?: TextLineHeight;
+  /** R20E (T299): `false` sets the eyebrow in its own case (no capitals, no tracking); unset is capitals. */
+  eyebrowUppercase?: boolean;
+  /** R20E (T300): the social-proof caption below or beside the image, per breakpoint; unset is beside, wrapping. */
+  proofCaptionPlacement?: 'below' | 'beside' | ResponsiveProp<'below' | 'beside'>;
+  /** R20E (T300): the caption's maximum width in px per breakpoint. */
+  proofCaptionMaxWidthPx?: number | ResponsiveProp<number>;
   align?: BlockAlign;
   minHeight?: HeroMinHeight | ResponsiveProp<HeroMinHeight>;
   /** The Custom (px) case of `minHeight`: today's `minHeightPx`. */
   minHeightPx?: number | ResponsiveProp<number>;
-  /** Unset on a hero carried from before feature 163: today's spacing between its texts. */
-  gaps?: SpaceToken | ResponsiveProp<SpaceToken>;
+  /** Unset on a hero carried from before feature 163: today's spacing between its texts. R19A (T228): or Custom. */
+  gaps?: SpaceToken | 'custom' | ResponsiveProp<SpaceToken | 'custom'>;
+  /** R19A (T228): the Custom (px) case of `gaps`, per breakpoint. */
+  gapsPx?: number | ResponsiveProp<number>;
+  /** R19A (T229): with media above the content, the space between them (a token or Custom px); unset is none. */
+  mediaSpace?: SpaceToken | 'custom' | ResponsiveProp<SpaceToken | 'custom'>;
+  mediaSpacePx?: number | ResponsiveProp<number>;
   cornerRadius?: CornerRadius;
   shadow?: Shadow;
   /** The entrance reveal of the statement and the body (US10, R-21); unset is none. */
@@ -1237,6 +1490,9 @@ export interface TestimonialProps extends HideOnProps, BoxStyleProps, Appearance
   avatarUrl?: string;
   /** @deprecated stored before feature 163 — read as `avatar.assetId`. */
   avatarAssetId?: string;
+  /** R22I (T381): the quote's size per breakpoint (a type token or Custom px); unset or `default`, today's 1.15 rem. */
+  quoteSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  quoteSizePx?: number | ResponsiveProp<number>;
 }
 
 export interface StatsItem {
@@ -1266,6 +1522,32 @@ export interface StatsProps extends HideOnProps, BoxStyleProps, BlockHeadingStyl
   /** Unset or `'default'`: today's value look. */
   valueSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
   valueSizePx?: number | ResponsiveProp<number>;
+  /** R19A (T235): the labels' size and weight; unset is today's muted 0.9 rem. R23 (T435): one weight; no colour of their own. */
+  labelSize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  labelSizePx?: number | ResponsiveProp<number>;
+  labelWeight?: ResponsiveTextWeight;
+  /** R20F (T319): the labels' line height per breakpoint; unset, today's inherited one. */
+  labelLineHeight?: TextLineHeight;
+  /** R22I (T375): the values' line height per breakpoint; a breakpoint below the first set keeps the size's own. */
+  valueLineHeight?: TextLineHeight;
+  /** R22I (T370): with the image's columns of 12, the space between them in px per breakpoint; unset, today's. */
+  columnGapPx?: number | ResponsiveProp<number>;
+  /** R21G (T335): with an image, the tier from which image and figures sit side by side; unset is `tablet` (768 px, today's). */
+  sideBySide?: 'tablet' | 'desktop';
+  /**
+   * R19A (T235): beside an image, from the tablet up, the image's and the
+   * figures' widths in columns of 12 and the columns between them. Any set:
+   * a 12-column grid (unset ones: image 6, no columns between, figures the
+   * rest); none set: today's two halves. R23 (T438): applied with `layoutAdvanced` on (raw numbers
+   * stored without the switch and without a `layout` read as on); otherwise the `layout` preset's.
+   */
+  layout?: 'default' | TwelveColumnLayout;
+  layoutAdvanced?: boolean;
+  imageSpan?: number;
+  figuresSpan?: number;
+  figuresOffset?: number;
+  /** R19A (T235): the figures beside an image — centred (unset, today's), at the top, the bottom, or spread over its height. */
+  figuresAlign?: 'center' | 'start' | 'end' | 'spread';
 }
 
 /** Feature 163 (contracts/blocks.md `cms.MediaText`) — the media: an art-directed image or a video with a poster. */
@@ -1308,6 +1590,8 @@ export interface MediaTextRow {
   body?: import('@tiptap/core').JSONContent | string | null;
   features?: IconTextItem[];
   buttons?: ButtonSpec[];
+  /** R20F (T315): this row's vertical alignment; unset or `inherit`, the block's `verticalAlign`. */
+  verticalAlign?: BlockAlign | 'inherit';
 }
 
 export type MediaTextSplit = '5-5' | '6-6' | '5-6' | '4-7' | '7-4';
@@ -1339,6 +1623,45 @@ export interface MediaTextProps extends HideOnProps, BlockHeadingStyleProps, But
   featureTitleSizePx?: number | ResponsiveProp<number>;
   /** T160: every feature title's weight; unset or `default` is today's 600. */
   featureTitleWeight?: TextWeight;
+  /** R19A (T238): the tier from which media and text sit side by side; unset is `tablet` (768 px, today's). */
+  sideBySide?: 'tablet' | 'desktop';
+  /**
+   * R23 (T437): one spacing step for the space below each row's heading (today's 16 px) and between the
+   * paragraphs of its text (today's: their own margins), and one between media and text while stacked
+   * (today's 24 px); unset or `default` writes nothing. Replaces R20F's `headingSpacePx`, `bodySpacePx`
+   * and `stackedGapPx` (stored values are ignored).
+   */
+  innerSpace?: BlockSpace;
+  stackedGap?: BlockSpace;
+  /** R20F (T315): every row's text size per breakpoint and line height; unset, today's 16 px at 1.65. */
+  bodySize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  bodySizePx?: number | ResponsiveProp<number>;
+  bodyLineHeight?: TextLineHeight;
+  /**
+   * R21G (T332): from the side-by-side tier, the media's and the text's widths
+   * in columns of 12 and the columns between them, as `cms.CarouselSplit`'s
+   * (unset ones: media 6, none between, the text the rest), mirrored on a row
+   * with media at the end. None set: today's `split`. R23 (T438): applied with `layoutAdvanced` on (raw
+   * numbers stored without the switch read as on); the `split` is the layout's main choice.
+   */
+  layoutAdvanced?: boolean;
+  mediaSpan?: number;
+  textSpan?: number;
+  textOffset?: number;
+  /** R21G (T333): the check and chevron markers' colour in every row's text; unset, today's. */
+  listMarkerColor?: string;
+  /** R21G (T333): every row's text weight per breakpoint; unset, today's. */
+  bodyWeight?: ResponsiveTextWeight;
+  /** R21G (T333): every row's heading line height per breakpoint; unset, the heading size's. */
+  headingLineHeight?: TextLineHeight;
+  /** R22I (T371): where the pair sits on the 12 columns — at the media's side (`media`, unset: today's), from column 1 (`start`) or to column 12 (`end`). */
+  columnsAnchor?: 'media' | 'start' | 'end';
+  /** R22I (T370): with the columns of 12, the space between them in px per breakpoint; unset, today's (the brand's grid gap, else the side gutter). */
+  columnGapPx?: number | ResponsiveProp<number>;
+  /** R22I (T376): every feature text's size per breakpoint and weight (R23: one value); unset, today's 15 px muted text. */
+  featureBodySize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  featureBodySizePx?: number | ResponsiveProp<number>;
+  featureBodyWeight?: ResponsiveTextWeight;
 }
 
 export type BackgroundPanelHeight = 'medium' | 'tall' | 'screen';
@@ -1358,6 +1681,10 @@ export interface BackgroundPanelProps extends HideOnProps, IconChoice, BlockHead
   body?: import('@tiptap/core').JSONContent | string | null;
   buttons?: ButtonSpec[];
   minHeight?: BackgroundPanelHeight | ResponsiveProp<BackgroundPanelHeight>;
+  /** R19C (T264): no background on the text box, so the image shows through; unset, the scheme's. */
+  textBoxTransparent?: boolean;
+  /** R20F (T316): below the tablet tier, the text over the image (`overlay`) instead of stacked with it (unset or `stack`, today's). */
+  mobileLayout?: 'stack' | 'overlay';
 }
 
 export interface CtaCardListItem {
@@ -1370,7 +1697,7 @@ export interface CtaCardListItem {
  * action in a muted, dark or light card, with an icon list, buttons and an
  * image.
  */
-export interface CtaCardProps extends HideOnProps, BlockHeadingStyleProps, ButtonListWidthProps {
+export interface CtaCardProps extends HideOnProps, BlockHeadingStyleProps, ButtonListWidthProps, TextMaxWidthProps {
   cardScheme?: 'muted' | 'dark' | 'light';
   decorative?: boolean;
   heading?: InlineRichText | string;
@@ -1383,6 +1710,39 @@ export interface CtaCardProps extends HideOnProps, BlockHeadingStyleProps, Butto
   buttons?: ButtonSpec[];
   image?: Partial<ResponsiveImage>;
   imageSide?: 'start' | 'end';
+  /** R19A (T237): the card's corners — unset or `default` today's 12 px, else a radius token (`none` square). */
+  cardRadius?: 'default' | CornerRadius;
+  /** R19A (T237): the space between the image and the card's edges — unset or `default` the card's padding, `none` flush, or Custom px. */
+  imageInset?: 'default' | 'none' | 'custom';
+  /**
+   * R19A (T237): the Custom inset in px. R23 (T440): one number for every breakpoint again; a value stored per
+   * breakpoint by R21G reads as its desktop value, else its base.
+   */
+  imageInsetPx?: number | ResponsiveProp<number>;
+  /**
+   * R23 (T437): the card's padding as one spacing step; unset or `default`, today's 32 / 24 px (48 px from the
+   * tablet). Replaces R20F's `paddingPx` (stored values are ignored).
+   */
+  cardPadding?: BlockSpace;
+  /** R23 (T440): with an image, a layout preset (image – text) for its width from the tablet up; unset or `default`, half the card. */
+  layout?: 'default' | TwelveColumnLayout;
+  /** R23 (T440): the raw `imageColumns` per breakpoint instead of the preset (stored without the switch and without a preset: on). */
+  layoutAdvanced?: boolean;
+  /** R20F (T318): with an image, its width in columns of 12 from the tablet up, per breakpoint; unset, half the card. */
+  imageColumns?: number | ResponsiveProp<number>;
+  /** R21G (T334): with an image, where it sits while the card is stacked; unset or `above`, above the text (today's). */
+  mobileImagePosition?: 'above' | 'below';
+  /** R21G (T334): with an image, the tier from which image and text sit side by side; unset is `tablet` (768 px, today's). */
+  sideBySide?: 'tablet' | 'desktop';
+  /** R21G (T334): the text's size per breakpoint (a type token or Custom px); unset, today's. R23 (T440): the list follows it. */
+  bodySize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  bodySizePx?: number | ResponsiveProp<number>;
+  /**
+   * R22I (T374): the text's weight (R23: one value); its maximum width (`textMaxWidth`, `textMaxWidthPx`).
+   * R23 (T437): the space below the heading as one spacing step (unset, today's 16 px), replacing `headingSpacePx`.
+   */
+  bodyWeight?: ResponsiveTextWeight;
+  headingSpace?: BlockSpace;
 }
 
 /**
@@ -1402,6 +1762,18 @@ export interface StatementProps extends HideOnProps, TextMaxWidthProps {
   background?: { image?: Partial<ResponsiveImage>; textPosition?: 'bottom' | 'center' };
   /** The entrance reveal of the heading and the body (US10, R-21); unset is none. */
   reveal?: Partial<RevealSetting>;
+  /** R19A (T231): over a background image, the minimum height per breakpoint; unset or `default` is today's 60vh. */
+  minHeight?: 'default' | HeroMinHeight | ResponsiveProp<'default' | HeroMinHeight>;
+  minHeightPx?: number | ResponsiveProp<number>;
+  /**
+   * R19A (T231): the heading's line height; the supporting text's size, weight and line height.
+   * R23 (T435): a line height applies with a Custom px size only; one weight; the colour option was removed.
+   */
+  headingLineHeight?: TextLineHeight;
+  bodySize?: SectionTextSize | ResponsiveProp<SectionTextSize>;
+  bodySizePx?: number | ResponsiveProp<number>;
+  bodyWeight?: ResponsiveTextWeight;
+  bodyLineHeight?: TextLineHeight;
 }
 
 export interface AnnouncementBarProps extends HideOnProps {
@@ -1485,6 +1857,19 @@ export interface NewsletterSignupFormProps extends HideOnProps {
   consentLabel?: InlineRichText | string;
   layout?: 'inline' | 'boxed';
   messages?: NewsletterSignupMessages;
+  /** R19B (T252): the button beside the field (unset, today's) or inside it. */
+  buttonPlacement?: 'beside' | 'inside';
+  /** R19B (T252): with the button inside, the field's box rounded (unset) or a pill. */
+  fieldShape?: 'rounded' | 'pill';
+  /** R19B (T252): the topics as a grid of 1–4 columns; unset is today's wrapping row. */
+  topicsColumns?: number;
+  /** R19B (T252): the e-mail label visually hidden, still the input's label for assistive technology. */
+  hideEmailLabel?: boolean;
+  /**
+   * R22I (T380): an icon from the catalog after the button's label; unset, none (today's). R23 (T443): R21G's
+   * button height, text size and weight and R22I's topic label size were removed (stored values are ignored).
+   */
+  buttonIcon?: string;
 }
 
 export interface ContactFormEmbedProps extends HideOnProps, BoxStyleProps {

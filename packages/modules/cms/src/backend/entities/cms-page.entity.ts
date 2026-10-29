@@ -33,7 +33,9 @@ export class CmsPage {
     | 'parentPageId'
     | 'breadcrumbsVisible'
     | 'breadcrumbsScheme'
-    | 'shareImageAssetId';
+    | 'shareImageAssetId'
+    | 'parentPathInUrl'
+    | 'breadcrumbsOverlay';
 
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
@@ -112,7 +114,8 @@ export class CmsPage {
   // ── Feature 163 fields (data-model §1.1) ────────────────────────────
 
   /**
-   * The breadcrumb parent. It shapes the trail only — never the URL (FR-030).
+   * The breadcrumb parent. It shapes the trail, and the URL only when
+   * `parentPathInUrl` is set (R19D; FR-030 as amended).
    * The database clears it when the parent is deleted (`on delete set null`);
    * the `cms_page.update` Command refuses a self-parent, a cycle and a chain
    * deeper than eight.
@@ -130,4 +133,23 @@ export class CmsPage {
   /** An `assets_library` asset id — not a foreign key; see the migration. */
   @Property({ type: 'uuid', nullable: true })
   shareImageAssetId?: string | null;
+
+  // ── R19D (feature 163, data-model §1.1) ─────────────────────────────
+
+  /**
+   * Serve the page at its parent's public path plus its own slug. Off by
+   * default, so a stored page keeps its flat address; the path is computed on
+   * read (`cmsPagePublicPaths`), never stored.
+   */
+  @Property({ type: 'boolean' })
+  parentPathInUrl: boolean = false;
+
+  // ── R21H (feature 163, data-model §1.1) ─────────────────────────────
+
+  /**
+   * Draw the breadcrumb trail over the page's first section instead of in a
+   * band above it. Off by default, so a stored page keeps its band.
+   */
+  @Property({ type: 'boolean' })
+  breadcrumbsOverlay: boolean = false;
 }

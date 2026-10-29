@@ -582,7 +582,11 @@ on desktop only if so configured, and never for visitors who prefer reduced moti
 **Breadcrumbs (US8)**
 
 - **FR-030**: A page MUST be able to name a parent page. The breadcrumb trail and its structured
-  data MUST follow the parent chain. The page's URL MUST NOT be derived from the parent.
+  data MUST follow the parent chain. The page's URL MUST NOT be derived from the parent unless
+  the page opts in (**amended 2026-10-27, R19D**): a page MAY include its parent's path in its
+  address, and is then served at its parent's public path plus its own slug. The option is off by
+  default, so no stored page changes address; the page's own slug keeps answering with a
+  permanent redirect to the path, and two pages MUST NOT share a public path in one channel.
 - **FR-030a**: If a page in the chain is not published in the visiting channel, its crumb MUST
   show as plain text without a link. Deleting a parent MUST clear the parent field on its
   children.

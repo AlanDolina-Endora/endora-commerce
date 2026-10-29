@@ -61,7 +61,9 @@ not wire shapes.
 
 - **Admin detail, create and patch schemas** gain `parentPageId: uuid | null`,
   `breadcrumbsVisible: boolean`, `breadcrumbsScheme: 'light' | 'muted' | 'dark'` and
-  `shareImageAssetId: uuid | null`. All are optional on create and patch.
+  `shareImageAssetId: uuid | null`. All are optional on create and patch. R21H (T355):
+  `breadcrumbsOverlay: boolean` likewise (absent = `false`); the resolved page's `breadcrumbs`
+  carries `overlay: true` only when it is on.
 - **Parent refusal**: `PATCH` with a cyclic or too-deep parent answers
   `422 CMS_PAGE_PARENT_CYCLE`.
 - **Admin page list** gains `parentPageId`, so the parent picker can exclude descendants on the
@@ -71,6 +73,12 @@ not wire shapes.
   `422 CMS_RESERVED_ANCHOR {anchor}`.
 - **Storefront by-slug** (`cmsResolvedPageSchema`) gains `breadcrumbs`, `share` and `languages`
   ([../data-model.md](../data-model.md) §5).
+- **R19D — nested addresses.** Admin summary/detail gain `parentPathInUrl: boolean`; create and
+  patch accept it, optional (absent = `false` on create). `slug` on `GET /api/v1/cms/pages/by-slug`
+  takes the whole public path; the answer gains `path`, each trail crumb gains `path`, and
+  `GET /api/v1/cms/pages/by-channel` entries gain `path` ([../data-model.md](../data-model.md)
+  §5.1). A write that would give two pages of one channel the same path answers
+  `409 CMS_SLUG_CONFLICT {path}`. No route is added, so the OpenAPI baseline is unchanged.
 
 ---
 

@@ -36,6 +36,10 @@ export const PAGE_BUILDER_SHARED_FIELD_KEYS = [
   'textAlign',
   'lineHeight',
   'minHeight',
+  // R20E (T296): the look of a button a block embeds (every block's `ButtonSpec`).
+  'buttonTransparentOutline',
+  'buttonBorderColor',
+  'buttonIconOnlyShape',
 ] as const;
 
 export type PageBuilderSharedFieldKey = (typeof PAGE_BUILDER_SHARED_FIELD_KEYS)[number];

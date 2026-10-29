@@ -291,11 +291,18 @@ export function registerModule(ctx: ModuleContext): void {
           // is not the only one caching CMS content: `megamenu` inlines a
           // block's tree into a menu payload and can learn that the block moved
           // from nowhere else. The bus is read per change, never captured.
-          publishContentChange: (change) => {
-            ctx.cradle<CmsCradle>().eventBus.emit(CMS_CONTENT_CHANGED_EVENT, {
-              eventId: randomUUID(),
-              occurredAt: new Date().toISOString(),
-              ...change,
+          //
+          // R19C (T271): dispatched in a bus scope, so the write awaits its
+          // handlers — the storefront revalidation below among them — and the
+          // request after a save or a publish reads the new content.
+          publishContentChange: async (change) => {
+            const bus = ctx.cradle<CmsCradle>().eventBus;
+            await bus.run(async () => {
+              bus.emit(CMS_CONTENT_CHANGED_EVENT, {
+                eventId: randomUUID(),
+                occurredAt: new Date().toISOString(),
+                ...change,
+              });
             });
           },
           // Feature 096, T209/T210. The declarations are fixed at composition;
@@ -594,12 +601,17 @@ export function registerModule(ctx: ModuleContext): void {
    * the module — a switched-off `cms` has no write route to publish from, and
    * no storefront surface left to refresh.
    *
-   * Not awaited: the save has already answered, and the storefront being slow
-   * or absent is not the operator's problem to wait on.
+   * Handed back to the bus (R19C, T271): the write dispatches the change in a
+   * bus scope and awaits it, so a save or a publish answers once the storefront
+   * has dropped the tags and the next storefront request reads the new
+   * content — before, the first request after a publish could still be served
+   * the previous render. The revalidator never throws and gives up on a slow
+   * storefront after its timeout, so an absent storefront delays a save by at
+   * most that and never fails it.
    */
   ctx.subscribe(CMS_CONTENT_CHANGED_EVENT, (payload) => {
     const change = payload as EventBase & CmsContentChange;
-    void ctx.cradle<CmsCradle>().cmsStorefrontRevalidator.revalidate(storefrontTagsFor(change));
+    return ctx.cradle<CmsCradle>().cmsStorefrontRevalidator.revalidate(storefrontTagsFor(change));
   });
 
   ctx.routes(async (app) => {

@@ -60,11 +60,20 @@
   "blocks.signup.fields.layout.label": "Układ",
   "blocks.signup.fields.layout.options.boxed": "W ramce",
   "blocks.signup.fields.layout.options.inline": "W linii",
+  "blocks.signup.fields.buttonPlacement.label": "Położenie przycisku",
+  "blocks.signup.fields.buttonPlacement.options.beside": "Obok pola",
+  "blocks.signup.fields.buttonPlacement.options.inside": "Wewnątrz pola",
+  "blocks.signup.fields.fieldShape.label": "Kształt pola",
+  "blocks.signup.fields.fieldShape.options.rounded": "Zaokrąglony",
+  "blocks.signup.fields.fieldShape.options.pill": "Pigułka",
+  "blocks.signup.fields.topicsColumns.label": "Kolumny tematów",
+  "blocks.signup.fields.hideEmailLabel.label": "Ukryj etykietę pola e-mail (czytniki ekranu nadal ją odczytają)",
   "blocks.signup.fields.messages.label": "Komunikaty",
   "blocks.signup.fields.messages.fields.pending.label": "Wysłano e-mail z potwierdzeniem",
   "blocks.signup.fields.messages.fields.active.label": "Zapisano",
   "blocks.signup.fields.messages.fields.consent.label": "Brak zgody",
   "blocks.signup.fields.messages.fields.email.label": "Nieprawidłowy adres e-mail",
   "blocks.signup.fields.messages.fields.topics.label": "Nie wybrano tematu",
-  "blocks.signup.fields.messages.fields.unavailable.label": "Zapis niedostępny"
+  "blocks.signup.fields.messages.fields.unavailable.label": "Zapis niedostępny",
+  "blocks.signup.fields.buttonIcon.label": "Ikona przycisku"
 }

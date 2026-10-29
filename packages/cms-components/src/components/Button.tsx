@@ -3,6 +3,7 @@
 import { type ComponentConfig, type Fields, type PuckComponent } from '@puckeditor/core';
 import {
   createColorField,
+  createToggleField,
   isResponsiveProp,
   PB_RESPONSIVE_METADATA,
   resolveTextAlignForTier,
@@ -17,11 +18,12 @@ import {
 import { usePreviewBreakpointTier } from '@endora-commerce/page-builder-core/client';
 import type { ButtonProps, ButtonVariant } from '../schema/component-types.js';
 import { BoxStyled } from './box-styles.js';
-import { ButtonView } from './ButtonView.js';
+import { ButtonView, type ButtonViewLook } from './ButtonView.js';
+import { colorValueToCss } from '../utils/color-value.js';
 import { createIconPickerField } from './IconPickerField.js';
 import { physicalAlign } from './block-align.js';
 import { buttonWidthClasses, buttonWidthField } from './button-full-width.js';
-import { BOX_BORDER_FIELD, BOX_MARGIN_FIELD, BOX_PADDING_FIELD, DEFAULT_BOX_PROPS } from '../fields/shared-fields.js';
+import { BOX_BORDER_FIELD, BOX_MARGIN_FIELD, BOX_PADDING_FIELD, BUTTON_LOOK_FIELDS, DEFAULT_BOX_PROPS } from '../fields/shared-fields.js';
 
 /**
  * `cms.Button` (`specs/163-page-builder-marketing-pages/` contracts/blocks.md,
@@ -102,9 +104,24 @@ function buttonClassName(fullWidth: ButtonProps['fullWidth'], tier: 'mobile' | '
   return ['cmsc-pb-button', ...buttonWidthClasses(fullWidth, tier, 'cmsc-btn')].join(' ');
 }
 
+/** R19B (T245, T246): the block's look options for its button; only what is set. */
+function lookOf(props: ButtonProps): ButtonViewLook | undefined {
+  const border = colorValueToCss(props.borderColor);
+  const look: ButtonViewLook = {
+    ...(props.transparentOutline === true ? { transparentOutline: true } : {}),
+    ...(border ? { borderColor: border } : {}),
+    ...(props.iconOnlyShape === 'pill' ? { iconOnlyShape: 'pill' as const } : {}),
+  };
+  return Object.keys(look).length > 0 ? look : undefined;
+}
+
+
 const ButtonEditingRender: PuckComponent<ButtonProps> = (props) => {
   const tier = usePreviewBreakpointTier();
-  const { button: _button, align, fullWidth, ...rest } = props;
+  // R23 (T447): a stored `iconSizePx` / `iconOnlyWidthPx` (R19B, R20E) is ignored data, kept off the box.
+  const { button: _button, align, fullWidth, transparentOutline: _t, borderColor: _b, iconOnlyShape: _s, ...stored } = props;
+  const { iconSizePx: _i, iconOnlyWidthPx: _w, ...rest } = stored as typeof stored & { iconSizePx?: unknown; iconOnlyWidthPx?: unknown };
+  const look = lookOf(props);
   const box = withoutLegacy(rest);
   const textAlign = physicalAlign(align);
   return (
@@ -114,19 +131,26 @@ const ButtonEditingRender: PuckComponent<ButtonProps> = (props) => {
       style={{ textAlign: resolveTextAlignForTier(textAlign, tier, 'left') }}
       {...box}
     >
-      <ButtonView button={specAtTier(specOf(props), tier)} className={buttonClassName(fullWidth, tier)} />
+      <ButtonView
+        button={specAtTier(specOf(props), tier)}
+        className={buttonClassName(fullWidth, tier)}
+        {...(look ? { look } : {})}
+      />
     </BoxStyled>
   );
 };
 
 const ButtonPublishedRender: PuckComponent<ButtonProps> = (props) => {
-  const { button: _button, align, fullWidth, ...rest } = props;
+  // R23 (T447): a stored `iconSizePx` / `iconOnlyWidthPx` (R19B, R20E) is ignored data, kept off the box.
+  const { button: _button, align, fullWidth, transparentOutline: _t, borderColor: _b, iconOnlyShape: _s, ...stored } = props;
+  const { iconSizePx: _i, iconOnlyWidthPx: _w, ...rest } = stored as typeof stored & { iconSizePx?: unknown; iconOnlyWidthPx?: unknown };
+  const look = lookOf(props);
   const box = withoutLegacy(rest);
   const textAlign = physicalAlign(align);
   return (
     <div className={responsiveTextAlignClass(textAlign, 'left')} {...textAlignDataAttrs(textAlign, 'left')}>
       <BoxStyled {...box}>
-        <ButtonView button={specOf(props)} className={buttonClassName(fullWidth, null)} />
+        <ButtonView button={specOf(props)} className={buttonClassName(fullWidth, null)} {...(look ? { look } : {})} />
       </BoxStyled>
     </div>
   );
@@ -236,12 +260,15 @@ export const BUTTON_SPEC_OBJECT_FIELDS = {
   },
   backgroundColor: createColorField({ label: 'Background color' }),
   textColor: createColorField({ label: 'Text color' }),
+  // R20E (T296): `cms.Button`'s look on every embedded button (a hero's, a card's, a header's).
+  ...BUTTON_LOOK_FIELDS,
 };
 
+/** `cms.Button`'s own button: the spec without the look, which stays the block's own (as stored since R19B). */
 const BUTTON_SPEC_FIELD = {
   type: 'object' as const,
   label: 'Button',
-  objectFields: BUTTON_SPEC_OBJECT_FIELDS,
+  objectFields: Object.fromEntries(Object.entries(BUTTON_SPEC_OBJECT_FIELDS).filter(([key]) => !(key in BUTTON_LOOK_FIELDS))),
 };
 
 const BUTTON_FIELDS = {
@@ -258,10 +285,23 @@ const BUTTON_FIELDS = {
   },
   // T168: the full width per breakpoint (top level, Responsive tab); unset keeps today's.
   fullWidth: buttonWidthField('Width'),
+  // R19B (T245): today's outline is filled with the scheme's background (the `secondary` variant it
+  // replaced); the switch lets the section show through. Offered with an outline fill.
+  transparentOutline: createToggleField({ label: 'Transparent outline fill' }),
+  // R19B (T246): the border's colour. R23 (T447): an icon-only button follows its size option.
+  borderColor: createColorField({ label: 'Border color' }),
+  // R20E (T296): an icon-only button as a pill (the shared button look fields).
+  iconOnlyShape: BUTTON_LOOK_FIELDS.iconOnlyShape,
   margin: BOX_MARGIN_FIELD,
   padding: BOX_PADDING_FIELD,
   border: BOX_BORDER_FIELD,
 };
+
+/** Whether a fill, one value or one per breakpoint, is an outline at some breakpoint. */
+function hasOutline(fill: unknown): boolean {
+  if (fill === 'outline') return true;
+  return fill !== null && typeof fill === 'object' && Object.values(fill as Record<string, unknown>).includes('outline');
+}
 
 const buttonConfig: ComponentConfig<{ props: ButtonProps }> = {
   label: 'Button',
@@ -277,6 +317,19 @@ const buttonConfig: ComponentConfig<{ props: ButtonProps }> = {
       return { props: { ...withoutLegacy(props as unknown as Record<string, unknown>), button: buttonFromLegacy(props as unknown as Record<string, unknown>) } as ButtonProps };
     }
     return { props };
+  },
+  // R19B (T245, T246): the outline switch with an outline fill, the size with an icon-only button.
+  resolveFields: (data, params) => {
+    const props = data.props as ButtonProps;
+    const spec = specOf(props);
+    const fields: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries((params?.fields as Record<string, unknown> | undefined) ?? BUTTON_FIELDS)) {
+      if (key === 'transparentOutline' && !hasOutline(spec.fill)) continue;
+      const iconOnly = spec.iconPosition === 'only' && typeof spec.icon === 'string' && spec.icon !== '';
+      if (key === 'iconOnlyShape' && !iconOnly) continue;
+      fields[key] = field;
+    }
+    return fields as unknown as Fields<ButtonProps>;
   },
   render: (props) =>
     props.puck?.isEditing ? <ButtonEditingRender {...props} /> : <ButtonPublishedRender {...props} />,

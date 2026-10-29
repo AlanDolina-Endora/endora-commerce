@@ -595,6 +595,22 @@ describe('cms.Hero space after each element (T145)', () => {
     expect(content.style.getPropertyValue('--cmsc-hero-after-subheading-lg')).toBe('var(--cmsb-space-xl, 96px)');
   });
 
+  it('a Custom space stored per breakpoint is read per breakpoint, not as 0 px', () => {
+    const content = dom([
+      hero({
+        ...texts,
+        order: [
+          { element: 'title', space: 'custom', spacePx: { base: 12, desktop: 40 } },
+          { element: 'subheading', space: 'custom', spacePx: { desktop: 30 } },
+        ],
+      }),
+    ]).querySelector<HTMLElement>('.cmsc-pb-hero__content')!;
+    expect(content.style.getPropertyValue('--cmsc-hero-after-title')).toBe('12px');
+    expect(content.style.getPropertyValue('--cmsc-hero-after-title-lg')).toBe('40px');
+    expect(content.style.getPropertyValue('--cmsc-hero-after-subheading')).toBe('0px');
+    expect(content.style.getPropertyValue('--cmsc-hero-after-subheading-lg')).toBe('30px');
+  });
+
   it('an item without a space, or with an unknown one, is ignored', () => {
     const content = dom([hero({ ...texts, spaceAfter: [{ element: 'title' }, { element: 'subheading', space: 'huge' }] })]).querySelector<HTMLElement>(
       '.cmsc-pb-hero__content',

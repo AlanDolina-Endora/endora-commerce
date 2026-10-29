@@ -1758,7 +1758,8 @@ describe('option parity — R5 carousel controls, grid and filter; the tab bar (
         for (const path of ['controls.arrows', 'controls.dots']) expect(optionValues(fieldAt(fields, path)).sort(), path).toEqual([false, true]);
         const placement = fields['controlsPlacement'] as { metadata?: unknown } | undefined;
         expect(placement?.metadata, `${name} controlsPlacement (${position})`).toEqual(PB_RESPONSIVE_METADATA);
-        expect(optionValues(placement).sort()).toEqual([...CAROUSEL_TRACK_BEFORE_R5.placement].sort());
+        // R19B (T253, deliberately widened, standing rule 13): a superset — the Carousel adds `slide`.
+        expect(optionValues(placement)).toEqual(expect.arrayContaining([...CAROUSEL_TRACK_BEFORE_R5.placement]));
         for (const path of ['controls.arrowVariant', 'controls.arrowShape', 'controls.arrowSize', 'controls.arrowColor']) {
           expectCounterpart(fields, path, `${name} ${path} (${position})`);
         }
@@ -2054,10 +2055,12 @@ describe('option parity — R7 filter style, item typography and controls alignm
         const fields = await fieldsAt(block, position, { layout: 'carousel' });
         for (const path of CAROUSEL_BEFORE_R7.controls) expectCounterpart(fields, path, `${name} ${path} (${position})`);
         expect(optionValues(fieldAt(fields, 'controls.arrowVariant'))).toEqual([...CAROUSEL_BEFORE_R7.arrowVariant]);
-        expect(optionValues(fields['controlsPlacement']).sort()).toEqual([...CAROUSEL_BEFORE_R7.placement].sort());
+        // R19B (T253, deliberately widened, standing rule 13): a superset — the Carousel adds `slide`.
+        expect(optionValues(fields['controlsPlacement'])).toEqual(expect.arrayContaining([...CAROUSEL_BEFORE_R7.placement]));
         const align = fields['controlsAlign'] as { metadata?: unknown } | undefined;
         expect(align?.metadata, `${name} controlsAlign (${position})`).toEqual(PB_RESPONSIVE_METADATA);
-        expect(optionValues(align)).toEqual(['center', 'start', 'end', 'between', 'split']);
+        // R20F (T313): extended with the dots at the start, the arrows at the end.
+        expect(optionValues(align)).toEqual(['center', 'start', 'end', 'between', 'split', 'dots-start']);
         expect(optionValues(fieldAt(fields, 'controls.nextArrowVariant'))).toEqual(['same', ...CAROUSEL_BEFORE_R7.arrowVariant]);
       }
       const defaults = (block.defaultProps ?? {}) as Record<string, unknown>;
@@ -3016,7 +3019,8 @@ const R15_LATEST_POSTS_SELECTS = {
   loop: [true, false],
   bleed: ['none', 'end', 'both'],
   controlsPlacement: ['below', 'header', 'overlay'],
-  controlsAlign: ['center', 'start', 'end', 'between', 'split'],
+  // R20F (T313): extended with the dots at the start, the arrows at the end.
+  controlsAlign: ['center', 'start', 'end', 'between', 'split', 'dots-start'],
   controlsAlignTo: ['container', 'slide'],
 } as const;
 const R15_LATEST_POSTS_ADDED = {

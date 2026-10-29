@@ -260,6 +260,16 @@ describe('blog.LatestPosts card look and header button placement (T189)', () => 
     expect(styleOf(host)).toContain('--cmsc-lp-lead-color:#000000');
   });
 
+  it('R22I (T379): the lead takes a weight — R23 (T435): one value, a stored per-breakpoint one read as its desktop value; unset, none', () => {
+    const plain = dom({ header: HEADER }, { posts }).querySelector<HTMLElement>('.cmsc-pb-carousel__lead')!;
+    expect(plain.querySelector('.cmsc-pb-carousel__lead-text')).toBeNull();
+    const span = dom({ header: HEADER, leadWeight: { base: 400, desktop: 500 } }, { posts }).querySelector<HTMLElement>('.cmsc-pb-carousel__lead-text')!;
+    expect(span.className).not.toContain('cmsc-pb-item-weight');
+    expect(span.style.fontWeight).toBe('500');
+    const one = dom({ header: HEADER, leadWeight: 500 }, { posts }).querySelector<HTMLElement>('.cmsc-pb-carousel__lead-text')!;
+    expect(one.style.fontWeight).toBe('500');
+  });
+
   it('the header button sits below the lead, at the header\'s end or after the posts, per breakpoint', () => {
     const end = dom({ header: HEADER, headerButtonPlacement: 'end' }, { posts });
     expect(rootOf(end).classList).toContain('cmsc-pb-latest-posts--action-end');

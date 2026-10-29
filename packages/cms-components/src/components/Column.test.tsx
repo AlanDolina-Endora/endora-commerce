@@ -356,3 +356,59 @@ describe('a Column\'s placement in its Row\'s grid per breakpoint (T165)', () =>
     expect(html).not.toMatch(/--pb-(row-span|col-start|row-start)/);
   });
 });
+
+/**
+ * R19C (T265): a Column's box — its background, border and shadow — may reach
+ * past the column track by an outset per side, per breakpoint, the content
+ * padded back to where it was (e.g. a grey box wider than its text column).
+ * Unset, or zero at every breakpoint, the column renders as today.
+ */
+describe('cms.Column — background outset (R19C, T265)', () => {
+  const columnFields = (config.components['cms.Column']?.fields ?? {}) as Record<string, { type?: string; label?: string; metadata?: unknown }>;
+  const cell = (html: string): string => /<div[^>]*class="cmsc-pb-row-col [^"]*"[^>]*>/.exec(html)?.[0] ?? '';
+
+  it('unset or zero everywhere: the cell carries nothing new', () => {
+    for (const props of [{}, { outsetPx: 0 }, { outsetPx: { base: 0, desktop: 0 } }]) {
+      const tag = cell(page(props, [text('t-1', 'One')]));
+      expect(tag).not.toContain('data-pb-outset');
+      expect(tag).not.toContain('--pb-col-outset');
+    }
+    expect(columnDefaults).not.toHaveProperty('outsetPx');
+  });
+
+  it('an outset marks the cell and writes the outset per breakpoint', () => {
+    const tag = cell(page({ outsetPx: { base: 0, desktop: 24 } }, [text('t-1', 'One')]));
+    expect(tag).toContain('data-pb-outset="1"');
+    expect(tag).toContain('--pb-col-outset:0px');
+    expect(tag).toContain('--pb-col-outset-md:0px');
+    expect(tag).toContain('--pb-col-outset-lg:24px');
+  });
+
+  it('the stylesheet widens the box by the outset on each side and pads its content back', () => {
+    const sheet = css();
+    expect(sheet).toContain('.cmsc-pb-row-col[data-pb-outset] { --pb-outset: var(--pb-col-outset, 0px); }');
+    // R20E (T291): the cell reaches past its track, so the box inside keeps its own side margins on top of the outset.
+    expect(sheet).toContain(
+      '.cmsc-pb-row-col[data-pb-outset] { max-width: none; margin-left: calc(-1 * var(--pb-outset, 0px)); margin-right: calc(-1 * var(--pb-outset, 0px)); }',
+    );
+    expect(sheet).toContain('.cmsc-pb-row-col[data-pb-outset] > * { width: auto; }');
+    expect(sheet).toContain(
+      '.cmsc-pb-row-col[data-pb-outset] > * > .cmsc-pb-bg-content { padding-left: var(--pb-outset, 0px); padding-right: var(--pb-outset, 0px); }',
+    );
+    expect(sheet).toContain('--pb-outset: var(--pb-col-outset-lg, var(--pb-col-outset-md, var(--pb-col-outset, 0px)));');
+  });
+
+  it('offers the outset on the Responsive tab', () => {
+    expect(columnFields['outsetPx']?.type).toBe('number');
+    expect(columnFields['outsetPx']?.label).toBe('Background outset (px)');
+    expect(columnFields['outsetPx']?.metadata).toEqual(PB_RESPONSIVE_METADATA);
+    expect((config.components['cms.Column'] as { responsiveFields?: string[] }).responsiveFields).toContain('outsetPx');
+  });
+
+  it('R20E (T291): no rule on the box replaces its own side margins (a zero-outset tier keeps them)', () => {
+    const sheet = css();
+    const boxRules = sheet.match(/\.cmsc-pb-row-col\[data-pb-outset\] > \* \{[^}]*\}/g) ?? [];
+    expect(boxRules.length).toBeGreaterThan(0);
+    for (const rule of boxRules) expect(rule).not.toMatch(/margin/);
+  });
+});

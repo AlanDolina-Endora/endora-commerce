@@ -804,7 +804,7 @@ export const manifest = defineModuleManifest({
       category: 'catalog',
       contexts: ['cms'],
       fields: {},
-      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'columns', 'gap', 'view', 'margin', 'padding', 'border', 'equalItemHeight', 'gapPx', 'headingWeight'],
+      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'columns', 'gap', 'view', 'margin', 'padding', 'border', 'equalItemHeight', 'gapPx', 'headingWeight', 'leadSize', 'leadSizePx', 'headingLineHeight'],
       weight: 20,
     },
     {
@@ -835,7 +835,9 @@ export const manifest = defineModuleManifest({
         'margin',
         'padding',
         'border',
-        'headingWeight',
+        'headingWeight', 'leadSize', 'leadSizePx',
+        // R22I.
+        'headingLineHeight',
       ],
       weight: 30,
     },

@@ -122,7 +122,7 @@ function stemOf(name: string): string {
 const SHOWING: ReadonlyArray<Record<string, unknown>> = [
   {},
   {
-    autoplay: true, loop: false, controls: { arrows: true, dots: true, disabledArrowLook: 'color' }, caption: 'Caption',
+    autoplay: true, loop: false, controls: { arrows: true, dots: true, disabledArrowLook: 'color', arrowVariant: 'solid' }, caption: 'Caption',
     image: { src: '/a.jpg' }, minHeight: 200, dividers: 'between', useBrandColors: false, source: 'file', gap: 'custom',
     headingSize: 'custom', titleSize: 'custom', headingMaxWidth: 'custom', layout: 'grid',
   },
@@ -133,6 +133,18 @@ const SHOWING: ReadonlyArray<Record<string, unknown>> = [
     valueSize: 'custom', featureTitleSize: 'custom', subheadingSize: 'custom', statementSize: 'custom', titleMaxWidth: 'custom',
     titlePadding: 'custom', panelGap: 'custom', itemGap: 'custom', panelPaddingBottom: 'custom', openItemGap: 'custom',
     cardDivider: 'line', rows: [{}], showDivider: true,
+    // R19B: the look options shown only where they apply.
+    linkLook: 'icon', hoverImage: { imageSource: 'url', src: '/a.jpg' }, moreLabel: 'More', buttonPlacement: 'inside',
+    topics: [{ label: 'A', tagCode: 'a' }], footerButton: { label: 'All', link: { kind: 'url', href: '/' } },
+    button: { label: 'Go', link: { kind: 'url', href: '/' }, fill: 'outline', icon: 'download', iconPosition: 'only' },
+    // R20F: the text size's Custom px and the hanging indent's text indent, shown only where they apply.
+    bodySize: 'custom', titleHangingIcon: true,
+    // R21G: a mobile image's tier and the social-proof caption's placement, shown only where they apply.
+    mobileSrc: '/m.jpg', socialProof: { caption: 'Caption' },
+    // R22I: the columns of 12 (their anchor and gap), the feature text's and the quote's Custom px.
+    mediaSpan: 5, imageSpan: 5, featureBodySize: 'custom', quoteSize: 'custom',
+    // R23: the raw columns behind the Advanced switch, the eyebrow's Custom px and line height.
+    layoutAdvanced: true, eyebrowSize: 'custom',
   },
 ];
 

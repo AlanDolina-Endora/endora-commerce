@@ -2269,3 +2269,872 @@ Each step ends with a commit on the branch and can be reviewed on its own.
 | SC-005, SC-005a | T105 (LCP, CLS and INP all gating), T051, T089 |
 | SC-006 | T105 (axe) |
 | SC-007 | T104 |
+
+## R19A — text & content blocks
+
+Gaps found while rebuilding the local reference pages (coordinator brief R19, area A). Every new
+option is optional; unset renders today's markup byte for byte (each block's "unset" case in
+`text-and-content-options.test.tsx`). RED counts are from the first run of each new test file
+against the pre-R19A code: `text-and-content-options.test.tsx` **RED 29/42** (13 green from the
+start: the unset guards, the Hero token gap, the Hero media-above unset case and T239, see
+below); `rich-text-size-and-markers.test.tsx` **RED 8/11** (green: the lists stored before, an
+unknown marker, the unset prose).
+
+- [X] T223 [US3] A block text's own size, weight, line height and colour (`text-style.ts`,
+  `textStyleAttrs`, `lineHeightField`): one value inline, values per breakpoint as
+  `cmsc-pb-ts-size|weight|leading` + `--pb-ts-<name>(-md|-lg)` (every tier written, Default tiers
+  carry the block's own value), rules at the end of `cms-components.css`. Covered through
+  T224–T236.
+  **R23:** Superseded in part by R23 T435: a token size carries its own line height, weight and tracking; a line height only with Custom px; the added weights are one value.
+- [X] T224 [US3] `cms.FeatureList` item text: `bodySize`/`bodySizePx`, `bodyWeight`,
+  `bodyLineHeight`, `bodyColor` (today: 0.9 rem / 1.45 / muted).
+  **R23:** Superseded in part by R23 T435/T436: `bodyWeight` is one value, `bodyColor` removed.
+- [X] T225 [US3] `cms.FeatureList`: `titleLineHeight`; `iconSpacePx`, `titleSpacePx` per
+  breakpoint (fallbacks 8 / 4 px); `iconPosition: 'beside'` (icon beside the title, title and text
+  hanging beside it, `data-icon-position`).
+  **R23:** Superseded in part by R23 T437: `iconSpacePx` / `titleSpacePx` replaced by `innerSpace`.
+- [X] T226 [US3] Hanging indent after a leading inline icon: `InlineRich` `hangingIcon`
+  (`.cmsc-hang`), `cms.Heading` `hangingIcon` (switch) + `hangingIconGapPx`. **Decision:** opt-in
+  on the heading (unset keeps the stored markup); a feature list's icon uses T225's `beside`.
+  **R23:** Superseded in part by R23 T439: `hangingIconGapPx` removed (the indent keeps 0.35 em).
+- [X] T227 [US2] `cms.Hero`: subheading and statement `…Weight`, `…LineHeight`, `…MaxWidth(Px)`;
+  body `bodySize(Px)` (Default 16 px), `bodyWeight`, `bodyLineHeight`, `bodyMaxWidth(Px)`.
+  **R23:** Superseded in part by R23 T435: the weights are one value, line heights only with Custom px.
+- [X] T228 [US2] `cms.Hero` `gaps`: Custom (px) with `gapsPx` per breakpoint (before: a non-token
+  value was ignored, read as `m`). **Decision:** supported rather than rejected; a stored
+  `gaps: {px: n}` (an ad-hoc shape) still reads as `m`, unchanged.
+- [X] T229 [US2] `cms.Hero` `mediaSpace`/`mediaSpacePx` with image or video media above the
+  content (`--cmsc-hero-media-space`, 0 fallback); shown only then.
+- [X] T230 [US2] Bug: the social-proof image's 40 px lost to `.cmsc-picture > img`; a
+  higher-specificity rule (`.cmsc-pb-hero__proof > .cmsc-pb-hero__proof-image > img`).
+- [X] T231 [US3] `cms.Statement`: over a background image `minHeight`/`minHeightPx` per breakpoint
+  (`default` = 60vh, `--cmsc-statement-min-h`); `headingLineHeight`; supporting text
+  `bodySize(Px)`, `bodyWeight`, `bodyLineHeight`, `bodyColor`.
+- [X] T232 [US3] `cms.Text`: `text` is the inline rich-text field (bold, italic, links, emphasis,
+  canvas editing). **Decision:** inline rich text (the Heading's pattern, a stored string read as
+  one paragraph) rather than a weight option, which `cms.Text` already had (`fontWeight` per
+  breakpoint); a stored string renders as before until edited; translatable `text` →
+  `format: 'tiptap'`.
+- [X] T233 [US3] Rich text: `textSize` mark (type token class `cmsc-fs--<token>` or `font-size`
+  px 8–200, sanitizer keeps it on `<span>`), bullet `listStyle` `chevron` / `none` beside `check`;
+  toolbar **Text size** and **List marker** (core `pageBuilder.fieldText.*`, en + pl);
+  `cms.RichContent` `textSize(Px)` per breakpoint. Server (DOM-free) and editor markup agree (the
+  DOM's trailing `;` normalised by the sanitizer, as T119/T175).
+  **R23:** Superseded in part by R23 T442: the toolbar offers token sizes only (a stored px mark still renders).
+- [X] T234 [US3] Gradient emphasis: `box-decoration-break: slice` — one gradient across a wrapped
+  run. **Visible change** for wrapped gradient runs already on pages (one-line runs unchanged);
+  own changeset.
+- [X] T235 [US3] `cms.Stats`: `labelSize(Px)`, `labelWeight`, `labelColor`; beside an image
+  `imageSpan`, `figuresSpan`, `figuresOffset` (12-column grid from 768 px, mirrored for the end
+  side) and `figuresAlign` (`start` / `end` / `spread`).
+  **R23:** Superseded in part by R23 T436/T438: `labelColor` removed; the spans behind a `layout` preset and `layoutAdvanced`.
+- [X] T236 [US6] `cms.LinkList`: `titleSize(Px)`, `titleWeight` for the row titles.
+  **R23:** Superseded in part by R23 T435: `titleWeight` is one value.
+- [X] T237 [US3] `cms.CtaCard`: `cardRadius` (Default 12 px, or a radius token) and `imageInset`
+  (`none`, `custom` + `imageInsetPx`). **Decision:** no Custom px radius — T208 ("Custom … (px)")
+  and T210 (two corner fields each "X – rounded corners") cannot both hold for a radius px field;
+  `none` covers the square card. The test case was rewritten to tokens after the RED run.
+- [X] T238 [US3] `cms.MediaText` `sideBySide: 'desktop'` (stacked up to 1023 px,
+  `data-side-by-side`).
+- [X] T239 [US3] `cms.Row` row gap per breakpoint: **already supported** (`rowGap` is responsive,
+  `--pb-row-gap(-md|-lg)`; a single stored value applies everywhere). No code change; the test was
+  green from the start and now holds it.
+
+Also: the option-parity, fallback-parity and panel-consistency tests stay green;
+`panel-consistency.test.ts` T211 pairs extended with the new size/weight pairs; every new
+responsive field declared in `responsiveFields` (index and manifest); labels en + pl in the `cms`
+bundle; docs `cms/index.md` § *Text sizes, line heights and spacing in blocks*, Polish mirrored,
+cache entry rehashed with `hashSourceBody()`; contracts/blocks.md § R19A, data-model.md § 4;
+changesets `163-r19a-*` (six).
+
+## R19B — carousels, buttons, tiles, image cards, newsletter form
+
+Gaps found while rebuilding the local reference pages (carousel controls, buttons, download
+cards, image cards and the sign-up form). Task IDs T240–T259 are this area's. Widening only;
+contracts/blocks.md § "R19B" holds the shapes. RED notes are what the new test files reported
+before the implementation.
+
+- [X] T240 Carousel dots follow the colour scheme (dark: the active dot is the scheme's text
+  colour over faint dots) and take `controls.dotColor` / `activeDotColor`
+  (`carousel/carousel-controls-look.test.tsx`; RED: 10 of 13 failed — no `--pb-dot-*`, no
+  scheme variables, no fields).
+  **R23:** Superseded in part by R23 T448: `dotColor` / `activeDotColor` removed (the scheme colours stay).
+- [X] T241 A solid arrow's glyph colour, `controls.arrowGlyphColor` (`--pb-arrow-glyph`, both
+  solid rules; same test file).
+- [X] T242 Arrows and dots hidden per breakpoint, `controls.hideArrowsOn` / `hideDotsOn`; a row
+  left empty there is removed (same test file).
+- [X] T243 Arrows "in the header" with no heading: the shell already rendered a controls-only
+  header (probe), but the controls sat at its start; they now stand at its end (same test file).
+  In the editor arrows are never drawn on the canvas, as before.
+- [X] T244 The product listings' footer button alignment, `footerButtonAlign`
+  (`catalog/product-listing-footer.test.tsx`; RED: 2 of 3 failed).
+- [X] T245 `cms.Button`'s outline fill: today's scheme-filled outline is intentional (the
+  `secondary` look it replaced, `.cmsc-pb-button`), so it stays; `transparentOutline` switches it
+  off per button (`button-look.test.tsx`; RED: 6 of 8 failed).
+- [X] T246 `cms.Button` icon-only size per breakpoint (`iconSizePx`, the icon scaled) and
+  `borderColor` (same test file).
+  **R23:** Superseded by R23 T447: `iconSizePx` removed (the button size applies).
+- [X] T247 `cms.DownloadTile` look: scheme, background, border, corners, padding and title size per
+  breakpoint, the type badge (`download-tile-look.test.tsx`; RED: 6 of 8 failed). The tile was
+  already one link and equal-height in a carousel row.
+  **R23:** Superseded in part by R23 T437/T444: `paddingPx` replaced by `cardPadding`, a `titleSize` select added.
+- [X] T248 `cms.DownloadTile` hover image in full under a gradient and the round icon-button link
+  pinned to the bottom end, size per breakpoint and ring colour (same test file).
+  **R23:** Superseded in part by R23 T444: the icon button size and ring colour removed.
+- [X] T249 `cms.CarouselImage` read-more label in a corner of its own (`moreLabel*`, translatable)
+  (`image-caption-look.test.tsx`; RED: 7 of 10 failed for T249–T251;
+  `cms/block-declarations.test.ts` RED: `moreLabel` not extracted until declared).
+  **R23:** Superseded in part by R23 T445: the label size option removed.
+- [X] T250 `cms.CarouselImage` caption padding per breakpoint, `captionPaddingPx` (same test file).
+  **R23:** Superseded by R23 T445: `captionPaddingPx` removed.
+- [X] T251 `cms.Image` caption placement, size and alignment per breakpoint, weight and colour
+  (same test file).
+  **R23:** Superseded in part by R23 T446: caption weight and colour removed, a `captionSize` select added.
+- [X] T252 `newsletter.Signup` layout: the button inside the field (rounded or pill), topic
+  columns, a visually hidden e-mail label (`newsletter-signup-layout.test.tsx`; RED: 4 of 5
+  failed). `cms.NewsletterSignup` shares no code with it and is unchanged.
+- [X] T253 Carousel controls inside each split slide (`controlsPlacement: 'slide'`, per
+  breakpoint), with a fallback row for carousels of other items
+  (`carousel/carousel-slide-controls.test.tsx`; RED: 4 of 5 failed). Not offered on free-content
+  slides (a controls block would be needed) nor on the product and post listings.
+- [X] T254 Responsive-tab registry and manifests (`index.ts`, `cms/src/manifest.ts`
+  `responsiveFields`, `translatable` for `moreLabel`); `panel-consistency.test.ts`,
+  `option-parity.test.ts` and `ContentSlider.test.tsx` widened deliberately (a superset of the
+  placements; the dots' fields with dots).
+- [X] T255 Labels en + pl in the `cms`, `catalog`, `blog` and `newsletter` bundles; the admin's
+  field-label walk (`page-builder-field-i18n.test.ts`) shows the new settings.
+- [X] T256 Docs: `cms` module page § "Carousel controls, buttons, download tiles and image cards:
+  look options", `newsletter` page's sign-up table; Polish mirrors and translation cache.
+- [X] T257 contracts/blocks.md § "R19B", data-model.md §4 note, changesets `163-r19b-*`, rebuilt
+  `dist/cms-components.css`.
+- [ ] T258 (reserved)
+- [ ] T259 (reserved)
+
+## R19C — Sections, layout frame, breadcrumbs, background art, publish freshness, brand tokens
+
+Gaps found while rebuilding reference pages (2026-10-27): area C of R19. Every option is optional;
+unset renders today's markup.
+
+- [X] T260 [US1] `cms.Section.width` per breakpoint (`Responsive<SectionWidth>`, Responsive tab; a
+  stored single width is read as it is). Published: one value when the tiers agree (today's
+  markup), else `data-width="tiered"` with each tier's box (`--cmsc-section-box-w|m|o|mh`) and frame
+  (`--cmsc-section-frame-max|px`), `-md`/`-lg` per tier; the content width applies at the tiers whose
+  width admits one. Editor canvas: the previewed tier's width as one value. `resolveFields` shows
+  `contentWidth`, `customMaxWidthPx` and `outsetPx` when any tier's width takes them. Manifest and
+  `SECTION_RESPONSIVE_FIELDS` list `width` and `outsetPx`.
+  **Result:** **RED first:** contracts `page-builder-props.test.ts` R19C RED 4/4;
+  `section-width-outset.test.tsx` RED 13/15 (the two "unset writes nothing" cases green, guards);
+  `SectionBlock.test.tsx` RED 2 (the Responsive-tab list deliberately changed, standing rule 13, and
+  the new `resolveFields` case). The admin `sidebar-field-layout.test.tsx` expectations (the width on
+  the main tab, four responsive fields) deliberately changed.
+- [X] T261 [US1] Section **Background outset (px)** (`outsetPx`, 0–400 per breakpoint, with a
+  contained or custom width): `data-outset` + `--cmsc-section-outset(-md|-lg)`; the box grows by
+  `min(outset, (100vw - width) / 2)` per side, the side padding by as much. Covered by T260's RED.
+  **R23:** Superseded by R23 T449: `cms.Section.outsetPx` removed (the Column outset, T265, stays).
+- [X] T262 [US1] A `custom` width wider than the page container widens the section, centred, up to
+  `100vw - 2 * gutter` (`--cmsc-section-w`); it used to be capped silently. At or below the
+  container's content width the computed box is unchanged (markup unchanged everywhere). Stylesheet
+  case in `section-width-outset.test.tsx` (RED with T260).
+- [X] T263 [US1] Where the mobile art stops: `desktopFrom?: 'tablet' | 'desktop'` on
+  `ResponsiveImage` and `SectionBackground` (unset = `tablet`, 768 px). `Picture` /
+  `pictureMobileMedia`; section tile and video pair `data-desktop-from="desktop"` + stylesheet
+  (768–1023 px keeps the mobile tile and video); `useBreakpointVideo(ref, selector, { mobileMedia })`.
+  Admin: **Mobile image shown on** (image field) and **Mobile image or video shown on** (background
+  field), only with a mobile image/video, the default stored as nothing; `core` keys
+  `pageBuilder.imageField.desktopFrom*`, `pageBuilder.fieldText.section.desktopFrom*` (en + pl).
+  **Result:** **RED first:** `art-direction-tier.test.tsx` RED 5/6 (the unset case green, a guard);
+  `use-breakpoint-video.test.tsx` new case RED; `section-field.test.tsx` new case RED; admin
+  `button-image-fields.test.tsx` RED 1/2 (verified by re-running against the field without the
+  control; the "only with a mobile image" case green, a guard).
+- [X] T264 [US3] `cms.BackgroundPanel.textBoxTransparent` (switch, after the text placement):
+  `data-text-box="transparent"`, the text box paints no background. **Result:** **RED first:**
+  `BackgroundPanel.test.tsx` RED 2/2.
+- [X] T265 [US1] `cms.Column.outsetPx` (**Background outset (px)**, Responsive tab): cell
+  `data-pb-outset` + `--pb-col-outset(-md|-lg)` (editor: the tier's as the base); the box widens with
+  negative side margins, its content layer padded back. **Result:** **RED first:**
+  `Column.test.tsx` R19C RED 3/4 (the unset case green, a guard).
+- [X] T266 [US1] Box margins and padding per breakpoint: **already supported** — the shared spacing
+  fields carry the responsive metadata and every block offering them lists them in
+  `responsiveFields`. Guard test `box-spacing-responsive.test.tsx` (green from the start; it counts
+  the blocks it walks so it cannot pass empty). Documented in `cms/index.md`.
+- [X] T267 [US8] Breadcrumb band: on `muted`/`dark` the trail has no bottom margin
+  (`PAINTED_TRAIL_CLASS`, `mb-0`) and the band pads itself (`pb-[16px]`), so no light strip opens
+  before a dark first section. Light keeps the trail's `mb-[16px]`. **Result:** **RED first:**
+  `breadcrumbs.test.tsx` painted-band case RED (the light case green, a guard).
+- [X] T268 [US1] Container token audit: the brand's `layout.containerMaxPx` (`--cmsb-container`,
+  1360 by default) already sizes the CMS page container, every Section width rule and the Row
+  breakouts. The one CMS-page hard-coding was the breadcrumb wrapper (`max-w-[1360px] px-[24px]`),
+  now `max-w-[var(--cmsb-container,1360px)] px-[var(--cmsb-gutter,24px)]`. The storefront chrome
+  (header, megamenu, catalog, cart, account pages) still hard-codes `max-w-[1360px]` — outside
+  this area, reported. **Result:** RED with T267's file (container case).
+- [X] T269 [US8] Polish storefront copy with its diacritics: `nav.home` "Strona główna" and 48 other
+  folded `pl-PL` strings (skip link, catalogue, stock, notify, search, pagination, checkout success
+  and failure, payment retry, order cancel, coupon, address, quote request success). `MESSAGES` is
+  exported for the test. **Result:** **RED first:** `messages-pl-diacritics.test.ts` RED 2/2 against
+  the previous catalogue; `success-panel.test.tsx` and `rfq-success-panel.test.tsx` asserted the
+  folded spelling and were deliberately changed.
+- [X] T270 [US8] Crumb label: every crumb is the page **name** (`resolveTrail` no longer reads the
+  meta title), as the current page's crumb always was. Data-model §5 updated. **Result:** the
+  contract test `page-tree.contract.test.ts` case deliberately changed (standing rule 13) — **not
+  run**: it needs Postgres, and no test database was reachable from this worktree.
+  **Status (R23 T468): run green 2026-10-29** on the test Postgres (`dev:infra:test`, port 5441): `page-tree.contract.test.ts`, `page-nested-url.contract.test.ts`, `migration.test.ts` — 3 files, 36 / 36.
+- [X] T271 [US8] Publish freshness. **Cause:** the CMS write revalidates the storefront's tags
+  fire-and-forget, and a refused call was silent: `backend/.env.example` and
+  `storefront/.env.example` shipped *different* `REVALIDATE_SECRET` values, so a checkout set up from
+  them gets 401 on every revalidation and serves the cached render until the 60 s window lapses (then
+  once more stale-while-revalidate) — the 5–40 s observed. Probed on the running dev storefront: the
+  storefront example secret answers 200, the backend example secret 401. **Fix:** the backend example
+  takes the storefront's value with a comment; `StorefrontRevalidator` logs a non-2xx answer (401
+  named as a secret mismatch) and times out after `timeoutMs` (3000 ms); the CMS write dispatches its
+  change in an EventBus scope and the subscriber returns the revalidation, so a save or publish
+  answers once the tags are dropped. **Result:** **RED first:** platform
+  `storefront-revalidator.test.ts` RED 2/2; mod-cms `cms-content-invalidator.test.ts` and
+  `storefront-revalidation.test.ts` RED 1 each. Whether the local backend `.env` really holds a
+  different secret was not read (out of bounds for this worktree): check that both `.env` files
+  carry the same `REVALIDATE_SECRET` and restart.
+
+**R19C verification (2026-10-27):** packages built; `dist/cms-components.css` rebuilt and kept.
+Tests: contracts 67 / 1393; page-builder-core 33 / 233; cms-components 76 / 1814; mod-cms 27 / 318;
+platform `src/http` 22 / 162 (sandbox off: its server tests listen on a port); admin whole suite
+387 / 3886 + 1 failure in `crm/assignment.test.tsx` that passes alone (10 / 10, untouched area,
+load-dependent); storefront whole suite 167 / 1771. Typecheck clean for contracts,
+page-builder-core, cms-components, page-builder-admin, mod-cms, platform, mod-i18n, admin,
+storefront, backend; lint 0 errors (warnings pre-existing, none in touched files). Checks:
+`check:block-names`, `check:class-vocabulary`, `check:docs-translations`, `check:module-docs`,
+`check:block-renderers`, `check:bundle-pairing`, `check:test-ownership` findings=0;
+`check:default-language-prose` violations=0; `i18n:hardcoded` regressions=0; `check:release-intent`
+violations=0; `check:language` OK. Docs: `cms/index.md` (Section width and outset, mobile art,
+column outset, box spacing, panel text box, breadcrumbs, storefront cache), `cms/brand.md` (Layout),
+Polish mirrored, cache entries rewritten with `hashSourceBody()`. Changesets `163-r19c-*.md` (six).
+Not run: the backend contract/integration suites (no Postgres for tests here).
+
+## R19D — hierarchical CMS page URLs
+
+Opt-in per page: `parentPathInUrl` (off by default) serves a page at its parent's public path
+plus its own slug; the path is computed on read per channel. Spec FR-030 amended; data-model
+§1.1, §5.1, §6; contracts §2.
+
+- [x] T280 [R19D] `cmsPagePublicPaths` + `CMS_PAGE_PATH_MAX_LEVELS` in `packages/contracts/src/cms.ts` — one rule for backend, admin and storefront (flat by default, parent path when opted in, flat on loop / > 8 levels / parent not in channel). Test: `packages/contracts/src/cms-page-path.test.ts` (RED 9/9 before the code).
+- [x] T281 [R19D] Contracts: `parentPathInUrl` on summary/detail/create/patch; optional `path` on the resolved page, its trail crumbs and the by-channel index entry; `CmsContentChange.addressesMoved`.
+- [X] T282 [R19D] Backend: `page-paths.ts` (load a channel's tree, paths, duplicates, addresses); `StorefrontResolver` resolves by whole path then flat slug, answers `path`, trail `path`, index `path`; `CmsPageService` writes `parent_path_in_url` in the Commands, refuses a duplicate path with `409 CMS_SLUG_CONFLICT` inside the Command (nothing written, nothing audited), records `parentPathInUrl` in the audit state, invalidates old and new paths. Tests: `page-paths.test.ts`, `cms-content-invalidator.test.ts` (RED 2 before the code), contract `backend/test/contract/cms/page-nested-url.contract.test.ts` (written, not run — no test Postgres), `page-tree.contract.test.ts` extended with crumb `path`.
+  **Status (R23 T468): run green 2026-10-29** on the test Postgres (`dev:infra:test`, port 5441): `page-tree.contract.test.ts`, `page-nested-url.contract.test.ts`, `migration.test.ts` — 3 files, 36 / 36.
+- [x] T283 [R19D] Page Builder links of kind `page` rendered at the target's path: `rewritePageLinkSlugs` in `content-tree-walker.ts`, applied by the resolver to the page tree and inlined embeds. Test: `page-link-paths.test.ts` (RED 3/3 before the code).
+- [X] T284 [R19D] Migration `20261027T165458_cms_page_parent_path_in_url.ts` (`parent_path_in_url boolean not null default false`), entity `CmsPage.parentPathInUrl`, registry regenerated. Test: case added to `backend/test/integration/cms/migration.test.ts` (not run — no test Postgres).
+  **Status (R23 T468): run green 2026-10-29** on the test Postgres (`dev:infra:test`, port 5441): `page-tree.contract.test.ts`, `page-nested-url.contract.test.ts`, `migration.test.ts` — 3 files, 36 / 36.
+- [x] T285 [R19D] Storefront `(content)/[...slug]`: 308 from a nested page's flat slug to its path, breadcrumb hrefs from crumb `path`, canonical and `og:url` from the path, home-page check by path or flat slug; sitemap entries at `path`. Tests: `storefront/test/seo/cms-nested-path.test.tsx` (RED 4/5), `sitemap-cms.test.ts` case (RED).
+- [x] T286 [R19D] Admin page editor: "Include the parent page's path in the address" checkbox under the parent picker; the public address preview follows the rule (ancestors read up the opted-in chain). en + pl strings; `parentHelp` reworded. Test: `admin/test/modules/cms/cms-editors-settings-panel.test.tsx` (RED 2 before the code).
+- [x] T287 [R19D] Docs: `cms` module page *Nested page addresses* + API rows, PL mirror, translation cache rehashed.
+- [x] T288 [R19D] Changeset `.changeset/163-r19d-nested-page-urls.md`.
+- [ ] T289 [R19D] Follow-ups not done here: `seo`'s own sitemap generator and `megamenu` CMS-page links still build `/<slug>` from `CmsPageRecord` (they reach nested pages through the 308); no redirect from a nested page's *old* path after its parent moves (no redirects facility exists).
+
+## R20E — fixes and embedded-button, hero, tile options
+
+Defects and gaps found while rebuilding the local reference pages after R19 (area E). Task IDs
+T290–T309. Widening only (plan § *Extend, don't narrow*): every new option is optional, unset
+renders today's markup (each new test file has an "unset" case); contracts/blocks.md § "R20E",
+data-model.md §3.2 and §4 note. RED counts are the first run of each new or extended test against
+the pre-R20E code.
+
+- [X] T290 [US4] Bug: `cms.DownloadTile` `titleSizePx` per breakpoint ignored from 768 px — the
+  `-md`/`-lg` rules preceded the base `.cmsc-pb-download-tile__title` rule of equal specificity;
+  the tier rules now follow it. Audit: a generic stylesheet-order test
+  (`stylesheet-breakpoint-order.test.ts`: for every rule in a min-width tier reading a `-md`/`-lg`
+  custom property, no later rule of the same selector, unconditional or in a lower tier, sets that
+  property or its shorthand) found no other case. **RED 1/3** (the parser guard and the synthetic
+  case green).
+- [X] T291 [US1] Bug: a Column's `outsetPx` replaced the box's own side margins at every
+  breakpoint, also at a 0 outset. The outset is now the cell's negative side margins (a grid item
+  stretched, `max-width: none`); the box is `width: auto` and keeps its margins on top of the
+  outset. `Column.test.tsx`: the stylesheet case deliberately changed (standing rule 13) and one new
+  case — **RED 2**.
+- [X] T292 [US6] Bug: a `cms.CarouselImage` read-more label overlapped a caption on the same edge
+  on a narrow card. Such a caption gets `cmsc-pb-carousel-image--more-clear-top|bottom` and sits
+  above the label's line (`--cmsc-more-clear-inset` + `--cmsc-more-clear-line`, per breakpoint) — a
+  CSS-only lift, robust at any card width. **Visible change** for cards with both on one edge (own
+  changeset).
+- [X] T293 [US3] Bug: `cms.Image` with the caption below at the base breakpoint and beside from a
+  wider one, with a set width, kept the figure at the image's width there. Such a figure is
+  `cmsc-pb-image__figure--tiered` (`--pb-img-fig-w`, the media wrapped in `.cmsc-pb-image__media`):
+  the image width below, image plus caption column beside. New `captionMinWidthPx`,
+  `captionMaxWidthPx` per breakpoint. **Decision:** a caption's measure has its own range (0 / 40 to
+  1200 px), not the text measure's 160–2000 px — `panel-consistency.test.ts` deliberately changed
+  (standing rule 13) with a case of its own for caption measures.
+- [X] T294 [US3] Bug: an inline heading holding only blank text or hard breaks rendered an empty
+  element (`cms.MediaText` `<h3>`). `isEmptyInline` (shared, now also the Hero's) treats them as
+  empty; the published `cms.Heading` keeps its box but writes no heading for an empty text. Not
+  changed here (another area's file): `cms.FeatureList`'s item title renders without an
+  emptiness check.
+- [X] T295 [US3] Bug: React's "key spread into JSX" warning — `MediaTextMediaFrame` passed
+  `{ key, … }` spread into `<video>`; the key is now passed directly. A grep found no other place.
+- [X] T296 [US2] `ButtonSpec` gains `transparentOutline`, `iconSizePx`, `borderColor`,
+  `iconOnlyShape` (`circle` / `pill`) and `iconOnlyWidthPx` (contracts `buttonSpecSchema`, RED 1;
+  `embedded-button-look.test.tsx` **RED 8/10**, the "unset" and "the block's own option wins"
+  cases green). Fields: `BUTTON_LOOK_FIELDS` (shared, translated once in `core`:
+  `pageBuilder.sharedFields.button*`) on every embedded button (`BUTTON_SPEC_OBJECT_FIELDS`, the
+  admin's `createButtonListField` / `createButtonSpecField`). Pill: `cmsc-btn--icon-pill`,
+  `--pb-btn-width(-md|-lg)`, 1.15 × height without a width.
+  **R23:** Superseded in part by R23 T447: `iconSizePx` and `iconOnlyWidthPx` removed.
+- [X] T297 [US2] One code path: `ButtonView` merges the spec's look under the block's own;
+  `cms.Button` keeps its R19B block-level look (its `button` object omits the look fields,
+  `createButtonSpecField({ look: false })`) and gains `iconOnlyShape` / `iconOnlyWidthPx`
+  (Responsive tab). `specAtTier` resolves the size and width to the previewed tier.
+- [X] T298 [US2] `cms.Hero` `titleLineHeight` per breakpoint and `eyebrowColor`, `titleColor`,
+  `subheadingColor`, `statementColor`, `bodyColor` (`hero-text-options.test.tsx` **RED 8/9**, the
+  unset case green).
+  **R23:** Superseded in part by R23 T436: the per-text colours removed (`eyebrowColor` stays).
+- [X] T299 [US2] `cms.Hero` eyebrow as a label: `eyebrowSizePx`, `eyebrowWeight`,
+  `eyebrowLineHeight` per breakpoint, `eyebrowUppercase` (switch, on by default; off =
+  `cmsc-pb-hero__eyebrow--plain`). **Decision:** the space after it is its item's in `order`
+  (exists since T193), no new field.
+  **R23:** Superseded in part by R23 T435/T436: `eyebrowWeight` removed, an `eyebrowSize` select added.
+- [X] T300 [US2] `cms.Hero` social-proof caption: `proofCaptionPlacement` (`beside` / `below` per
+  breakpoint, `data-caption(-md|-lg)` on the proof row), `proofCaptionSizePx`,
+  `proofCaptionMaxWidthPx` per breakpoint, `proofCaptionWeight`, `proofCaptionColor`. **Decision:**
+  top-level props (the Responsive tab reads top-level fields), not inside `socialProof`.
+  **R23:** Superseded in part by R23 T436: the caption size, weight and colour removed.
+- [X] T301 [US4] `cms.DownloadTile` `minHeightPx` per breakpoint (`--pb-dl-min-h`, 180 px unset)
+  (`download-tile-options.test.tsx` **RED 5/6**, the unset case green).
+- [X] T302 [US4] `cms.DownloadTile` `subtitleSizePx` per breakpoint and `subtitleColor`.
+  **R23:** Superseded by R23 T444.
+- [X] T303 [US4] `cms.DownloadTile` `linkTo: 'link'` + `link` (the shared link field; the admin's
+  picker): one link, no `download`, no type badge, `cmsc-pb-download-tile--page-link`, the icon
+  button's `arrowRight`; a link leading nowhere renders nothing published and a warning in the
+  preview. Label fallback "Learn more".
+- [X] T304 Responsive registry (`index.ts`, `cms/src/manifest.ts` `responsiveFields`) for every
+  new per-breakpoint field; labels en + pl in the `cms` bundle and the `core` bundle's shared
+  button keys; the admin's field-label walk (`page-builder-field-i18n.test.ts`) green.
+- [X] T305 Docs: `cms` module page § *Buttons in blocks, hero texts, download tiles and image
+  captions: more options*, the Column outset and list marker paragraphs; Polish mirrored, cache
+  entry rewritten with `hashSourceBody()`.
+- [X] T306 contracts/blocks.md § "R20E", data-model.md §3.2 and §4 note, changesets `163-r20e-*`
+  (six), rebuilt `dist/cms-components.css`.
+- [X] T307 [US3] Rich-text list marker colour. **Decision:** the default stays as stored (check =
+  brand primary, chevron = text colour) rather than following the text colour on a dark scheme,
+  which would repaint stored dark sections; `cms.RichContent` `listMarkerColor` and `cms.Hero`
+  `bodyListMarkerColor` set `--cmsc-list-marker`, read by both markers
+  (`list-marker-color.test.tsx` **RED 3/3**). Not added to MediaText / FeatureList / CtaCard (another
+  area's files); any block can adopt it by writing the one custom property.
+- [X] T308 [US6] `cms.CarouselImage` `moreLabelColor`, `moreLabelIconColor`, `moreLabelWeight`
+  (`r20e-fixes.test.tsx`, with T292–T295: **RED 10/13**, the three unset guards green).
+  **R23:** Superseded by R23 T445.
+- [X] T309 Verification (2026-10-28): see below.
+
+**R20E verification:** packages built (`pnpm run build:packages`). Tests: cms-components 91 / 2018;
+contracts 68 / 1403; page-builder-core 33 / 233; mod-cms 29 / 329; mod-i18n 1 / 6; storefront whole
+suite 168 / 1777; admin whole suite 388 / 3885; backend `test/unit/cms` + `tailwind-sources` (unit config) 7 / 85.
+Typecheck clean for contracts, page-builder-core, cms-components, page-builder-admin, mod-cms,
+mod-i18n, admin, storefront; lint 0 errors (one pre-existing warning in
+`page-builder-admin/src/chrome/CatalogPickers.tsx`, untouched). Checks: `check:block-names`,
+`check:class-vocabulary`, `check:docs-translations`, `check:module-docs`, `check:block-renderers`,
+`check:bundle-pairing`, `check:test-ownership` findings=0; `check:default-language-prose`
+violations=0; `i18n:hardcoded` regressions=0; `check:release-intent` violations=0 (a first run
+flagged the word "margin" in a changeset as a commercial term; reworded); `check:language` OK.
+Not run: the backend contract/integration suites (no test Postgres here).
+
+## R20F — carousel-split, layout and type-scale options
+
+Gaps found while rebuilding reference pages (2026-10-28): layout and spacing of the split slide,
+the carousel controls, media and text, the background panel, the feature list, the
+call-to-action card, stats, link list and accordion, and a type scale per breakpoint. Every
+option is optional; unset renders today's markup (contracts/blocks.md § "R20F").
+
+**RED first (2026-10-28):** `cms-components` `split-layout-and-block-spacing.test.tsx` RED 33/44
+(the 11 green from the start are the "unset: today's markup" guards and the "off, today" client
+case); `brand/brand-css.test.ts` R20F cases RED 2/4 (the "unset or 1" and "refused factor"
+byte-identity guards green from the start). The contracts `cms-brand.test.ts` R20F case and the
+admin `brand-page.test.tsx` case were written before the code but first run after it (green);
+not separately observed RED.
+
+- [X] T310 [US4] `cms.CarouselSplit` layout: `sideBySide` (`data-side-by-side="desktop"`),
+  `mediaSpan` / `textSpan` / `textOffset` (`--columns`, `--cmsc-split-media-col|text-col`, 12-column
+  grid from 768 px, mirrored for media at the end), `mediaCornerRadius` (shared "Rounded corners").
+  Layout fields after the content (`mediaSide` moved there), style after layout.
+- [X] T311 [US4] `cms.CarouselSplit` title: `titleSize` / `titleSizePx`, `titleWeight`,
+  `titleLineHeight` (per breakpoint, `textStyleAttrs`), `titleHangingIcon` +
+  `titleHangingIconGapPx` (R19A T226's hanging indent; `--cmsc-hang-gap(-md|-lg)` on the title).
+  **R23:** Superseded in part by R23 T435: `titleWeight` is one value.
+- [X] T312 [US4] `cms.CarouselSplit` text: `bodySize` / `bodySizePx`, `bodyWeight`,
+  `bodyLineHeight` per breakpoint. `resolveFields` added (Custom px on Custom, the icon space with
+  the indent on; field objects passed through unchanged). Panel-consistency weight pairs extended.
+  **R23:** Superseded in part by R23 T435: `bodyWeight` is one value.
+- [X] T313 [US4] Carousel controls alignment (`carousel-parts`, all three carousels):
+  `controlsAlign: 'dots-start'` (root `--ctl(-md|-lg)-dots-start`, dots `order: -1` +
+  `margin-inline-end: auto`; tiers with another value reset it). A set `controlsAlign` also aligns
+  the row inside a split slide (`__controls--al-*`, every tier written); unset keeps today's start.
+  Option-parity / ContentSlider tests deliberately extended with `dots-start` (standing rule 13).
+- [X] T314 [US4] `controls.arrowsWhenFit` (shown with arrows): when every slide fits the controls
+  stay, both arrows `disabled`, the dots `hidden` (`.cmsc-pb-carousel__dots[hidden]` keeps the
+  box); `disabledArrowLook` offered and applied on a looping carousel too. Shell
+  `keepArrowsWhenFit`.
+- [X] T315 [US3] `cms.MediaText`: `headingSpacePx`, `bodySpacePx`, `stackedGapPx` (per breakpoint,
+  root classes + `--cmsc-mt-*`), `bodySize` / `bodySizePx`, `bodyLineHeight`,
+  `rows[].verticalAlign` (`'inherit'` / unset = the block's). Touched only `Row`, `MediaTextBody`,
+  the fields and `resolveFields` (not `MediaTextMediaFrame`).
+  **R23:** Superseded by R23 T437: `innerSpace` and `stackedGap`.
+- [X] T316 [US3] `cms.BackgroundPanel`: `mobileLayout: 'overlay'` (`data-mobile-layout`, one grid
+  cell below 768 px, the text at the top or bottom by `mobileTextPosition`), `textBoxMarginPx`,
+  `textBoxPaddingPx` (per breakpoint).
+  **R23:** Superseded in part by R23 T449: `textBoxMarginPx` / `textBoxPaddingPx` removed.
+- [X] T317 [US3] `cms.FeatureList`: `rowGapPx`, `listLineHeight`, `bodySpacePx` (per breakpoint),
+  `titleLetterSpacing` (em).
+  **R23:** Superseded in part by R23 T435/T437: `bodySpacePx` and `titleLetterSpacing` removed.
+- [X] T318 [US3] `cms.CtaCard`: `paddingPx` (per breakpoint; the image inset measures from it),
+  `imageColumns` (per breakpoint, columns of 12 from the tablet, with an image only).
+  **R23:** Superseded in part by R23 T437/T440: `paddingPx` replaced by `cardPadding`, the columns behind a `layout` preset.
+- [X] T319 [US3] `cms.Stats.labelLineHeight` (per breakpoint).
+- [X] T320 [US8] `cms.LinkList.dividerAfterLast` (with `divider` on).
+- [X] T321 [US8] `cms.Accordion.icon: 'chevron-circle'` + `iconCircleColor`. Option-parity and
+  Accordion tests deliberately extended with the new value; `iconCircleColor` sits after the icon
+  size (the T179 order test).
+  **R23:** Superseded by R23 T441: `chevron-circle` reads as `chevron`.
+- [X] T322 [US1] Brand `tierScale` (`tablet`, `smallDesktop`, 0.5–2, optional) in
+  `cms-brand.ts`; `brandTokensToCss` writes a 768–1023.98 px block (mobile px × factor) before the
+  desktop block and a 1024–1279.98 px block (desktop px × factor) after it, for every type size and
+  spacing step; gutter and container unscaled; unset or 1 byte-identical. Blocks' own Custom px are
+  not scaled. `/cms/brand` Layout card: two factor fields (empty = 1, nothing stored).
+- [X] T323 i18n en + pl: `cms` (block fields, brand screen), `catalog` and `blog` (the shared
+  carousel fields); the admin field-label walk shows the conditional fields (`SHOWING` extended).
+- [X] T324 Docs: `cms/index.md` § "Split slides, carousel controls and block spacing",
+  `cms/brand.md` (Layout, Tokens as CSS variables); Polish mirrors; translation cache rehashed with
+  `hashSourceBody()`. contracts/blocks.md § "R20F", data-model §2 and §4; changesets `163-r20f-*`
+  (four); `dist/cms-components.css` rebuilt.
+- [ ] T325 (reserved) Follow-ups not done: `cms.Stats` keeps its own 12-column helper (not shared
+  with the split slide's); the rich-text size mark stays single-valued (per-breakpoint text size
+  is the block-level `bodySize` on MediaText and CarouselSplit).
+- [ ] T326–T329 (reserved)
+
+## R21G — fixes and block options
+
+A bug and options found while rebuilding reference pages (2026-10-28): the hero's social-proof
+caption below the image, column layouts and stacking breakpoints on media-and-text, the
+call-to-action card and stats, the split slide's text indent and spacing, and text options on
+several blocks. Every option is optional; unset renders today's markup (contracts/blocks.md §
+"R21G").
+
+**RED first (2026-10-28):** `cms-components` `r21g-fixes-and-options.test.tsx` **RED 20/32** (the
+12 green from the start are the "unset: today's markup" guards and the "no indent without a
+hanging icon title" case). Two R20 assertions deliberately changed (standing rule 13): the proof
+caption's below rule (`hero-text-options.test.tsx`, now `order: 2` beside the flex basis) and the
+call-to-action card's desktop inset rule (`split-layout-and-block-spacing.test.tsx`, now reading
+the inset per breakpoint). The admin field-label walk's `SHOWING` extended (a mobile image, the
+list's Custom size, a social-proof caption).
+
+- [X] T330 [US2] Bug: `cms.Hero` with `proofCaptionPlacement: 'below'` and a
+  `proofCaptionMaxWidthPx` kept the caption beside the image whenever image and measure fit the
+  row — the caption's `max-width` capped the `flex-basis: 100%` meant to break the line. Fix: a
+  zero-height full-width `::before` break between the image and the caption (`order` 0 / 1 / 2),
+  the row gap moved to the caption's top margin (12 px, as before); `'beside'` at a wider tier
+  undoes it. CSS only; the measure still applies.
+- [X] T331 [US2] `cms.Hero.proofCaptionLineHeight` (per breakpoint).
+  **R23:** Superseded by R23 T436.
+- [X] T332 [US3] `cms.MediaText` `mediaSpan` / `textSpan` / `textOffset` on a 12-column grid from
+  the side-by-side tier, both sides written so alternating rows mirror; the helper shared with
+  `cms.CarouselSplit` (`twelve-columns.ts`, output unchanged).
+  **R23:** Superseded in part by R23 T438: the spans behind `layoutAdvanced` (`split` stays the preset).
+- [X] T333 [US3] `cms.MediaText` `listMarkerColor`, `bodyWeight`, `headingLineHeight` (per
+  breakpoint where it applies).
+  **R23:** Superseded in part by R23 T435: `bodyWeight` is one value.
+- [X] T334 [US3] `cms.CtaCard` `mobileImagePosition`, `sideBySide`, `imageInsetPx` per breakpoint
+  (stored number unchanged), `bodySize` / `bodySizePx`, `listSize` / `listSizePx`. **Decision:**
+  a list text size of its own rather than one size for text and list (they differ on the
+  reference pages); a list weight not added (not asked).
+  **R23:** Superseded in part by R23 T440: `listSize` removed (the list follows `bodySize`), `imageInsetPx` one value.
+- [X] T335 [US3] `cms.Stats.sideBySide`.
+- [X] T336 [US4] `cms.CarouselSplit` `bodyIndent: 'title'` (subgrid of the text column; only for
+  a hanging title led by an icon), `stackedGapPx`, `titleSpacePx`, `controlsSpacePx`.
+  **Decision:** the indent is the body's only; buttons and controls keep the column's full width.
+- [X] T337 [US3] `cms.Image.desktopFrom` (R19C helper) and `cms.Heading` `textMaxWidth` /
+  `textMaxWidthPx`.
+- [X] T338 [US3] `cms.RichContent.listLineHeight`, `cms.Accordion.titleLineHeight`,
+  `newsletter.Signup` `buttonHeightPx` / `buttonTextSizePx` / `buttonWeight`, product listings'
+  `leadSize` / `leadSizePx` / `leadWeight` / `leadColor` (through the shared header's `lead` hook,
+  `carousel-parts.tsx` untouched), `cms.DownloadTile.titleWeight`. Labels en + pl in the `cms`,
+  `catalog` and `newsletter` bundles; docs § "Stacking breakpoints, column layouts and more text
+  options" with its Polish mirror and the translation cache rehashed (`hashSourceBody()`);
+  changesets `163-r21g-*`; `dist/cms-components.css` rebuilt.
+  **R23:** Superseded in part by R23 T435: the line heights only with Custom px.
+- [ ] T339 (not done) A brand bold weight (`fonts.boldWeight`): inline bold has no rule of its own
+  in the stylesheet (the browser's `bolder`), so a token needs a new stylesheet rule over every
+  rich and inline text, a contract change, the brand CSS and a `/cms/brand` control — not trivial,
+  and the brand files are another area's in this round. Left for a later round.
+- [ ] T340–T349 (reserved)
+
+**R21G verification (2026-10-28):** packages built. Tests: cms-components 93 / 2099 (with
+`r21g-fixes-and-options.test.tsx` 32 / 32); mod-cms 29 / 329; mod-catalog 12 / 110; mod-newsletter
+6 / 7 files green, `smtp-provider.test.ts` not runnable here (it binds a local SMTP server, refused
+by the sandbox; the file is untouched); admin whole suite 3889 / 3890 — the one failure,
+`crm/OpportunitiesList.more-filters.test.tsx`, timed out under the full run and passes alone
+(10 / 10), unrelated; storefront whole suite 168 / 1777; backend `test/unit/cms` 6 / 72 and
+`tailwind-sources` 13 / 13 (unit config). Typecheck clean for cms-components, mod-cms,
+mod-catalog, mod-newsletter, admin, storefront; lint 0 errors (pre-existing warnings only).
+Checks: `check:module-docs`, `check:docs-translations`, `check:bundle-pairing`,
+`check:block-names`, `check:block-renderers`, `check:class-vocabulary`, `check:test-ownership`
+findings=0; `check:default-language-prose` violations=0; `i18n:hardcoded` regressions=0;
+`check:release-intent` violations=0; `check:language` OK.
+
+## R21H — breakpoint tiers, breadcrumbs over hero, carousel tiers
+
+Gaps found while rebuilding reference pages (2026-10-28): a per-breakpoint type token losing its
+line height, the tier scale's range and a fluid desktop scale, buttons in the scale, the frame per
+tier, a carousel small-desktop tier and breadcrumbs over the first section. Task IDs T350–T369.
+Every option is optional; unset renders today's markup and today's brand CSS (contracts/blocks.md
+§ "R21H"; data-model §1.1, §2, §4, §5).
+
+- [X] T350 [US1] Bug: a text sized by a different type token per breakpoint kept the first
+  tier's line height, weight and tracking (`cmsc-t--<token>` of one tier). One helper,
+  `tokenTierStyle` (`typography.ts`), used by `sizedTextProps` (carousel header heading, section
+  heading, item texts), `HeroText` and `cms.Heading`: `cmsc-pb-text-token` +
+  `--pb-text-lh|w|ls(-md|-lg)` from each tier's token (a Custom px tier reads the class token);
+  the rule sits before the weight and line-height classes. **RED first:**
+  `r21h-tiers.test.tsx` T350 cases RED 4/5 (the "one token" guard green).
+  `MediaText.test.tsx` feature-title class expectation deliberately changed (standing rule 13).
+- [X] T351 [US1] Brand `tierScale.smallDesktopUntilPx` (1024–3840, unset 1279), `fluidDesktop`,
+  `fluidUntilPx` (else `layout.containerMaxPx`): `clamp(px × factor, px × 100 / end vw, px)` from
+  the small-desktop end. **RED first:** `brand-css.test.ts` R21H RED 4/5 (the byte-identity guard
+  green); contracts `cms-brand.test.ts` R21H RED 1/1.
+  **R23:** Superseded in part by R23 T432: `smallDesktopUntilPx` removed (`fluidDesktop`, `fluidUntilPx` stay).
+- [X] T352 [US1] `tierScale.buttons`: `--cmsb-btn-h-s|m|l` in the tablet, small-desktop and fluid
+  blocks. Covered by T351's RED.
+- [X] T353 [US1] `layout.gutterTabletPx`, `gutterSmallDesktopPx`, `containerSmallDesktopPx`
+  (tablet / small-desktop blocks). Covered by T351's RED. Brand screen fields (Layout card;
+  `brand-page.test.tsx` R21H case RED: missing labels).
+  **R23:** Superseded by R23 T432.
+- [X] T354 [US4] Carousel small-desktop tier: `slidesPerViewSmallDesktop`, `gapSmallDesktopPx`
+  (dedicated props; `Responsive<T>` keeps three tiers) → `--pb-spv-sd` / `--pb-gap-sd`, the
+  stylesheet's `1024–1279.98px` rule, the brand's moved range (`:root .cmsc-pb-carousel`).
+  **RED first:** `r21h-tiers.test.tsx` T354 cases RED 3/5 (the unset and fade guards green).
+  **R23:** Superseded by R23 T434.
+- [X] T355 [US8] `breadcrumbsOverlay` per page: migration
+  `20261028T090524_cms_page_breadcrumbs_overlay` (registry regenerated), entity, service (create,
+  patch, detail, audit state), resolver (`breadcrumbs.overlay: true` only when on), contracts,
+  admin page editor checkbox, storefront zero-height overlay layer. **RED first:** contracts
+  `cms-breadcrumbs-overlay.test.ts` RED 3/3; storefront `breadcrumbs.test.tsx` RED 1/3 (the
+  "off/absent" and "hidden" guards green); admin `cms-editors-settings-panel.test.tsx` RED 1
+  (observed by re-running against the previous `PageEditor.tsx`). Written, **not run** (no test
+  Postgres): `page-tree.contract.test.ts` R21H case, `migration.test.ts` column case.
+  **Status (R23 T468): run green 2026-10-29** on the test Postgres (`dev:infra:test`, port 5441): `page-tree.contract.test.ts`, `page-nested-url.contract.test.ts`, `migration.test.ts` — 3 files, 36 / 36.
+- [X] T356 i18n en + pl: `cms` (brand screen, page editor, carousel fields), `catalog`, `blog`
+  (carousel fields). Docs: `cms/index.md` (breadcrumbs over the first section, § "Small desktops:
+  carousels and type sizes per breakpoint", API rows), `cms/brand.md` (Layout, Tokens as CSS
+  variables); Polish mirrored; cache rehashed with `hashSourceBody()`.
+- [X] T357 contracts/blocks.md § "R21H", data-model, storefront-and-admin-api §2, changesets
+  `163-r21h-*` (four), rebuilt `dist/cms-components.css`.
+- [ ] T358 (reserved) Follow-ups not done: block-level Custom px values (a block's own sizes and
+  spaces) have no small-desktop value and are not scaled by the tier scale (only brand tokens
+  are); the editor's preview has no small-desktop viewport; the container is per tier, not fluid.
+- [ ] T359–T369 (reserved)
+
+## R22I — grid, alignment and block-option fixes
+
+Gaps found while rebuilding reference pages (2026-10-28): the 12-column layouts' gap and anchor,
+a Row's vertical alignment, a call-to-action card's list columns, and line height, weight, size and
+icon options. Task IDs T370–T389. Every option is optional; unset renders today's markup
+(contracts/blocks.md § "R22I"; data-model §4). **RED first:** `r22i-grid-and-options.test.tsx`
+RED 20 / 33 against stub exports (`tierLeading`, `rowVerticalAlign`; the 13 "unset" guards green),
+`LatestPosts.test.tsx` R22I case RED 1 / 19.
+
+- [X] T370 [US3] Bug: the inner 12-column grids (`cms.Stats` with an image's columns,
+  `cms.MediaText`, `cms.CarouselSplit`) took the page's side gutter as their column gap, so a brand
+  gutter per tier (R21H `gutterSmallDesktopPx`) widened them. They read
+  `--cmsc-grid-gap(-md|-lg)` → `--cmsb-grid-gap` → `--cmsb-gutter` (the Row's `.cmsc-pb-gap`
+  fallback too); new `columnGapPx` (per breakpoint) on the three. **Decision:** the default keeps
+  today's gutter; `--cmsb-grid-gap` is a hook the brand CSS does not write yet (brand files were
+  another area's this round). `r21g-fixes-and-options.test.tsx` T332 stylesheet expectation
+  deliberately changed (standing rule 13).
+- [X] T371 [US3] `columnsAnchor` (`'media' | 'start' | 'end'`) on `cms.MediaText` and
+  `cms.CarouselSplit` (`twelveColumns`): a media-at-the-end pair from column 1.
+- [X] T372 [US3] Bug: a call-to-action card's two-column list turned on at 768 px although
+  `sideBySide: 'desktop'` kept the card stacked; it now follows the card's side-by-side tier (CSS).
+- [X] T373 [US1] Bug: a Row's `verticalAlign` had no effect on published pages — every Column
+  carried `cmsc:self-stretch`, which beat the Row's `align-items`. Removed; a stored `'center'` is
+  read as `'middle'` (`rowVerticalAlign`, render and editor). Default rows stretch as before.
+- [X] T374 [US3] `cms.CtaCard` `headingSpacePx`, `bodyWeight`, `textMaxWidth` / `textMaxWidthPx`.
+  **R23:** Superseded in part by R23 T437/T435: `headingSpacePx` replaced by `headingSpace`, `bodyWeight` one value.
+- [X] T375 [US3] `cms.Stats` `valueLineHeight` through the new `tierLeading` helper (a tier below
+  the first set keeps the size token's line height).
+  **R23:** Superseded in part by R23 T435: the line height only with Custom px.
+- [X] T376 [US3] `cms.MediaText` `featureBodySize` / `featureBodySizePx`, `featureBodyWeight`,
+  `featureBodyColor`.
+  **R23:** Superseded in part by R23 T435/T436: `featureBodyColor` removed, the weight one value.
+- [X] T377 [US3] `cms.RichContent` `textWeight`, `listWeight`.
+  **R23:** Superseded in part by R23 T442: `listWeight` removed, `textWeight` one value.
+- [X] T378 [US3] `cms.FeatureList` `iconPosition` per breakpoint and `items[].span` (desktop, 12
+  tracks). `titleWeight` was already per breakpoint (guard test; its type corrected).
+- [X] T379 [US4] Carousel header `headingLineHeight` (`CAROUSEL_HEADER_FIELDS`: ContentSlider,
+  ProductSlider, ProductGrid, LatestPosts), `cms.LinkList` `titleLineHeight`, `blog.LatestPosts`
+  `leadWeight`.
+  **R23:** Superseded in part by R23 T435: the line height only with Custom px.
+- [X] T380 [US6] `newsletter.Signup` `topicLabelSizePx`, `buttonIcon` (icon catalog; the
+  sign-up's button is not a `ButtonSpec`).
+  **R23:** Superseded in part by R23 T443: `topicLabelSizePx` removed.
+- [X] T381 [US3] `cms.Testimonial` `quoteSize` / `quoteSizePx`.
+- [X] T382 [US4] `cms.DownloadTile` `iconButtonIcon`; the icon catalog gains `cloudDownload`.
+- [X] T383 i18n en + pl in the `cms`, `catalog`, `blog` and `newsletter` bundles; manifests' and
+  the default config's `responsiveFields`; the admin label walk shows the new conditional fields.
+  Docs: `cms/index.md` § "Column gaps, column anchors, row alignment and more options", Polish
+  mirror, cache rehashed (`hashSourceBody()`); contracts/blocks.md § "R22I", data-model; changesets
+  `163-r22i-*` (four); rebuilt `dist/cms-components.css`.
+- [X] T384 (done on the merged branch as R22K's T410) The brand CSS writing `--cmsb-grid-gap` (the
+  base tier's gutter in the tablet / small-desktop blocks when a per-tier gutter is set), so the
+  default gap stops following a per-tier gutter without a block option.
+  **R23:** Superseded by R23 T433.
+- [ ] T385–T389 (reserved)
+
+**R22I verification (2026-10-28):** packages built. Tests: cms-components 95 / 2148 (with
+`r22i-grid-and-options.test.tsx` 33 / 33); mod-cms 29 / 329; mod-catalog 12 / 110; mod-blog 2 / 22;
+mod-newsletter 7 / 57; admin whole suite 388 / 3892; storefront whole suite 168 / 1780; backend
+`test/unit/cms` and `tailwind-sources` 7 / 85 (unit config). Typecheck clean for cms-components,
+mod-cms, mod-catalog, mod-blog, mod-newsletter, admin, storefront; lint 0 errors. Checks:
+`check:block-names`, `check:class-vocabulary`, `check:docs-translations`, `check:module-docs`,
+`check:block-renderers`, `check:bundle-pairing`, `check:test-ownership` findings=0;
+`check:default-language-prose` violations=0; `i18n:hardcoded` regressions=0;
+`check:release-intent` violations=0; `manifests:check` up to date; `check:language` OK.
+
+## R22J — fluid frame, block px scaling, button labels, breadcrumbs
+
+Gaps found while rebuilding reference pages (2026-10-28): the frame does not grow with the fluid
+type, a block's own px values ignore the tier scale, button labels do not scale, the painted
+breadcrumb trail uses the link colour, the band cannot be made compact, and a type style has one
+letter spacing for every breakpoint. Task IDs T390–T409. Brand opt-in flags; unset, the brand CSS is
+today's byte for byte (contracts/blocks.md § "R22J"; data-model §2).
+
+- [X] T390 [US1] Brand `layout.fluidContainer`: in the fluid block `--cmsb-container` =
+  `clamp(<containerSmallDesktopPx, else container × factor>px, <container × 100 / until>vw,
+  <container>px)`; `--cmsb-gutter` the same from a narrower `gutterSmallDesktopPx`. Needs the fluid
+  range (`fluidDesktop`, factor below 1). **RED first:** `brand-css.test.ts` R22J RED 4/5 (the
+  byte-identity guard green); contracts `cms-brand.test.ts` R22J RED 1/1.
+  **R23:** Superseded by R23 T432.
+- [X] T391 [US1] `blockPx(n)` (`components/block-px.ts`): `calc(n * var(--cmsb-px, 1px))`, `0px`
+  for zero. **Decision (stored shape and markup):** nothing stored changes; the wrapping is
+  unconditional (a block renders without the brand; threading a render-context flag through every
+  helper was rejected), so a **set** Custom px value changes form in the markup while its computed
+  value is identical when `--cmsb-px` is unset. Unset options still write nothing; a caller's code
+  default (section default spacing, fallback px) stays literal. The helper was written before its
+  own unit case (that case was never RED); the block cases below were.
+  **R23:** Superseded by R23 T431.
+- [X] T392 [US1] Brand `tierScale.blockPx`: `--cmsb-px` (`<factor>px`; fluid
+  `clamp(<factor>px, <100 / until>vw, 1px)`) in the tablet, small-desktop and fluid blocks. Emitters
+  routed through `blockPx`: `pxCss` / `tierVars` / `pxTierOption`, `responsivePxVars`,
+  `textStyleAttrs`, `section-parts` (`gapCss`, Custom sizes), `cms.Heading`, `cms.Hero`, Section
+  frame / group (editor `{px}` spacing, overlap, max width, outset; `tieredVars` no longer parses
+  CSS back to numbers), `cms.Spacer`, `cms.Statement`, `text-max-width`, `ButtonView` (icon-only
+  size, pill width), `CarouselShell` gap, `cms.Image` width (local `scaledWidthVars` replaces
+  `buildResponsiveNumberVars`), `cms.Accordion` icon, `CmsProductCard`, `CarouselImage` padding,
+  `LogoStrip`, `cms.Map`. Not covered: list in contracts/blocks.md § "R22J" (notably `cms.Row` /
+  `cms.Column` own gaps, max width, outset — another agent's area in this round — and the core
+  box-spacing helpers). **RED first:** `r22j-block-px.test.tsx` RED 6/8 (the `blockPx` unit case
+  and the "nothing set" guard green). `fallback-parity.test.tsx`: `resolveVars` computes the
+  scaled-pixel product as a browser does (named change, standing rule 13), plus an R22J case
+  (button label 14 → 12.6 px, spacer 40 → 36 px under the variables; written after the code, not
+  seen RED). **Named changes (rule 13), expectation form only (`Npx` →
+  `calc(N * var(--cmsb-px, 1px))` where the block writes a set Custom px):** `Accordion`,
+  `CarouselImage`, `CmsProductCard`, `ContentSlider`, `FeatureList`, `Heading`, `Hero`,
+  `LatestPosts`, `LinkTile`, `MediaText`, `Section`, `SectionBlock`, `SectionGroup`, `Stats`,
+  `Tabs`, `button-look`, `carousel/CarouselShell`, `download-tile-look`, `download-tile-options`,
+  `embedded-button-look`, `hero-text-options`, `image-caption-look`, `r20e-fixes`,
+  `r21g-fixes-and-options`, `r21h-tiers`, `rich-text-size-and-markers`, `section-width-outset`,
+  `split-layout-and-block-spacing`, `text-and-content-options`, `text-max-width`,
+  `text-weight-and-measure` (`.test.ts(x)`, 95 assertions on one run before the rewrite).
+  **R23:** Superseded by R23 T431.
+- [X] T393 [US1] Brand `tierScale.buttonLabels` (separate from `buttons`, so stored brands keep
+  their output): `--cmsb-btn-px` per tier; `.cmsc-btn` labels `calc(14|13|16 * var(--cmsb-btn-px,
+  1px))`, the icon (`1.15em`) follows. **RED first:** in T390's brand-css RED and
+  `r22j-block-px.test.tsx`' stylesheet case.
+  **R23:** Superseded by R23 T431.
+- [X] T394 [US8] Bug: on a painted trail (muted, dark; band or overlay) the links took the scheme's
+  link colour and the current page the muted text. Now links `--cmsb-fg-muted` (hover `--cmsb-fg`),
+  current page `--cmsb-fg` (`storefront/components/Breadcrumbs.tsx`); light unchanged. **RED
+  first:** storefront `breadcrumbs.test.tsx` R22J colour case RED (the light guard green).
+- [X] T395 [US8] Brand `layout.breadcrumbsPaddingYPx` (integer 0–64): the painted band's
+  `padding-top` / `padding-bottom` inline, replacing `pt-[24px] pb-[16px] max-md:pt-[16px]`
+  (`app/(content)/[...slug]/page.tsx`, read from `getServerContext().brandTokens`). **Decision:**
+  brand-level (no migration, one band look per site); light trail and overlay keep their spacing.
+  **RED first:** `breadcrumbs.test.tsx` R22J band case RED (the "unset" guard green).
+  **R23:** Superseded by R23 T432.
+- [X] T396 [US1] `typeScale.<token>.trackingMobileEm` (−0.1–0.2): the token's `-ls` below 1024 px,
+  `trackingEm` from 1024 px. Covered by T390's RED.
+  **R23:** Superseded by R23 T432.
+- [X] T397 Brand screen: Layout card switches **Scale button label sizes…**, **Scale blocks' own px
+  values…**, **Grow the page container and side margins…** (shown with the fluid sizes), field
+  **Breadcrumb band padding above and below (px)**; type scale column **Letter spacing below
+  desktop (em)** (`FactorField` gains `labelHidden`). **RED first:** admin `brand-page.test.tsx`
+  R22J case RED 1/1 (missing field).
+  **R23:** Superseded by R23 T432.
+- [X] T398 i18n en + pl (`cms`: 5 keys). Docs: `cms/brand.md` (Typography, Layout, Tokens as CSS
+  variables), `cms/index.md` (breadcrumb colours and band padding); Polish mirrored; cache rehashed
+  with `hashSourceBody()`.
+- [X] T399 contracts/blocks.md § "R22J", data-model §2, changesets `163-r22j-*` (five; the
+  storefront-only colour fix needs none), rebuilt `dist/cms-components.css`.
+- [ ] T400 (partly done on the merged branch as R22K's T411: Row gaps, max width and Column outset)
+  Follow-ups not done: route `cms.Row` / `cms.Column` gaps, max width and
+  outset and the core `buildResponsive*` box spacing through `blockPx` once this round's grid work
+  is merged (they always write their defaults, so the change there is a markup change for unset
+  blocks too); the editor preview has no small-desktop or fluid viewport to show the scaling.
+  **R23:** Superseded by R23 T431 (no block px scaling).
+- [ ] T401–T409 (reserved)
+
+**R22J verification (2026-10-28):** packages built. Tests: cms-components 95 / 2129 (with
+`r22j-block-px.test.tsx` 8 / 8, `brand-css.test.ts` 35 / 35, `fallback-parity.test.tsx` 128 / 128);
+contracts 69 / 1409; mod-cms 29 / 329; mod-catalog 12 / 110; mod-blog 2 / 22; admin whole suite
+388 / 3893; storefront whole suite 168 / 1784; backend `test/unit/cms` + `tailwind-sources` 7 / 85
+(unit config). Typecheck clean for contracts, cms-components, mod-cms, admin, storefront; lint 0
+errors (storefront: 17 pre-existing warnings in files not touched). Checks: `check:module-docs`,
+`check:docs-translations`, `check:bundle-pairing`, `check:block-names`, `check:block-renderers`,
+`check:class-vocabulary`, `check:test-ownership` findings=0; `check:default-language-prose`
+violations=0; `i18n:hardcoded` regressions=0; `check:release-intent` violations=0;
+`check:language` OK.
+
+## R22K — merge follow-ups
+
+Follow-ups left by R22I (T384) and R22J (T400), done on the merged branch. Task IDs T410–T414.
+
+- [X] T410 [US1] (= R22I's T384) The brand CSS writes `--cmsb-grid-gap` wherever a tier has a gutter
+  of its own, so the 12-column layouts (and the Row's fallback) keep the base tier's gutter as their
+  column gap: in the tablet block with `layout.gutterTabletPx` (`gutterMobilePx ?? 24` px), in the
+  small-desktop block with `layout.gutterSmallDesktopPx` (`gutterDesktopPx ?? gutterMobilePx ?? 24`
+  px) and in the fluid block beside a fluid gutter (`layout.fluidContainer`, the desktop gutter).
+  No per-tier gutter: the brand CSS is today's byte for byte. **RED first:** `brand-css.test.ts`
+  R22K block RED 3/4 (the "unset" guard green); the R21H frame-per-tier expectations now include
+  the grid gap.
+  **R23:** Superseded by R23 T433.
+- [X] T411 [US1] (= R22J's T400, part) The px values R22I added and the Row's and Column's own px
+  through `blockPx`. Audit: every R22I emitter already goes through the shared helpers R22J routed —
+  `columnGapPx` (`tierVars` + `pxCss`, `cms.Stats`, `cms.MediaText`, `cms.CarouselSplit`),
+  `headingSpacePx` and `topicLabelSizePx` (`pxTierOption`), `textMaxWidthPx` (`textMaxWidthAttrs`),
+  `featureBodySizePx`, `quoteSizePx`, `bodyWeight`/`textWeight`/`titleLineHeight` (`textStyleAttrs`)
+  — so they needed no change (R22I's tests now assert the calc form). New `scaledNumberVars` in
+  `block-px.ts` (`buildResponsiveNumberVars` with a stored value against the scaled pixel, an
+  unstored default literal): `cms.Row` `gap`, `rowGap` and `customMaxWidthPx` (published and the
+  editor's inner max width); `cms.Column` `outsetPx` through `blockPx`. Not routed: the Row's
+  `minHeight` (a height, like the button heights) and the core `buildResponsive*` /
+  `spacingToCss` box padding and margins (they always write their defaults; routing them would
+  change unset markup). A Row with no stored gap keeps today's markup; a stored gap (the editor's
+  default 24 is stored) is now `calc(24 * var(--cmsb-px, 1px))` — 24 px wherever `--cmsb-px` is
+  unset. **RED first:** `r22k-row-column-px.test.tsx` RED 5/6 (the unset Row green); the R19C
+  outset and T239 row-gap expectations moved to the calc form.
+  **R23:** Superseded by R23 T431.
+- [ ] T412–T414 (reserved)
+
+**R22K verification (2026-10-28, merged branch `r22-merge`):** packages built; `composer:generate`,
+`manifests:generate` and `pnpm install --lockfile-only` changed nothing. `pnpm -r run typecheck` and
+`pnpm -r run lint` exit 0. `pnpm --no-bail --filter '!backend' run test`: every workspace green
+except `packages/cli` 5 / 1012 (the known macOS terminal and scaffold cases); cms-components
+97 / 2173, admin 388 / 3893, storefront 168 / 1784, contracts 69 / 1409, mod-cms 29 / 329.
+Backend `test:unit:fast` 16 files / 145 tests failing, the same file set as the earlier baseline
+(spawned-script and package-artefact cases). Every `quality.yml` check exit 0 (`check:naming` is the
+known macOS refusal), `check:language` OK, `check:release-intent -- --since 0e33ca93f`
+violations=0. Offline render of a stored marketing page, r21 against r22: identical once each
+`calc(N * var(--cmsb-px, 1px))` reads N px and the 25 Columns' removed `cmsc:self-stretch` (R22I
+T373) are discounted.
+
+## R23 — simplification of the R19–R22 options
+
+R19–R22 added about 200 block and brand options, many of them only to match a measured page to the
+pixel. Owner decision (2026-10-28): **pixel-matching options removed**; every structural capability
+and every bug fix stays. Nothing of R19–R22 was released, so there is no migration: a removed block
+prop is ignored data, a removed brand key is stripped on parse. Everything stored before R19 renders
+as before. Data-model §7 and contracts/blocks.md § "R23" hold the lists. Task IDs T430–T469.
+
+- [X] T430 Decisions (owner, binding): (1) a type-token size carries its own line height, weight
+  and tracking; a line height is shown and applied only with a Custom px size; the R19–R22 weights
+  are one value (stored per-breakpoint: desktop, else base); per-text colours fold into the block's
+  text colour plus an accent; (2) no carousel small-desktop tier; (3) 12-column layouts get a
+  `layout` preset, the raw numbers behind `layoutAdvanced`, which wins when on; (4) the drops
+  listed in T431–T449. Kept: `tierScale.tablet` / `smallDesktop`, `fluidDesktop` / `fluidUntilPx`,
+  `tierScale.buttons`, `breadcrumbsOverlay`, nested URLs, every structural option and bug fix.
+- [X] T431 [US1] No block px scaling: R22J's `blockPx` / `block-px.ts` / `--cmsb-px`,
+  `buttonLabels` / `--cmsb-btn-px` and R22K's Row/Column scaled vars reverted to literal px (calc
+  expectations back to px; `r22j-block-px.test.tsx`, `r22k-row-column-px.test.tsx` deleted).
+- [X] T432 [US1] Brand drops: `tierScale.smallDesktopUntilPx` (the tier ends at 1279 px),
+  `layout.gutterTabletPx` / `gutterSmallDesktopPx` / `containerSmallDesktopPx`, `fluidContainer`,
+  `breadcrumbsPaddingYPx` (the storefront band keeps its classes; T394's trail colours stay),
+  `typeScale.<token>.trackingMobileEm`. Brand screen Layout card: 9 controls → 5. **Test:**
+  contracts `cms-brand.test.ts` R23 "stripped on parse", `brand-css.test.ts` R23 stale keys write
+  nothing, admin `brand-page.test.tsx`, storefront `breadcrumbs.test.tsx` (stored padding ignored).
+- [X] T433 [US1] No `--cmsb-grid-gap`: the grids read `var(--cmsc-grid-gap…, var(--cmsb-gutter,
+  24px))` (R22K T410 reverted).
+- [X] T434 [US4] No carousel small-desktop tier (`slidesPerViewSmallDesktop`, `gapSmallDesktopPx`,
+  the `-sd` rule). **Test:** `r21h-tiers.test.tsx` R23 T434 cases (stored values ignored).
+- [X] T435 [US3] One typography rule in `text-style.ts`: `textStyleAttrs` writes a token size's
+  `--cmsb-t-<token>-lh|-w|-ls` (new `cmsc-pb-ts-tracking` class); a line height only at a Custom
+  tier (`customOnlyLeading`, `customLeadingAttrs`, `sizeUsesCustom`); `singleWeight` reads a stored
+  per-breakpoint weight as desktop, else base. Line-height fields shown only with a Custom size.
+  Pre-R19 per-breakpoint weights (R17) unchanged. **RED first:** `text-style.test.ts` (12 tests).
+- [X] T436 [US2] `cms.Hero`: per-text colours (`titleColor`, `subheadingColor`, `statementColor`,
+  `bodyColor`), `bodyListMarkerColor`, `eyebrowWeight` and the proof caption's size, weight, line
+  height and colour removed; `eyebrowSize` select added (a stored px without a size reads as
+  Custom). Also `cms.Statement.bodyColor`, `cms.FeatureList.bodyColor`,
+  `cms.MediaText.featureBodyColor`, `cms.Stats.labelColor` removed.
+- [X] T437 [US3] Spacing steps (`space-token.ts`, `BlockSpace`): `innerSpace` (FeatureList,
+  MediaText, CarouselSplit), `stackedGap` (MediaText, CarouselSplit), `cardPadding` (CtaCard,
+  DownloadTile), `headingSpace` (CtaCard) replace the per-element px.
+- [X] T438 [US3] 12-column presets (`twelve-columns.ts`: `LAYOUT_PRESETS`, `layoutPresetField`,
+  `LAYOUT_ADVANCED_FIELD`, `usesAdvancedLayout`, `chosenSpans`) on `cms.CarouselSplit`, `cms.Stats`;
+  `cms.MediaText` keeps `split` and gains `layoutAdvanced`; `resolveData` stores the switch on for
+  stored raw numbers. **RED first:** `twelve-columns.test.ts` (7 tests). Render cases
+  `r23-layout-presets.test.tsx` (10 tests, written after the implementation).
+- [X] T439 [US3] `cms.Heading.hangingIconGapPx`, `cms.CarouselSplit.titleHangingIconGapPx` removed.
+- [X] T440 [US3] `cms.CtaCard`: `layout` (two-track presets) + `layoutAdvanced`, `cardPadding`,
+  `headingSpace`; `listSize` / `listSizePx` removed (the list follows `bodySize`);
+  `imageInsetPx` one value.
+- [X] T441 [US8] `cms.Accordion`: `chevron-circle` and `iconCircleColor` removed; a stored
+  `chevron-circle` renders as `chevron`.
+- [X] T442 [US3] Rich text: the size mark's Custom px removed from the toolbar
+  (`isSettableTextSize`; a stored px mark still renders and sanitises); `cms.RichContent.listWeight`
+  removed, `textWeight` one value.
+- [X] T443 [US6] `newsletter.Signup`: `buttonHeightPx`, `buttonTextSizePx`, `buttonWeight`,
+  `topicLabelSizePx` removed (`responsiveFields` now empty).
+- [X] T444 [US4] `cms.DownloadTile`: `titleSize` select and `cardPadding` added;
+  `iconButtonSizePx`, `iconButtonBorderColor`, `subtitleSizePx`, `subtitleColor` removed;
+  `minHeightPx` one value.
+- [X] T445 [US6] `cms.CarouselImage`: read-more label size, colours, weight and
+  `captionPaddingPx` removed (the label is 14 px / semibold).
+- [X] T446 [US3] `cms.Image`: `captionSize` select added; `captionWeight`, `captionColor`,
+  `captionMinWidthPx` removed.
+- [X] T447 [US2] `cms.Button` / `ButtonSpec`: `iconSizePx`, `iconOnlyWidthPx` removed (contracts
+  schema strips them); a pill is 1.15 × its height in CSS.
+- [X] T448 [US4] Carousel `controls.dotColor` / `activeDotColor` removed (the scheme colours stay).
+- [X] T449 [US1] `cms.Section.outsetPx` and `cms.BackgroundPanel` `textBoxMarginPx` /
+  `textBoxPaddingPx` removed (the Column outset stays).
+- [X] T450 Responsive registry (`index.ts`) and the manifests' `responsiveFields` (cms, catalog,
+  blog, newsletter); option-parity and panel-consistency updated (`SINGLE_WEIGHT_PAIRS`).
+- [X] T451 i18n en + pl: `cms` −110 / +140 keys, `catalog` and `blog` −4, `newsletter` −11, core
+  `_i18n` −2; the admin's label-walk test (`page-builder-field-i18n.test.ts`) green.
+- [X] T452 Docs: `cms/index.md` and `cms/brand.md`, the PL mirrors, translation cache rehashed.
+- [X] T453 contracts/blocks.md § "R23", data-model §2, §3.2, §3.4, §4 note and §7; earlier tasks
+  annotated "R23: superseded".
+- [X] T454 Changesets: the unreleased `163-r19*`…`163-r22*` describe only what remains — eight
+  deleted (`r21h-carousel-small-desktop`, the five `r22j-*`, the two `r22k-*`), 22 edited; one
+  added, `163-r23-type-rule-layout-presets-spacing-steps`.
+- [X] T455 Pre-R19 parity: `option-parity.test.ts` and `fallback-parity.test.tsx` green; offline
+  render (`renderToString` + `puck.Render`) of every block at its pre-R19 defaults (47 blocks) and
+  of a page stored before R19, each stored and after `resolveAllData`, with the `0e33ca93f` build
+  against this one: 91 of 96 renders byte-identical. The five others carry only two earlier bug
+  fixes R23 keeps — R22I T373 (a Column no longer forces `cmsc:self-stretch`; Row, Column) and
+  R21H T350 (a heading with a different type token on desktop gets the tier's line height, weight
+  and tracking; one tag of 1556 on the stored page). Nothing in the difference comes from R23.
+- [X] T456 Verification (2026-10-28): packages built; `composer:generate`, `manifests:generate`
+  and `pnpm install --lockfile-only` changed nothing. `pnpm -r run typecheck` and `pnpm -r run lint`
+  exit 0. `pnpm --no-bail --filter '!backend' run test`: every workspace green except
+  `packages/cli` 5 / 1012 (the known macOS terminal and scaffold cases) and two stale R19 assertions
+  the run found, fixed and re-run green — cms-components `fallback-parity.test.tsx` (the dot colour
+  chain without `--pb-dot-*`, 126 / 126) and admin `sidebar-field-layout.test.tsx` (no Section
+  `outsetPx`, 9 / 9); cms-components 98 files / 2169 tests, admin 388 / 3892, storefront
+  168 / 1784, contracts 1409, mod-cms 329. Backend `test:unit:fast` 16 files / 145 tests failing,
+  the known file set (spawned-script and package-artefact cases). Every `quality.yml` check exit 0
+  (`check:naming` is the known macOS refusal), `check:language` OK,
+  `check:release-intent -- --since 0e33ca93f` exit 0.
+- [X] T466 T270, T282, T284, T355: their contract and migration tests are marked "written, not
+  run" — the test Postgres (`dev:infra:test`, port 5441) was not up; not started here.
+- [X] T467 Hero `order[].spacePx` (and `spaceAfter[].spacePx`) stored per breakpoint rendered as 0 px —
+  `spaceAfterCss` read a number only. RED: `Hero.test.tsx` "a Custom space stored per breakpoint
+  is read per breakpoint, not as 0 px" (received `0px`, expected `12px`); fixed by reading the
+  value through `resolveResponsive`, as the block's other px fields are. The editor still writes
+  one number.
+- [X] T468 T270, T282, T284, T355 run on the test Postgres: 3 files, 36 / 36 green; re-ticked.
+- [ ] T457–T465, T469 (reserved)
+
+**R23 option counts** (`defaultPageBuilderConfig`, r22-merge → R23): declared top-level fields
+975 → 933, with nested object and array fields 1615 → 1541; fields a new block shows in the editor
+(its `resolveFields` over the default props) 790 → 735. Brand: 9 stored keys removed; the screen's
+Layout card 9 controls → 5, the type scale table one column fewer.

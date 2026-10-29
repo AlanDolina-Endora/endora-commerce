@@ -2,7 +2,7 @@
 
 import type { ArrayField, Field, ObjectField } from '@puckeditor/core';
 import { createColorField, PB_RESPONSIVE_METADATA, type ButtonSpec } from '@endora-commerce/page-builder-core';
-import { createIconPickerField } from '@endora-commerce/cms-components';
+import { BUTTON_LOOK_FIELDS, createIconPickerField } from '@endora-commerce/cms-components';
 import { createLinkField } from './LinkField.js';
 
 /**
@@ -63,8 +63,12 @@ export interface ButtonListFieldOptions {
   responsive?: boolean;
 }
 
-/** The fields of one `ButtonSpec`, shared by the list and the single-button field. */
-function buttonSpecFields(responsive: boolean): Record<keyof ButtonSpec, Field> {
+/**
+ * The fields of one `ButtonSpec`, shared by the list and the single-button field.
+ * R20E (T296): with the button look (`cms-components`' shared `BUTTON_LOOK_FIELDS`)
+ * unless `look` is off — `cms.Button` keeps its look on the block, as stored.
+ */
+function buttonSpecFields(responsive: boolean, look = true): Partial<Record<keyof ButtonSpec, Field>> {
   const perBreakpoint = responsive ? { metadata: PB_RESPONSIVE_METADATA } : {};
   return {
     label: { type: 'text', label: 'Label' },
@@ -76,7 +80,8 @@ function buttonSpecFields(responsive: boolean): Record<keyof ButtonSpec, Field> 
     iconPosition: { type: 'select', label: 'Icon position', options: BUTTON_ICON_POSITION_OPTIONS },
     backgroundColor: createColorField({ label: 'Background color' }),
     textColor: createColorField({ label: 'Text color' }),
-  } as Record<keyof ButtonSpec, Field>;
+    ...(look ? (BUTTON_LOOK_FIELDS as unknown as Partial<Record<keyof ButtonSpec, Field>>) : {}),
+  } as Partial<Record<keyof ButtonSpec, Field>>;
 }
 
 /** A Puck array field of `ButtonSpec` items. */
@@ -97,6 +102,8 @@ export interface ButtonSpecFieldOptions {
   label?: string;
   /** Style and fill per breakpoint, as `cms.Button`'s variant is today. */
   responsive?: boolean;
+  /** R20E (T296): the button look fields; off for `cms.Button`, whose look is the block's own. Default on. */
+  look?: boolean;
 }
 
 /**
@@ -108,6 +115,6 @@ export function createButtonSpecField(options?: ButtonSpecFieldOptions): ObjectF
   return {
     type: 'object',
     label: options?.label ?? 'Button',
-    objectFields: buttonSpecFields(options?.responsive === true) as ObjectField<ButtonSpec>['objectFields'],
+    objectFields: buttonSpecFields(options?.responsive === true, options?.look !== false) as ObjectField<ButtonSpec>['objectFields'],
   };
 }

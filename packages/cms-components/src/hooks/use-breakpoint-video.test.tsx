@@ -18,6 +18,8 @@ type Listener = () => void;
 /** A controllable `matchMedia`: the mobile and reduced-motion answers are set per test. */
 const media = { mobile: false, reduced: false };
 const mediaListeners = new Set<Listener>();
+/** Every query asked of `matchMedia` (R19C: which breakpoint the hook watches). */
+const queries: string[] = [];
 /** The last IntersectionObserver callback, so a test can report the section visible. */
 let intersect: ((visible: boolean) => void) | null = null;
 let observerAvailable = true;
@@ -31,9 +33,10 @@ beforeEach(() => {
   media.mobile = false;
   media.reduced = false;
   mediaListeners.clear();
+  queries.length = 0;
   intersect = null;
   observerAvailable = true;
-  vi.stubGlobal('matchMedia', (query: string) => ({
+  vi.stubGlobal('matchMedia', (query: string) => (queries.push(query), {
     get matches() {
       return query.includes('reduced-motion') ? media.reduced : media.mobile;
     },
@@ -67,9 +70,9 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-function Harness({ single = false }: { single?: boolean }): ReactElement {
+function Harness({ single = false, mobileMedia }: { single?: boolean; mobileMedia?: string }): ReactElement {
   const ref = useRef<HTMLElement>(null);
-  useBreakpointVideo(ref);
+  useBreakpointVideo(ref, undefined, mobileMedia ? { mobileMedia } : undefined);
   return (
     <section ref={ref}>
       {single ? (
@@ -151,6 +154,17 @@ describe('useBreakpointVideo', () => {
     mount(<Harness />);
     act(() => intersect?.(true));
     expect(document.querySelector<HTMLVideoElement>('video[data-bp="desktop"]')?.muted).toBe(true);
+  });
+
+  // R19C (T263): a background whose desktop art starts at the desktop tier watches that breakpoint.
+  it('watches the tablet tier by default, and the breakpoint it is given', () => {
+    mount(<Harness />);
+    expect(queries).toContain('(max-width: 767.98px)');
+    document.body.innerHTML = '';
+    queries.length = 0;
+    mount(<Harness mobileMedia="(max-width: 1023.98px)" />);
+    expect(queries).toContain('(max-width: 1023.98px)');
+    expect(queries).not.toContain('(max-width: 767.98px)');
   });
 
   it('plays nothing without IntersectionObserver, since visibility cannot be known', () => {

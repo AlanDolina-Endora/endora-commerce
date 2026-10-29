@@ -87,6 +87,33 @@ export function typeTokenSizeCss(token: TypeToken, tier: BreakpointTier): string
   return `var(--cmsb-t-${token}-size, ${tier === 'desktop' ? fallback.desktopPx : fallback.mobilePx}px)`;
 }
 
+/**
+ * R21H (T350): a text whose type token changes across breakpoints. Its class
+ * (`cmsc-t--<token>`) is one tier's token, so the line height, weight and
+ * tracking stayed that token's at every width while only the size moved. With
+ * the tokens differing, this writes `cmsc-pb-text-token` and each tier's
+ * token's `--pb-text-lh`, `--pb-text-w`, `--pb-text-ls` (`-md`, `-lg`); a tier
+ * sized in Custom px reads the class token (`lead`), as it did. One token at
+ * every tier writes nothing. The rule sits before the weight and line-height
+ * classes, so a text's own weight or line height still wins.
+ */
+export function tokenTierStyle(
+  tokens: Record<BreakpointTier, TypeToken | null>,
+  lead: TypeToken,
+): { classes: string[]; style: Record<string, string> } {
+  const at = (['mobile', 'tablet', 'desktop'] as const).map((tier) => tokens[tier] ?? lead);
+  if (at.every((token) => token === at[0])) return { classes: [], style: {} };
+  const style: Record<string, string> = {};
+  (['', '-md', '-lg'] as const).forEach((suffix, index) => {
+    const token = at[index]!;
+    const fallback = TYPE_SCALE_FALLBACKS[token];
+    style[`--pb-text-lh${suffix}`] = `var(--cmsb-t-${token}-lh, ${fallback.lineHeight})`;
+    style[`--pb-text-w${suffix}`] = `var(--cmsb-t-${token}-w, ${fallback.weight})`;
+    style[`--pb-text-ls${suffix}`] = `var(--cmsb-t-${token}-ls, 0em)`;
+  });
+  return { classes: ['cmsc-pb-text-token'], style };
+}
+
 /** The brand's heading font, with today's heading stack as its fallback. */
 export const HEADING_FONT_CSS = 'var(--cmsb-font-heading, Inter, system-ui, -apple-system, sans-serif)';
 

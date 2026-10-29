@@ -9,20 +9,23 @@
  * write never fails because the storefront is unreachable. Disabled (no-op)
  * when the base URL or secret is not configured.
  *
- * A call is bounded by {@link REVALIDATE_TIMEOUT_MS}, and a non-2xx answer is a
- * failure like a transport error (feature 163, security review M2): a `401` from a
- * secret the two sides disagree on used to pass in silence, leaving every tagged
- * entry stale. The log names the status and the tags, never the secret.
+ * A call is bounded by a timeout (`timeoutMs`, default {@link DEFAULT_TIMEOUT_MS}), and
+ * a non-2xx answer is a failure like a transport error (feature 163, security review M2;
+ * R19C T271): a `401` from a `REVALIDATE_SECRET` the two sides do not share used to pass
+ * in silence, leaving every tagged entry stale. The log names the status and the tags,
+ * never the secret.
  */
 
-/** How long one revalidation call may take before it is abandoned. */
-const REVALIDATE_TIMEOUT_MS = 5_000;
+/** How long one revalidation call may take before it is abandoned, unless `timeoutMs` says otherwise. */
+const DEFAULT_TIMEOUT_MS = 5_000;
 
 export interface StorefrontRevalidatorOptions {
   baseUrl: string | undefined;
   secret: string | undefined;
   fetchFn?: typeof fetch;
   logger?: { warn: (obj: unknown, msg: string) => void };
+  /** How long to wait for the storefront's answer; a caller may await the call. Default {@link DEFAULT_TIMEOUT_MS}. */
+  timeoutMs?: number;
 }
 
 export class StorefrontRevalidator {
@@ -52,16 +55,18 @@ export class StorefrontRevalidator {
           'x-revalidate-secret': this.options.secret as string,
         },
         body: JSON.stringify({ tags }),
-        signal: AbortSignal.timeout(REVALIDATE_TIMEOUT_MS),
+        signal: AbortSignal.timeout(this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
       });
       if (!response.ok) {
         this.logger?.warn(
-          { status: response.status, tags: tags.length },
-          '[storefront-revalidate] the storefront refused the revalidation',
+          { status: response.status, tags },
+          response.status === 401
+            ? '[storefront-revalidate] refused: REVALIDATE_SECRET differs between the backend and the storefront'
+            : '[storefront-revalidate] refused',
         );
       }
     } catch (err) {
-      this.logger?.warn({ err, tags: tags.length }, '[storefront-revalidate] failed');
+      this.logger?.warn({ err, tags }, '[storefront-revalidate] failed');
     }
   }
 }

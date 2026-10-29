@@ -1,6 +1,7 @@
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CmsResolvedPage } from '@endora-commerce/contracts';
+import type { CmsBrandTokens, CmsResolvedPage } from '@endora-commerce/contracts';
+import { DEFAULT_BRAND_TOKENS } from '@endora-commerce/contracts';
 
 /**
  * Breadcrumbs that follow the page tree
@@ -15,12 +16,13 @@ import type { CmsResolvedPage } from '@endora-commerce/contracts';
  *   requires.
  */
 
-const state: { page: CmsResolvedPage | null } = { page: null };
+const state: { page: CmsResolvedPage | null; brandTokens: CmsBrandTokens | null } = { page: null, brandTokens: null };
 
 vi.mock('../../lib/server-context', () => ({
   getServerContext: async () => ({
     ctx: { locale: 'en-US', salesChannelCode: 'web' },
     locale: 'en-US',
+    brandTokens: state.brandTokens,
   }),
 }));
 vi.mock('../../lib/api/cms', () => ({
@@ -78,6 +80,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   state.page = null;
+  state.brandTokens = null;
 });
 
 describe('Breadcrumbs', () => {
@@ -147,5 +150,109 @@ describe('the CMS page trail', () => {
     const html = await renderPage();
     expect(html).toContain('data-cmsb-scheme="light"');
     expect(html).not.toContain('bg-[var(--cmsb-bg');
+  });
+
+  // R19C (T267): a painted band owns its spacing — padding inside it, no margin spilling out of it.
+  it('pads a painted band inside it, so no light strip opens between the band and a dark first section', async () => {
+    for (const scheme of ['muted', 'dark'] as const) {
+      state.page = page({ visible: true, scheme, trail: [] });
+      const html = await renderPage();
+      const ol = /<ol class="([^"]*)"/.exec(html)?.[1] ?? '';
+      expect(ol, scheme).not.toContain('mb-[16px]');
+      expect(ol, scheme).toContain('mb-0');
+      expect(html, scheme).toMatch(/<div class="[^"]*\bpb-\[16px\][^"]*"><nav aria-label="Breadcrumb"/);
+    }
+  });
+
+  it('keeps the light trail\'s own bottom margin, as before', async () => {
+    state.page = page({ visible: true, scheme: 'light', trail: [] });
+    const html = await renderPage();
+    expect(/<ol class="([^"]*)"/.exec(html)?.[1]).toContain('mb-[16px]');
+    expect(html).not.toMatch(/<div class="[^"]*\bpb-\[16px\][^"]*"><nav aria-label="Breadcrumb"/);
+  });
+
+  // R21H (T355): the trail over the first section — a zero-height layer, so nothing below moves down.
+  it('draws the trail over the first section when the page asks, in a zero-height layer with no band', async () => {
+    state.page = page({ visible: true, scheme: 'dark', overlay: true, trail: [{ name: 'Audiences', slug: 'audiences' }] });
+    const html = await renderPage();
+    const layer = /<div ([^>]*data-breadcrumbs-overlay[^>]*)>/.exec(html)?.[1] ?? '';
+    expect(layer).toContain('data-cmsb-scheme="dark"');
+    expect(layer).toMatch(/class="[^"]*\brelative\b[^"]*\bh-0\b/);
+    expect(layer).not.toContain('bg-[var(--cmsb-bg');
+    expect(html).toMatch(/<div class="[^"]*\babsolute\b[^"]*\binset-x-0\b[^"]*max-w-\[var\(--cmsb-container,1360px\)\][^"]*"><nav aria-label="Breadcrumb"/);
+    // The trail first, then the page body it lies over.
+    expect(html.indexOf('aria-label="Breadcrumb"')).toBeLessThan(html.indexOf('data-testid="page-body"'));
+    expect(html).toContain('href="/audiences"');
+    expect(html).not.toContain('pb-[16px]');
+  });
+
+  it('keeps today\'s band when the overlay is off or absent', async () => {
+    state.page = page({ visible: true, scheme: 'dark', trail: [] });
+    const absent = await renderPage();
+    state.page = page({ visible: true, scheme: 'dark', overlay: false, trail: [] });
+    expect(await renderPage()).toBe(absent);
+    expect(absent).not.toContain('data-breadcrumbs-overlay');
+  });
+
+  it('draws nothing over the page when the trail is hidden', async () => {
+    state.page = page({ visible: false, scheme: 'dark', overlay: true, trail: [] });
+    const html = await renderPage();
+    expect(html).not.toContain('data-breadcrumbs-overlay');
+    expect(html).not.toContain('aria-label="Breadcrumb"');
+  });
+
+  // R19C (T268): the trail sits in the brand's page container, as the page's content does.
+  it('holds the trail in the brand container and gutter', async () => {
+    state.page = page({ visible: true, scheme: 'light', trail: [] });
+    const html = await renderPage();
+    expect(html).toContain('max-w-[var(--cmsb-container,1360px)]');
+    expect(html).toContain('px-[var(--cmsb-gutter,24px)]');
+    expect(html).not.toContain('max-w-[1360px]');
+  });
+});
+
+/**
+ * R22J (T394): on a painted trail (muted and dark schemes, band or over the
+ * first section) the links are the scheme's muted text and the current page its
+ * text colour — not the link colour; the light trail keeps its own colours.
+ * R23 (T432): the brand's band padding (R22J T395) is gone — a stored
+ * `layout.breadcrumbsPaddingYPx` is ignored and the band keeps today's padding.
+ */
+describe('R22J: the painted trail\'s colours; R23: the band\'s own padding only', () => {
+  const crumbs = [
+    { href: '/', label: 'Home' },
+    { href: '/audiences', label: 'Audiences' },
+    { href: '/audience/buyers', label: 'Buyers' },
+  ];
+
+  it('on muted and dark, links take the muted text and the current page the scheme text', () => {
+    for (const scheme of ['muted', 'dark'] as const) {
+      const html = renderToString(<Breadcrumbs crumbs={crumbs} scheme={scheme} />);
+      const ol = /<ol class="([^"]*)"/.exec(html)?.[1] ?? '';
+      expect(ol, scheme).not.toContain('--cmsb-link');
+      expect(ol, scheme).toContain('[&amp;_a]:text-[color:var(--cmsb-fg-muted,#64748b)]');
+      expect(html, scheme).toMatch(/<span aria-current="page" class="[^"]*text-\[color:var\(--cmsb-fg,#15202b\)\][^"]*">Buyers<\/span>/);
+    }
+  });
+
+  it('the light trail keeps its own colours', () => {
+    const html = renderToString(<Breadcrumbs crumbs={crumbs} />);
+    expect(html).toContain('<span aria-current="page">Buyers</span>');
+    expect(html).not.toContain('--cmsb-fg');
+  });
+
+  it('a stored brand band padding (R22J T395, removed by R23) is ignored', async () => {
+    state.brandTokens = { ...DEFAULT_BRAND_TOKENS, layout: { ...DEFAULT_BRAND_TOKENS.layout, breadcrumbsPaddingYPx: 7 } } as CmsBrandTokens;
+    state.page = page({ visible: true, scheme: 'dark', trail: [] });
+    const html = await renderPage();
+    expect(html).toMatch(/<div class="[^"]*\bpt-\[24px\] pb-\[16px\] max-md:pt-\[16px\]"><nav aria-label="Breadcrumb"/);
+    expect(html).not.toContain('padding-top:7px');
+  });
+
+  it('unset, the band keeps today\'s padding', async () => {
+    state.brandTokens = DEFAULT_BRAND_TOKENS;
+    state.page = page({ visible: true, scheme: 'dark', trail: [] });
+    const html = await renderPage();
+    expect(html).toMatch(/<div class="[^"]*\bpt-\[24px\] pb-\[16px\] max-md:pt-\[16px\]"><nav aria-label="Breadcrumb"/);
   });
 });

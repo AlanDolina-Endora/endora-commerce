@@ -208,7 +208,8 @@ const NO_CONTRIBUTED_EDITORS: Pick<LoadedBlockEditors, 'editors' | 'owners'> = {
 };
 
 /** Stable: a field recreated on every merge loses its input focus. */
-const CMS_BUTTON_SPEC_FIELD = createButtonSpecField({ label: 'Button', responsive: true });
+// R20E (T296): the look stays `cms.Button`'s own block-level options (as stored since R19B).
+const CMS_BUTTON_SPEC_FIELD = createButtonSpecField({ label: 'Button', responsive: true, look: false });
 /** R17 (T212): the shared link of the image, icon, logo, announcement bar and map marker. */
 const OPTIONAL_LINK_FIELD = createLinkField({ label: 'Link (optional)' });
 const LOGO_IMAGE_FIELD = createSlideImageField();

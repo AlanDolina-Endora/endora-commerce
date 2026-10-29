@@ -41,6 +41,43 @@ describe('StorefrontRevalidator', () => {
     ).resolves.toBeUndefined();
   });
 
+  // R19C (T271): a refused call (a secret the storefront does not share answers 401) was silent,
+  // and every publish then waited out the storefront's time window. It is logged now.
+  it('logs a refused call with its status', async () => {
+    const warn = vi.fn();
+    const fetchFn = vi.fn(async () => new Response('{"error":"unauthorized"}', { status: 401 }));
+    await new StorefrontRevalidator({
+      baseUrl: 'http://x',
+      secret: 's',
+      fetchFn: fetchFn as unknown as typeof fetch,
+      logger: { warn },
+    }).revalidate(['cms:page:about']);
+    expect(warn).toHaveBeenCalledOnce();
+    const [obj, msg] = warn.mock.calls[0]!;
+    expect(obj).toMatchObject({ status: 401, tags: ['cms:page:about'] });
+    expect(String(msg)).toContain('[storefront-revalidate]');
+  });
+
+  it('gives up on a storefront that does not answer within the timeout, and logs it', async () => {
+    const warn = vi.fn();
+    const fetchFn = vi.fn(
+      (_url: unknown, init?: { signal?: AbortSignal }) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+        }),
+    );
+    const started = Date.now();
+    await new StorefrontRevalidator({
+      baseUrl: 'http://x',
+      secret: 's',
+      fetchFn: fetchFn as unknown as typeof fetch,
+      logger: { warn },
+      timeoutMs: 30,
+    }).revalidate(['cms:page:about']);
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
   it('does nothing for an empty tag list', async () => {
     const fetchFn = vi.fn();
     await new StorefrontRevalidator({ baseUrl: 'http://x', secret: 's', fetchFn }).revalidate([]);

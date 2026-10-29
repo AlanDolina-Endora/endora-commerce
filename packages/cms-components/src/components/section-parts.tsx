@@ -27,7 +27,7 @@ import { responsiveWeightProps, WeightSpan } from './item-text.js';
 import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
 import { htmlFromTiptap } from './rich-content-shared.js';
 import { textMaxWidthAttrs, textMaxWidthField, textMaxWidthPxField } from './text-max-width.js';
-import { isTypeToken, TYPE_SCALE_FALLBACKS, textWeightField, typeTokenSizeCss } from './typography.js';
+import { isTypeToken, TYPE_SCALE_FALLBACKS, textWeightField, tokenTierStyle, typeTokenSizeCss } from './typography.js';
 
 /**
  * The parts the composition blocks of `specs/163-page-builder-marketing-pages/`
@@ -277,7 +277,19 @@ export function isEmptyInline(value: unknown): boolean {
   if (value === undefined || value === null) return true;
   if (typeof value === 'string') return value.trim() === '';
   const content = (value as { content?: Array<{ content?: unknown[] }> }).content;
-  return !Array.isArray(content) || content.every((paragraph) => !Array.isArray(paragraph?.content) || paragraph.content.length === 0);
+  return !Array.isArray(content) || content.every((paragraph) => !Array.isArray(paragraph?.content) || !paragraph.content.some(inlineNodeShows));
+}
+
+/**
+ * R20E (T294): whether an inline node shows anything — a text with a visible
+ * character, or an inline icon (any node but a hard break). Blank text and
+ * line breaks alone leave a heading empty, and an empty heading renders nothing.
+ */
+function inlineNodeShows(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const { type, text } = node as { type?: unknown; text?: unknown };
+  if (type === 'text') return typeof text === 'string' && text.trim() !== '';
+  return type !== 'hardBreak';
 }
 
 /** A text size: a type token, **Custom** (`'custom'` with its px), or `'default'` — the block's own look. */
@@ -298,6 +310,14 @@ function sizeAt(
 
 function sizeCss(size: { token: TypeToken } | { px: number }, tier: BreakpointTier): string {
   return 'token' in size ? typeTokenSizeCss(size.token, tier) : `${size.px}px`;
+}
+
+/** R21H (T350): each tier's type token, `null` for a tier sized in Custom px. */
+export function tokensOf(
+  sizes: Record<BreakpointTier, { token: TypeToken } | { px: number }>,
+): Record<BreakpointTier, TypeToken | null> {
+  const token = (size: { token: TypeToken } | { px: number }): TypeToken | null => ('token' in size ? size.token : null);
+  return { mobile: token(sizes.mobile), tablet: token(sizes.tablet), desktop: token(sizes.desktop) };
 }
 
 /** Whether a size leaves the block's own look in place (unset, or `'default'` at every tier). */
@@ -342,6 +362,10 @@ export function sizedTextProps(
     style['--pb-text-size'] = sizeCss(sizes.mobile, 'mobile');
     style['--pb-text-size-md'] = sizeCss(sizes.tablet, 'tablet');
     style['--pb-text-size-lg'] = sizeCss(sizes.desktop, 'desktop');
+    // R21H (T350): each tier's token's line height, weight and tracking.
+    const tiered = tokenTierStyle(tokensOf(sizes), 'token' in lead ? lead.token : fallback);
+    classes.push(...tiered.classes);
+    Object.assign(style, tiered.style);
   }
   return { classes, style };
 }

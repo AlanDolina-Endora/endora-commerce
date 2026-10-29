@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import type { ComponentConfig, Fields, PuckComponent } from '@puckeditor/core';
 import { plainTextToInlineRichText, withHideOn, type InlineRichText, createToggleField } from '@endora-commerce/page-builder-core';
 import type {
@@ -16,6 +16,8 @@ import { InlineRich } from './InlineRich.js';
 import { useBlockDomId } from './block-dom-id.js';
 import { useCmsRenderLocation, type CmsRenderLocation } from './render-context.js';
 import { BlockHeading, plainTextToDoc, RichBody } from './section-parts.js';
+import { createIconPickerField } from './IconPickerField.js';
+import { resolveCmsIcon } from './icon-catalog.js';
 
 /**
  * `newsletter.Signup` — `specs/163-page-builder-marketing-pages/` US7, FR-029,
@@ -106,6 +108,13 @@ const DEFAULT_CONSENT_LABEL: InlineRichText = {
   ],
 } as InlineRichText;
 
+/** R19B (T252): the topics' columns, 1–4, or `null` for today's wrapping row. */
+function topicColumns(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN;
+  if (!Number.isFinite(n)) return null;
+  return Math.min(4, Math.max(1, Math.round(n)));
+}
+
 function SignupBody({ props, editing }: { props: NewsletterSignupFormProps; editing: boolean }): ReactNode {
   const location = useCmsRenderLocation();
   const [returnTo, setReturnTo] = useState(() => (location ? returnPathOf(location.path, location.query) : '/'));
@@ -138,6 +147,22 @@ function SignupBody({ props, editing }: { props: NewsletterSignupFormProps; edit
   const error = outcome && 'error' in outcome ? outcome.error : null;
   const done = outcome && 'status' in outcome ? outcome.status : null;
   const layout = props.layout === 'inline' ? 'inline' : 'boxed';
+  // R19B (T252): the button inside the field (rounded or a pill), topics in columns, a visually hidden label.
+  const inside = props.buttonPlacement === 'inside';
+  const pill = inside && props.fieldShape === 'pill';
+  const columns = topicColumns(props.topicsColumns);
+  // R22I (T380): an icon after the button's label. R23 (T443): the button's own height, text size and weight
+  // (R21G) and the topic labels' size (R22I) were removed — the button and the labels keep today's look.
+  const ButtonIcon = resolveCmsIcon(props.buttonIcon);
+  const topicsStyle = { ...(columns ? { '--pb-topic-cols': String(columns) } : {}) };
+  const rootClass = [
+    'cmsc-pb-signup',
+    `cmsc-pb-signup--${layout}`,
+    inside ? 'cmsc-pb-signup--button-inside' : '',
+    pill ? 'cmsc-pb-signup--pill' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -178,8 +203,33 @@ function SignupBody({ props, editing }: { props: NewsletterSignupFormProps; edit
 
   const errorText = (key: SignupError) => message(props.messages, key);
 
+  const emailInput = (
+    <input
+      ref={emailRef}
+      id={ids.email}
+      className="cmsc-pb-signup__input"
+      type="email"
+      name="email"
+      autoComplete="email"
+      required
+      placeholder={props.placeholder ?? ''}
+      {...(error === 'email' ? { 'aria-invalid': true, 'aria-describedby': ids.emailError } : {})}
+    />
+  );
+  const submitButton = (
+    <button
+      type="submit"
+      className={['cmsc-pb-signup__button', ...(ButtonIcon ? ['cmsc-pb-signup__button--icon'] : [])].join(' ')}
+      disabled={busy}
+      aria-busy={busy || undefined}
+    >
+      {props.buttonLabel?.trim() || 'Subscribe'}
+      {ButtonIcon ? <ButtonIcon className="cmsc-pb-signup__button-icon" aria-hidden="true" focusable="false" /> : null}
+    </button>
+  );
+
   return (
-    <div className={`cmsc-pb-signup cmsc-pb-signup--${layout}`}>
+    <div className={rootClass}>
       <BlockHeading
         value={props.heading}
         level={props.headingLevel}
@@ -201,33 +251,25 @@ function SignupBody({ props, editing }: { props: NewsletterSignupFormProps; edit
         {props.topicsRequired === true && topics.length > 0 ? <input type="hidden" name="topicsRequired" value="on" /> : null}
         <div className="cmsc-pb-signup__row">
           <div className="cmsc-pb-signup__field">
-            <label className="cmsc-pb-signup__label" htmlFor={ids.email}>
+            <label
+              className={props.hideEmailLabel === true ? 'cmsc-pb-signup__label cmsc-sr-only' : 'cmsc-pb-signup__label'}
+              htmlFor={ids.email}
+            >
               {props.emailLabel?.trim() || 'E-mail address'}
             </label>
-            <input
-              ref={emailRef}
-              id={ids.email}
-              className="cmsc-pb-signup__input"
-              type="email"
-              name="email"
-              autoComplete="email"
-              required
-              placeholder={props.placeholder ?? ''}
-              {...(error === 'email' ? { 'aria-invalid': true, 'aria-describedby': ids.emailError } : {})}
-            />
+            {inside ? <div className="cmsc-pb-signup__control">{emailInput}{submitButton}</div> : emailInput}
             {error === 'email' ? (
               <p id={ids.emailError} className="cmsc-pb-signup__error">
                 {errorText('email')}
               </p>
             ) : null}
           </div>
-          <button type="submit" className="cmsc-pb-signup__button" disabled={busy} aria-busy={busy || undefined}>
-            {props.buttonLabel?.trim() || 'Subscribe'}
-          </button>
+          {inside ? null : submitButton}
         </div>
         {topics.length > 0 ? (
           <fieldset
-            className="cmsc-pb-signup__topics"
+            className={['cmsc-pb-signup__topics', ...(columns ? ['cmsc-pb-signup__topics--columns'] : [])].join(' ')}
+            {...(Object.keys(topicsStyle).length > 0 ? { style: topicsStyle as CSSProperties } : {})}
             {...(error === 'topics' ? { 'aria-describedby': ids.topicsError } : {})}
           >
             <legend className="cmsc-pb-signup__legend">{props.topicsLegend?.trim() || 'Topics'}</legend>
@@ -312,6 +354,27 @@ const SIGNUP_FIELDS = {
       { label: 'Inline', value: 'inline' },
     ],
   },
+  // R19B (T252): where the button sits, the field's shape with the button inside, the topics' columns, the label.
+  buttonPlacement: {
+    type: 'radio' as const,
+    label: 'Button placement',
+    options: [
+      { label: 'Beside the field', value: 'beside' },
+      { label: 'Inside the field', value: 'inside' },
+    ],
+  },
+  fieldShape: {
+    type: 'radio' as const,
+    label: 'Field shape',
+    options: [
+      { label: 'Rounded', value: 'rounded' },
+      { label: 'Pill', value: 'pill' },
+    ],
+  },
+  topicsColumns: { type: 'number' as const, label: 'Topic columns', min: 1, max: 4 },
+  // R22I (T380): an icon from the catalog after the button's label; none keeps today's text-only button.
+  buttonIcon: createIconPickerField('Button icon'),
+  hideEmailLabel: createToggleField({ label: 'Hide the email label (screen readers still read it)' }),
   messages: {
     type: 'object' as const,
     label: 'Messages',
@@ -343,6 +406,17 @@ const signupConfig: ComponentConfig<{ props: NewsletterSignupFormProps }> = {
     layout: 'boxed',
     messages: { ...DEFAULT_MESSAGES },
   } as NewsletterSignupFormProps,
+  // R19B (T252): the field's shape with the button inside it, the topics' columns with topics.
+  resolveFields: (data, params) => {
+    const props = data.props as NewsletterSignupFormProps;
+    const fields: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries((params?.fields as Record<string, unknown> | undefined) ?? SIGNUP_FIELDS)) {
+      if (key === 'fieldShape' && props.buttonPlacement !== 'inside') continue;
+      if (key === 'topicsColumns' && (props.topics ?? []).length === 0) continue;
+      fields[key] = field;
+    }
+    return fields as unknown as Fields<NewsletterSignupFormProps>;
+  },
   render: (props) =>
     props.puck?.isEditing ? <SignupEditingRender {...props} /> : <SignupPublishedRender {...props} />,
 };

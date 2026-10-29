@@ -57,6 +57,12 @@ export const cmsPageSummarySchema = z.object({
    * `cms_page.update` Command stays the authority (`CMS_PAGE_PARENT_CYCLE`).
    */
   parentPageId: uuidSchema.nullable(),
+  /**
+   * Whether the page's public path starts with its parent's (R19D, T281):
+   * `false` keeps the flat `/<slug>` every page had before, so no stored page
+   * changes address. The resulting path is `cmsPagePublicPaths`'s answer.
+   */
+  parentPathInUrl: z.boolean(),
 });
 export type CmsPageSummary = z.infer<typeof cmsPageSummarySchema>;
 
@@ -78,6 +84,11 @@ export const cmsPageDetailSchema = cmsPageSummarySchema.extend({
   content: cmsContentEnvelopeSchema,
   breadcrumbsVisible: z.boolean(),
   breadcrumbsScheme: cmsBreadcrumbsSchemeSchema,
+  /**
+   * R21H (T355): the trail drawn over the page's first section instead of in
+   * a band above it. `false` (the default) keeps the band.
+   */
+  breadcrumbsOverlay: z.boolean(),
   /** The page's sharing image, an `assets_library` asset id (feature 163, FR-033). */
   shareImageAssetId: uuidSchema.nullable(),
 });
@@ -105,7 +116,11 @@ export const createCmsPageRequestSchema = z.object({
   parentPageId: uuidSchema.nullable().optional(),
   breadcrumbsVisible: z.boolean().optional(),
   breadcrumbsScheme: cmsBreadcrumbsSchemeSchema.optional(),
+  /** R21H (T355): the trail over the first section. Absent = `false`. */
+  breadcrumbsOverlay: z.boolean().optional(),
   shareImageAssetId: uuidSchema.nullable().optional(),
+  /** R19D (T281): serve the page under its parent's path. Absent = `false`. */
+  parentPathInUrl: z.boolean().optional(),
 });
 export type CreateCmsPageRequest = z.infer<typeof createCmsPageRequestSchema>;
 
@@ -556,6 +571,17 @@ export type CmsResolvedTemplate = CmsResolvedBlock;
 export const cmsResolvedPageSchema = z.object({
   id: uuidSchema,
   slug: z.string(),
+  /**
+   * The page's public path in the request's channel, without a leading slash
+   * (R19D, T282): its own slug, or — when it includes its parent's path — its
+   * ancestors' path and its slug. The page is canonical at `/<path>`; a
+   * storefront that resolved it under another address (the flat slug of a
+   * nested page) redirects there permanently.
+   *
+   * Optional only for an answer cached before the field existed, which was
+   * served at its `slug`; every answer composed since carries it.
+   */
+  path: z.string().optional(),
   name: z.string(),
   language: z.string(),
   meta: z.object({
@@ -574,11 +600,23 @@ export const cmsResolvedPageSchema = z.object({
    * root-first, without Home and without the page itself. An ancestor the
    * channel does not serve, published and active, carries `slug: null` and
    * renders as text (FR-030a).
+   *
+   * `path` (R19D, T282) is the ancestor's public path in this channel — what
+   * its link is built from, `/<path>`. It equals `slug` for a page that does
+   * not include its parent's path, and is `null` exactly when `slug` is.
+   * Optional on the same terms as the page's own `path`.
    */
   breadcrumbs: z.object({
     visible: z.boolean(),
     scheme: cmsBreadcrumbsSchemeSchema,
-    trail: z.array(z.object({ name: z.string(), slug: z.string().nullable() })),
+    /**
+     * R21H (T355): the trail over the first section, not in a band above it.
+     * Optional: an answer cached before the field existed is read as `false`.
+     */
+    overlay: z.boolean().optional(),
+    trail: z.array(
+      z.object({ name: z.string(), slug: z.string().nullable(), path: z.string().nullable().optional() }),
+    ),
   }),
   /**
    * The sharing image (feature 163, FR-033): the page's own
@@ -619,6 +657,12 @@ export type CmsResolvedHook = z.infer<typeof cmsResolvedHookSchema>;
  */
 export const cmsPageIndexEntrySchema = z.object({
   slug: z.string(),
+  /**
+   * The page's public path in this channel (R19D, T282) — what the URL is
+   * built from. Every answer since R19D carries it; a reader of an older
+   * backend falls back to `slug`.
+   */
+  path: z.string().optional(),
   updatedAt: isoDateTimeSchema,
 });
 export type CmsPageIndexEntry = z.infer<typeof cmsPageIndexEntrySchema>;
@@ -659,6 +703,86 @@ export type CmsReservedSegmentsResponse = z.infer<typeof cmsReservedSegmentsResp
  */
 export function firstSlugSegment(slug: string): string {
   return slug.split('/').filter((segment) => segment.length > 0)[0]?.toLowerCase() ?? '';
+}
+
+/**
+ * How many slugs a public path may join — the page tree's own depth limit
+ * (`CMS_PAGE_TREE_MAX_DEPTH`, research R-18), so a well-formed tree always has
+ * its whole path and a stored chain that is too deep still terminates.
+ */
+export const CMS_PAGE_PATH_MAX_LEVELS = 8;
+
+/** One page as the public-path rule reads it, in one sales channel. */
+export interface CmsPagePathNode {
+  id: string;
+  /** The slug the channel serves the page under. */
+  slug: string;
+  parentPageId: string | null;
+  parentPathInUrl: boolean;
+}
+
+function trimSlashes(slug: string): string {
+  return slug.split('/').filter((segment) => segment.length > 0).join('/');
+}
+
+/**
+ * The public path of every page in one sales channel, without a leading slash
+ * (`specs/163-page-builder-marketing-pages/` R19D, T280).
+ *
+ * A page that does not include its parent's path is served at its own slug —
+ * every page stored before the option existed, unchanged. A page that does is
+ * served at its parent's public path, a `/`, and its own slug; the parent's
+ * path is computed by the same rule, so the prefix runs up the tree until an
+ * ancestor that did not opt in. It falls back to the page's own slug when the
+ * parent is not among `nodes` (the channel does not serve it), when the chain
+ * loops, or when it would join more than `CMS_PAGE_PATH_MAX_LEVELS` slugs —
+ * the write side refuses the last two, so the fallback answers only stored
+ * data that predates the refusal.
+ *
+ * **It lives here because three programs ask the question and must agree**:
+ * the backend resolving a path and refusing a duplicate, the page editor
+ * showing the address, and the storefront linking to it.
+ */
+export function cmsPagePublicPaths(nodes: Iterable<CmsPagePathNode>): Map<string, string> {
+  const byId = new Map<string, CmsPagePathNode>();
+  for (const node of nodes) byId.set(node.id, node);
+  const memo = new Map<string, { path: string; levels: number }>();
+  const flat = (node: CmsPagePathNode) => ({ path: trimSlashes(node.slug), levels: 1 });
+  // The pages being composed, child below parent, to recognise a stored loop.
+  const stack: string[] = [];
+
+  const visit = (node: CmsPagePathNode): { path: string; levels: number } => {
+    const known = memo.get(node.id);
+    if (known) return known;
+    const parent = node.parentPathInUrl && node.parentPageId ? byId.get(node.parentPageId) : undefined;
+    if (!parent) {
+      memo.set(node.id, flat(node));
+      return flat(node);
+    }
+    const loopStart = stack.indexOf(parent.id);
+    if (loopStart >= 0) {
+      // Every page on the loop is served at its own slug.
+      for (const id of stack.slice(loopStart)) memo.set(id, flat(byId.get(id)!));
+      memo.set(node.id, flat(node));
+      return flat(node);
+    }
+    stack.push(node.id);
+    const above = visit(parent);
+    stack.pop();
+    const marked = memo.get(node.id);
+    if (marked) return marked;
+    const own = trimSlashes(node.slug);
+    const result =
+      above.levels + 1 > CMS_PAGE_PATH_MAX_LEVELS
+        ? flat(node)
+        : { path: above.path.length > 0 ? `${above.path}/${own}` : own, levels: above.levels + 1 };
+    memo.set(node.id, result);
+    return result;
+  };
+
+  const paths = new Map<string, string>();
+  for (const node of byId.values()) paths.set(node.id, visit(node).path);
+  return paths;
 }
 
 // ---------------------------------------------------------------------------

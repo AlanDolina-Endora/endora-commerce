@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { ComponentConfig, Fields, PuckComponent } from '@puckeditor/core';
 import { withHideOn, type BreakpointTier, type ResponsiveImage } from '@endora-commerce/page-builder-core';
 import { usePreviewBreakpointTier } from '@endora-commerce/page-builder-core/client';
@@ -16,11 +16,12 @@ import {
   SHADOW_FIELD,
 } from '../fields/shared-fields.js';
 import { createRichTextDocField } from '../fields/rich-text-doc-field.js';
-import { imageObjectField } from '../fields/section-block-fields.js';
+import { imageObjectField, sizeFieldWithDefault, sizePxField } from '../fields/section-block-fields.js';
 import { Picture } from './Picture.js';
 import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
 import { resolveImageUrl } from '../utils/resolve-image-url.js';
-import { hasImage, plainTextToDoc, richHtml } from './section-parts.js';
+import { hasImage, plainTextToDoc, richHtml, usesCustom } from './section-parts.js';
+import { textStyleAttrs } from './text-style.js';
 
 /**
  * `cms.Testimonial` — `specs/163-page-builder-marketing-pages/`
@@ -72,11 +73,24 @@ export function testimonialFromLegacy(props: Record<string, unknown>): Testimoni
 
 // ── Render ───────────────────────────────────────────────────────────
 
-function Quote({ quote }: { quote: TestimonialProps['quote'] }): ReactNode {
+/** R22I (T381): today's quote (`.cmsc-pb-testimonial__quote`), read by a breakpoint left on Default when another is set. */
+const QUOTE_TODAY = { size: '1.15rem', lineHeight: '1.55' };
+
+function Quote({ quote, look }: { quote: TestimonialProps['quote']; look: { classes: string[]; style: Record<string, string> } }): ReactNode {
+  // R22I (T381): the quote's own size, written only when chosen.
+  const attrs = Object.keys(look.style).length > 0 ? { style: look.style as CSSProperties } : {};
   // A plain quote stored before renders as its text, exactly as today.
-  if (typeof quote === 'string') return <blockquote className="cmsc-pb-testimonial__quote">{quote}</blockquote>;
+  if (typeof quote === 'string') {
+    return (
+      <blockquote className={['cmsc-pb-testimonial__quote', ...look.classes].join(' ')} {...attrs}>
+        {quote}
+      </blockquote>
+    );
+  }
   const html = richHtml(quote);
-  return <blockquote className="cmsc-pb-testimonial__quote cmsc-pb-rich" dangerouslySetInnerHTML={{ __html: html }} />;
+  return (
+    <blockquote className={['cmsc-pb-testimonial__quote cmsc-pb-rich', ...look.classes].join(' ')} {...attrs} dangerouslySetInnerHTML={{ __html: html }} />
+  );
 }
 
 /** The avatar as today's round `<img>`: its desktop image, else its mobile one; 44 px, so it reserves its space. */
@@ -120,6 +134,7 @@ function TestimonialBody({ props: stored, tier }: { props: TestimonialProps; tie
   const props = { ...testimonialFromLegacy(stored as unknown as Record<string, unknown>), quote: stored.quote };
   const { margin, padding, border, background, cornerRadius, shadow, image } = props;
   const overlay = props.layout === 'image-overlay' && hasImage(image);
+  const quoteLook = textStyleAttrs({ size: props.quoteSize, sizePx: props.quoteSizePx }, tier, QUOTE_TODAY);
 
   return (
     <BoxStyled
@@ -138,7 +153,7 @@ function TestimonialBody({ props: stored, tier }: { props: TestimonialProps; tie
             <Picture image={{ fit: 'cover', ...image, ratio: image!.ratio ?? '4:5' }} />
           </div>
           <div className="cmsc-pb-testimonial__overlay">
-            <Quote quote={props.quote} />
+            <Quote quote={props.quote} look={quoteLook} />
             <Attribution props={props} />
           </div>
         </div>
@@ -149,7 +164,7 @@ function TestimonialBody({ props: stored, tier }: { props: TestimonialProps; tie
               <Picture image={{ fit: 'cover', ...image, ratio: image.ratio ?? '16:9' }} />
             </div>
           ) : null}
-          <Quote quote={props.quote} />
+          <Quote quote={props.quote} look={quoteLook} />
           <Attribution props={props} />
         </>
       )}
@@ -177,6 +192,9 @@ const TESTIMONIAL_FIELDS = {
     ],
   },
   quote: createRichTextDocField({ label: 'Quote' }),
+  // R22I (T381): the quote's size per breakpoint, a type token or Custom px; Default keeps today's.
+  quoteSize: sizeFieldWithDefault('Quote size'),
+  quoteSizePx: sizePxField('Custom quote size (px)'),
   author: { type: 'text' as const, label: 'Author' },
   role: { type: 'text' as const, label: 'Role / company' },
   image: imageObjectField('Image'),
@@ -204,8 +222,16 @@ const testimonialConfig: ComponentConfig<{ props: TestimonialProps }> = {
     cornerRadius: 'medium',
   } as TestimonialProps,
   // Filters the host's field set, so the admin's pickers survive.
-  resolveFields: (_data, params) =>
-    ((params?.fields as Record<string, unknown> | undefined) ?? TESTIMONIAL_FIELDS) as unknown as Fields<TestimonialProps>,
+  // R22I (T381): the quote's Custom px once a breakpoint is on Custom.
+  resolveFields: (data, params) => {
+    const props = data.props as TestimonialProps;
+    const fields: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries((params?.fields as Record<string, unknown> | undefined) ?? TESTIMONIAL_FIELDS)) {
+      if (key === 'quoteSizePx' && !usesCustom(props.quoteSize)) continue;
+      fields[key] = field;
+    }
+    return fields as unknown as Fields<TestimonialProps>;
+  },
   // A testimonial stored before the reshape is carried into it once, with no change to its render.
   resolveData: async (data) => ({
     props: testimonialFromLegacy(data.props as unknown as Record<string, unknown>) as never,

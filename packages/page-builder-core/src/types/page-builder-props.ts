@@ -42,6 +42,8 @@ export type {
 export {
   ASPECT_TOKENS,
   BACKGROUND_REPEATS,
+  DESKTOP_FROM_TIERS,
+  SECTION_OUTSET_PX_MAX,
   BACKGROUND_SIZE_KEYWORDS,
   BACKGROUND_SIZE_PERCENT_MAX,
   BACKGROUND_SIZE_PX_MAX,
@@ -67,4 +69,9 @@ export {
   plainTextToInlineRichText,
 } from '@endora-commerce/contracts/page-builder-values';
 
-export type { BackgroundRepeat, BackgroundSizeKeyword, BackgroundSizeValue } from '@endora-commerce/contracts/page-builder-values';
+export type {
+  BackgroundRepeat,
+  BackgroundSizeKeyword,
+  BackgroundSizeValue,
+  DesktopFromTier,
+} from '@endora-commerce/contracts/page-builder-values';

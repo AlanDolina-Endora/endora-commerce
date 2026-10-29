@@ -33,6 +33,8 @@ import { hasImage, isEmptyInline, usesCustom, type TextSize } from './section-pa
 import { ITEM_TAGS_FIELD, itemTagsAttribute } from './carousel/carousel-filter.js';
 import { ItemText, itemFontField } from './item-text.js';
 import { textWeightField } from './typography.js';
+import { createIconPickerField } from './IconPickerField.js';
+import { resolveCmsIcon } from './icon-catalog.js';
 
 /**
  * `cms.CarouselImage` — `specs/163-page-builder-marketing-pages/`
@@ -75,6 +77,16 @@ export const CAPTION_PLACEMENT_OPTIONS: Array<{ label: string; value: CarouselCa
 ];
 
 const PLACEMENTS = new Set<string>(CAPTION_PLACEMENT_OPTIONS.map((option) => option.value));
+
+/** R19B (T249): the corners the read-more label may take; the bottom right by default. */
+export type CarouselMoreLabelPlacement = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+const MORE_LABEL_OPTIONS: Array<{ label: string; value: CarouselMoreLabelPlacement }> = [
+  { label: 'Bottom right', value: 'bottom-right' },
+  { label: 'Bottom left', value: 'bottom-left' },
+  { label: 'Top right', value: 'top-right' },
+  { label: 'Top left', value: 'top-left' },
+];
+const MORE_CORNERS = new Set<string>(MORE_LABEL_OPTIONS.map((option) => option.value));
 
 /** The caption's inline style: only what the editor set, so an unstyled caption keeps the stylesheet's look. */
 export function captionStyleCss(style: CarouselCaptionStyle | undefined): CSSProperties {
@@ -177,6 +189,27 @@ function CarouselImageBody({
     </div>
   );
 
+  const captionCss = captionStyleCss(props.captionStyle);
+  // R19B (T249): a second line over the image, in a corner of its own (e.g. "Read more"), in the caption's
+  // colour. R23 (T445): its own size, colour, icon colour and weight, and the caption's padding per
+  // breakpoint, were removed — the label keeps the stylesheet's 14 px / 600, 12 px from the corner.
+  const moreText = props.moreLabel?.trim() ?? '';
+  const moreCorner = MORE_CORNERS.has(props.moreLabelPlacement ?? '') ? (props.moreLabelPlacement as CarouselMoreLabelPlacement) : 'bottom-right';
+  const MoreIcon = moreText ? resolveCmsIcon(props.moreLabelIcon) : null;
+  const moreColor = resolveColorValue(props.captionStyle?.color);
+  const moreStyle: CSSProperties = moreColor ? { color: moreColor } : {};
+  const moreLabel = moreText ? (
+    <span
+      className={`cmsc-pb-carousel-image__more cmsc-pb-carousel-image__more--${moreCorner}`}
+      {...(Object.keys(moreStyle).length > 0 ? { style: moreStyle } : {})}
+    >
+      {moreText}
+      {MoreIcon ? (
+        <MoreIcon className="cmsc-pb-carousel-image__more-icon" aria-hidden="true" focusable="false" />
+      ) : null}
+    </span>
+  ) : null;
+
   const scrim = scrimFor(props.captionScrim, placement, showCaption);
   // A scrim replaces the caption's own box, unless the editor gave the caption a background.
   const onScrim = scrim !== null && !resolveColorValue(props.captionStyle?.background);
@@ -187,7 +220,7 @@ function CarouselImageBody({
   const caption = showCaption ? (
     <figcaption
       className={`cmsc-pb-carousel-image__caption cmsc-pb-carousel-image__caption--${placement}${onScrim ? ' cmsc-pb-carousel-image__caption--on-scrim' : ''}`}
-      style={captionStyleCss(props.captionStyle)}
+      style={captionCss}
     >
       <ItemText
         className="cmsc-pb-carousel-image__caption-text"
@@ -210,12 +243,22 @@ function CarouselImageBody({
     props.hoverZoom === true ? 'cmsc-pb-carousel-image--zoom' : '',
     placement === 'below' ? 'cmsc-pb-carousel-image--caption-below' : '',
     hoverColor ? 'cmsc-pb-carousel-image--hover-caption' : '',
+    // R20E (T292): a caption on the read-more label's edge is lifted above the label's line.
+    moreText && showCaption && placement !== 'below' && placement.startsWith(moreCorner.split('-')[0]!)
+      ? `cmsc-pb-carousel-image--more-clear-${moreCorner.split('-')[0]}`
+      : '',
   ]
     .filter(Boolean)
     .join(' ');
-  const figureStyle = hoverColor ? { ...mediaRadiusVars(props.mediaCornerRadius), ['--pb-caption-hover' as string]: hoverColor } : mediaRadiusVars(props.mediaCornerRadius);
+  const baseStyle = hoverColor ? { ...mediaRadiusVars(props.mediaCornerRadius), ['--pb-caption-hover' as string]: hoverColor } : mediaRadiusVars(props.mediaCornerRadius);
+  const figureStyle = baseStyle;
 
-  const frame = <div className="cmsc-pb-carousel-image__media">{media}</div>;
+  const frame = (
+    <div className="cmsc-pb-carousel-image__media">
+      {media}
+      {moreLabel}
+    </div>
+  );
   return (
     <figure className={classes} style={figureStyle} {...itemTagsAttribute(props.tags)}>
       {link ? (
@@ -298,9 +341,16 @@ const CAROUSEL_IMAGE_FIELDS = {
       strength: { type: 'number' as const, label: 'Strength (%)', min: 0, max: 90 },
     },
   },
+  // R19B (T249): a second line over the image in a corner of its own, e.g. a "read more" label.
+  moreLabel: { type: 'text' as const, label: 'Read-more label' },
+  moreLabelPlacement: { type: 'select' as const, label: 'Read-more label placement', options: MORE_LABEL_OPTIONS },
+  moreLabelIcon: createIconPickerField('Read-more label icon'),
   hoverZoom: hoverZoomField(),
   tags: ITEM_TAGS_FIELD,
 };
+
+/** R19B (T249): the read-more label's look, once it has text. */
+const MORE_LOOK_KEYS = new Set(['moreLabelPlacement', 'moreLabelIcon']);
 
 /** The caption's look (R17, T219): offered once the item has a caption. */
 const CAPTION_LOOK_KEYS = new Set([
@@ -335,6 +385,7 @@ const carouselImageConfig: ComponentConfig<{ props: CarouselImageProps }> = {
     for (const [key, field] of Object.entries((params?.fields as Record<string, unknown> | undefined) ?? CAROUSEL_IMAGE_FIELDS)) {
       if (key === 'captionSizePx' && !usesCustom(props.captionSize)) continue;
       if (!captioned && CAPTION_LOOK_KEYS.has(key)) continue;
+      if (MORE_LOOK_KEYS.has(key) && !(props.moreLabel?.trim())) continue;
       fields[key] = field;
     }
     return fields as unknown as Fields<CarouselImageProps>;

@@ -376,6 +376,30 @@
 .cmsc-pb-row-col[data-pb-distribute='end'] > * > .cmsc-pb-bg-content > .cmsc-pb-column-stack { justify-content: flex-end; }
 .cmsc-pb-row-col[data-pb-distribute='space-between'] > * > .cmsc-pb-bg-content > .cmsc-pb-column-stack { justify-content: space-between; }
 .cmsc-pb-row-col[data-pb-distribute='last-to-bottom'] > * > .cmsc-pb-bg-content > .cmsc-pb-column-stack > :last-child { margin-top: auto; }
+/* R19C (T265): a Column's box reaches `--pb-col-outset(-md|-lg)` past its track on each side — its background,
+   border and shadow with it — and its content layer is padded back by as much, so the content keeps its place. */
+.cmsc-pb-row-col[data-pb-outset] { --pb-outset: var(--pb-col-outset, 0px); }
+@media (min-width: 768px) {
+  .cmsc-pb-row-col[data-pb-outset] { --pb-outset: var(--pb-col-outset-md, var(--pb-col-outset, 0px)); }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-row-col[data-pb-outset] { --pb-outset: var(--pb-col-outset-lg, var(--pb-col-outset-md, var(--pb-col-outset, 0px))); }
+}
+/* R20E (T291): the cell itself reaches past its track (a grid item stretched with negative margins), so the box
+   inside keeps its own side margins on top of the outset; a tier whose outset is 0 adds nothing. The box is
+   as wide as the cell less its own margins. */
+.cmsc-pb-row-col[data-pb-outset] {
+  max-width: none;
+  margin-left: calc(-1 * var(--pb-outset, 0px));
+  margin-right: calc(-1 * var(--pb-outset, 0px));
+}
+.cmsc-pb-row-col[data-pb-outset] > * {
+  width: auto;
+}
+.cmsc-pb-row-col[data-pb-outset] > * > .cmsc-pb-bg-content {
+  padding-left: var(--pb-outset, 0px);
+  padding-right: var(--pb-outset, 0px);
+}
 /* T156: a block's place per breakpoint (`stackOrder`, written by the shared wrapper) is a CSS `order`, so it
    applies only inside a flex or grid container; a Column stacks its blocks as a flex column once one carries
    an order. Visual order only: the DOM, reading and focus order stay the stored order. */
@@ -804,6 +828,21 @@
   }
 }
 
+/*
+ * R21H (T350): a text whose type token changes across breakpoints follows
+ * each tier's token for its line height, weight and tracking, not only its
+ * size. Written only with every tier's value (`tokenTierStyle`); it sits after
+ * the token classes and before the weight and line-height classes, so a text's
+ * own weight or line height still wins.
+ */
+.cmsc-pb-text-token { line-height: var(--pb-text-lh); font-weight: var(--pb-text-w); letter-spacing: var(--pb-text-ls); }
+@media (min-width: 768px) {
+  .cmsc-pb-text-token { line-height: var(--pb-text-lh-md); font-weight: var(--pb-text-w-md); letter-spacing: var(--pb-text-ls-md); }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-text-token { line-height: var(--pb-text-lh-lg); font-weight: var(--pb-text-w-lg); letter-spacing: var(--pb-text-ls-lg); }
+}
+
 .cmsc-pb-text-weight {
   font-weight: var(--pb-text-weight);
 }
@@ -941,6 +980,87 @@
   min-width: 0;
   margin-top: 0;
 }
+/*
+ * R19B (T251): the caption's placement per breakpoint (`data-caption-md|lg`,
+ * written only where it changes), and its alignment per breakpoint
+ * (`--pb-img-caption-align(-md|-lg)`) on a styled caption. R23 (T446): its
+ * size is inline (`textStyleAttrs`).
+ */
+.cmsc-pb-image__caption--styled {
+  text-align: var(--pb-img-caption-align, start);
+}
+@media (min-width: 768px) {
+  .cmsc-pb-image__figure[data-caption-md='beside'] {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .cmsc-pb-image__figure[data-caption-md='beside'] > .cmsc-pb-image__caption {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+  }
+  .cmsc-pb-image__figure[data-caption-md='below'] {
+    display: inline-block;
+  }
+  .cmsc-pb-image__figure[data-caption-md='below'] > .cmsc-pb-image__caption {
+    margin-top: 8px;
+  }
+  .cmsc-pb-image__caption--styled {
+    text-align: var(--pb-img-caption-align-md, var(--pb-img-caption-align, start));
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-image__figure[data-caption-lg='beside'] {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .cmsc-pb-image__figure[data-caption-lg='beside'] > .cmsc-pb-image__caption {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+  }
+  .cmsc-pb-image__figure[data-caption-lg='below'] {
+    display: inline-block;
+  }
+  .cmsc-pb-image__figure[data-caption-lg='below'] > .cmsc-pb-image__caption {
+    margin-top: 8px;
+  }
+  .cmsc-pb-image__caption--styled {
+    text-align: var(--pb-img-caption-align-lg, var(--pb-img-caption-align-md, var(--pb-img-caption-align, start)));
+  }
+}
+
+/*
+ * R20E (T293): a caption below the image at the base breakpoint and beside it from a breakpoint up, with a
+ * set image width. The figure takes the image's width (`--pb-img-fig-w`) only while the caption is below;
+ * beside, the figure is as wide as image and caption, the image keeping its width in its wrapper.
+ */
+.cmsc-pb-image__media { display: block; }
+.cmsc-pb-image__figure--tiered[data-caption] { width: var(--pb-img-fig-w, auto); }
+@media (min-width: 768px) {
+  .cmsc-pb-image__figure--tiered[data-caption-md='beside'] { width: auto; }
+  .cmsc-pb-image__figure--tiered[data-caption-md='beside'] > .cmsc-pb-image__media { flex: none; width: var(--pb-img-fig-w, auto); max-width: 100%; }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-image__figure--tiered[data-caption-lg='beside'] { width: auto; }
+  .cmsc-pb-image__figure--tiered[data-caption-lg='beside'] > .cmsc-pb-image__media { flex: none; width: var(--pb-img-fig-w, auto); max-width: 100%; }
+  .cmsc-pb-image__figure--tiered[data-caption-lg='below'] { width: var(--pb-img-fig-w, auto); }
+  .cmsc-pb-image__figure--tiered[data-caption-lg='below'] > .cmsc-pb-image__media { width: auto; }
+}
+/* R20E (T293): the caption's maximum width per breakpoint (`--pb-img-caption-max(-md|-lg)`). */
+.cmsc-pb-image__figure[data-caption] > .cmsc-pb-image__caption.cmsc-pb-image__caption--measure { max-width: var(--pb-img-caption-max, none); }
+@media (min-width: 768px) {
+  .cmsc-pb-image__figure[data-caption] > .cmsc-pb-image__caption.cmsc-pb-image__caption--measure {
+    max-width: var(--pb-img-caption-max-md, var(--pb-img-caption-max, none));
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-image__figure[data-caption] > .cmsc-pb-image__caption.cmsc-pb-image__caption--measure {
+    max-width: var(--pb-img-caption-max-lg, var(--pb-img-caption-max-md, var(--pb-img-caption-max, none)));
+  }
+}
 
 /* ── Carousel ─────────────────────────────────────────────────────── */
 /*
@@ -1050,6 +1170,32 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+/*
+ * R19B (T253): the controls inside a split slide, under its text; the row
+ * under the track for slides that draw none goes once a slide of this
+ * carousel holds them.
+ */
+.cmsc-pb-carousel__controls--slide {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+}
+.cmsc-pb-carousel__controls--slide[hidden] {
+  display: flex;
+  visibility: hidden;
+}
+.cmsc-pb-carousel__controls--slide .cmsc-pb-carousel__arrow {
+  position: relative;
+}
+.cmsc-pb-carousel:has(> .cmsc-pb-carousel__viewport .cmsc-pb-carousel__controls--slide) > .cmsc-pb-carousel__controls--slide-fallback {
+  display: none;
+}
+/* R19B (T243): a header holding only the controls (no heading) puts them at its end, as beside a heading. */
+.cmsc-pb-carousel__header > .cmsc-pb-carousel__controls--header:first-child {
+  margin-inline-start: auto;
+}
 
 /* Controls. Hidden ones keep their box below the track, so hiding them shifts nothing. */
 .cmsc-pb-carousel__controls--overlay {
@@ -1155,10 +1301,11 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--cmsb-n-300, #cbd5e1);
+  background: var(--cmsc-dot, var(--cmsb-n-300, #cbd5e1));
 }
+/* R19B (T240): the scheme's dot colours (`--cmsc-dot*`), else today's greys. */
 .cmsc-pb-carousel__dot--active::before {
-  background: var(--cmsb-n-700, #334155);
+  background: var(--cmsc-dot-active, var(--cmsb-n-700, #334155));
 }
 
 .cmsc-pb-carousel--equal-height .cmsc-pb-carousel__slides,
@@ -1239,6 +1386,41 @@
 @media (min-width: 1024px) {
   .cmsc-pb-carousel__controls--off-lg { display: none !important; }
 }
+/*
+ * R19B (T242): the arrows / the dots hidden at a breakpoint (root classes
+ * `--arrows-off-*`, `--dots-off-*`). Child combinators, so a carousel nested in
+ * a slide keeps its own; a row left empty there carries `--off-*` (above).
+ */
+@media (max-width: 767.98px) {
+  .cmsc-pb-carousel--arrows-off-sm > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--arrows-off-sm > .cmsc-pb-carousel__header > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--arrows-off-sm > .cmsc-pb-carousel__viewport > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--dots-off-sm > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__dots,
+  .cmsc-pb-carousel--arrows-off-sm .cmsc-pb-carousel__controls--slide > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--dots-off-sm .cmsc-pb-carousel__controls--slide > .cmsc-pb-carousel__dots {
+    display: none;
+  }
+}
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .cmsc-pb-carousel--arrows-off-md > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--arrows-off-md > .cmsc-pb-carousel__header > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--arrows-off-md > .cmsc-pb-carousel__viewport > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--dots-off-md > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__dots,
+  .cmsc-pb-carousel--arrows-off-md .cmsc-pb-carousel__controls--slide > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--dots-off-md .cmsc-pb-carousel__controls--slide > .cmsc-pb-carousel__dots {
+    display: none;
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-carousel--arrows-off-lg > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--arrows-off-lg > .cmsc-pb-carousel__header > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--arrows-off-lg > .cmsc-pb-carousel__viewport > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--dots-off-lg > .cmsc-pb-carousel__controls > .cmsc-pb-carousel__dots,
+  .cmsc-pb-carousel--arrows-off-lg .cmsc-pb-carousel__controls--slide > .cmsc-pb-carousel__arrow,
+  .cmsc-pb-carousel--dots-off-lg .cmsc-pb-carousel__controls--slide > .cmsc-pb-carousel__dots {
+    display: none;
+  }
+}
 /* T163: a drawn arrow instead of today's chevron glyph, sized with the arrow's font size (s/m/l). */
 .cmsc-pb-carousel__arrow-icon {
   display: block;
@@ -1269,7 +1451,7 @@
 .cmsc-pb-carousel--arrows-solid .cmsc-pb-carousel__arrow {
   background: var(--pb-arrow-color, var(--cmsb-n-900, #0f172a));
   border-color: transparent;
-  color: #fff;
+  color: var(--pb-arrow-glyph, #fff);
 }
 /* T130: the same items as a grid of columns per breakpoint (`--pb-cols(-md|-lg)`). */
 .cmsc-pb-carousel--grid {
@@ -1490,6 +1672,97 @@
   }
 }
 /*
+ * R20F (T313): the dots at the start, both arrows together at the end — the
+ * dots row first by `order` (the markup's reading order is unchanged), the
+ * space after it pushing the arrows to the end. A tier with another value puts
+ * the dots back.
+ */
+.cmsc-pb-carousel--ctl-dots-start > :is(.cmsc-pb-carousel__controls--below, .cmsc-pb-carousel__controls--dots) {
+  justify-content: flex-start;
+}
+.cmsc-pb-carousel--ctl-dots-start > .cmsc-pb-carousel__controls--below > .cmsc-pb-carousel__dots {
+  order: -1;
+  margin-inline-end: auto;
+}
+@media (min-width: 768px) {
+  .cmsc-pb-carousel--ctl-md-dots-start > :is(.cmsc-pb-carousel__controls--below, .cmsc-pb-carousel__controls--dots) {
+    justify-content: flex-start;
+  }
+  .cmsc-pb-carousel--ctl-md-dots-start > .cmsc-pb-carousel__controls--below > .cmsc-pb-carousel__arrow {
+    margin-inline: 0;
+  }
+  :is(.cmsc-pb-carousel--ctl-md-center, .cmsc-pb-carousel--ctl-md-start, .cmsc-pb-carousel--ctl-md-end, .cmsc-pb-carousel--ctl-md-between, .cmsc-pb-carousel--ctl-md-split)
+    > .cmsc-pb-carousel__controls--below
+    > .cmsc-pb-carousel__dots {
+    order: 0;
+    margin-inline-end: 0;
+  }
+  .cmsc-pb-carousel--ctl-md-dots-start > .cmsc-pb-carousel__controls--below > .cmsc-pb-carousel__dots {
+    order: -1;
+    margin-inline-end: auto;
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-carousel--ctl-lg-dots-start > :is(.cmsc-pb-carousel__controls--below, .cmsc-pb-carousel__controls--dots) {
+    justify-content: flex-start;
+  }
+  .cmsc-pb-carousel--ctl-lg-dots-start > .cmsc-pb-carousel__controls--below > .cmsc-pb-carousel__arrow {
+    margin-inline: 0;
+  }
+  :is(.cmsc-pb-carousel--ctl-lg-center, .cmsc-pb-carousel--ctl-lg-start, .cmsc-pb-carousel--ctl-lg-end, .cmsc-pb-carousel--ctl-lg-between, .cmsc-pb-carousel--ctl-lg-split)
+    > .cmsc-pb-carousel__controls--below
+    > .cmsc-pb-carousel__dots {
+    order: 0;
+    margin-inline-end: 0;
+  }
+  .cmsc-pb-carousel--ctl-lg-dots-start > .cmsc-pb-carousel__controls--below > .cmsc-pb-carousel__dots {
+    order: -1;
+    margin-inline-end: auto;
+  }
+}
+/*
+ * R20F (T313): a chosen alignment on the row inside a split slide, every
+ * breakpoint written (unset, the row keeps today's start). Each tier first
+ * puts back what the tier below moved, then aligns.
+ */
+.cmsc-pb-carousel__controls--al-start { justify-content: flex-start; }
+.cmsc-pb-carousel__controls--al-center { justify-content: center; }
+.cmsc-pb-carousel__controls--al-end { justify-content: flex-end; }
+.cmsc-pb-carousel__controls--al-between { justify-content: space-between; }
+.cmsc-pb-carousel__controls--al-split { justify-content: center; }
+.cmsc-pb-carousel__controls--al-dots-start { justify-content: flex-start; }
+.cmsc-pb-carousel__controls--al-split > .cmsc-pb-carousel__arrow--prev { margin-inline-end: auto; }
+.cmsc-pb-carousel__controls--al-split > .cmsc-pb-carousel__arrow--next { margin-inline-start: auto; }
+.cmsc-pb-carousel__controls--al-dots-start > .cmsc-pb-carousel__dots { order: -1; margin-inline-end: auto; }
+@media (min-width: 768px) {
+  :is(.cmsc-pb-carousel__controls--al-md-start, .cmsc-pb-carousel__controls--al-md-center, .cmsc-pb-carousel__controls--al-md-end, .cmsc-pb-carousel__controls--al-md-between, .cmsc-pb-carousel__controls--al-md-split, .cmsc-pb-carousel__controls--al-md-dots-start) > .cmsc-pb-carousel__arrow { margin-inline: 0; }
+  :is(.cmsc-pb-carousel__controls--al-md-start, .cmsc-pb-carousel__controls--al-md-center, .cmsc-pb-carousel__controls--al-md-end, .cmsc-pb-carousel__controls--al-md-between, .cmsc-pb-carousel__controls--al-md-split, .cmsc-pb-carousel__controls--al-md-dots-start) > .cmsc-pb-carousel__dots { order: 0; margin-inline-end: 0; }
+  .cmsc-pb-carousel__controls--al-md-start { justify-content: flex-start; }
+  .cmsc-pb-carousel__controls--al-md-center { justify-content: center; }
+  .cmsc-pb-carousel__controls--al-md-end { justify-content: flex-end; }
+  .cmsc-pb-carousel__controls--al-md-between { justify-content: space-between; }
+  .cmsc-pb-carousel__controls--al-md-split { justify-content: center; }
+  .cmsc-pb-carousel__controls--al-md-dots-start { justify-content: flex-start; }
+  .cmsc-pb-carousel__controls--al-md-split > .cmsc-pb-carousel__arrow--prev { margin-inline-end: auto; }
+  .cmsc-pb-carousel__controls--al-md-split > .cmsc-pb-carousel__arrow--next { margin-inline-start: auto; }
+  .cmsc-pb-carousel__controls--al-md-dots-start > .cmsc-pb-carousel__dots { order: -1; margin-inline-end: auto; }
+}
+@media (min-width: 1024px) {
+  :is(.cmsc-pb-carousel__controls--al-lg-start, .cmsc-pb-carousel__controls--al-lg-center, .cmsc-pb-carousel__controls--al-lg-end, .cmsc-pb-carousel__controls--al-lg-between, .cmsc-pb-carousel__controls--al-lg-split, .cmsc-pb-carousel__controls--al-lg-dots-start) > .cmsc-pb-carousel__arrow { margin-inline: 0; }
+  :is(.cmsc-pb-carousel__controls--al-lg-start, .cmsc-pb-carousel__controls--al-lg-center, .cmsc-pb-carousel__controls--al-lg-end, .cmsc-pb-carousel__controls--al-lg-between, .cmsc-pb-carousel__controls--al-lg-split, .cmsc-pb-carousel__controls--al-lg-dots-start) > .cmsc-pb-carousel__dots { order: 0; margin-inline-end: 0; }
+  .cmsc-pb-carousel__controls--al-lg-start { justify-content: flex-start; }
+  .cmsc-pb-carousel__controls--al-lg-center { justify-content: center; }
+  .cmsc-pb-carousel__controls--al-lg-end { justify-content: flex-end; }
+  .cmsc-pb-carousel__controls--al-lg-between { justify-content: space-between; }
+  .cmsc-pb-carousel__controls--al-lg-split { justify-content: center; }
+  .cmsc-pb-carousel__controls--al-lg-dots-start { justify-content: flex-start; }
+  .cmsc-pb-carousel__controls--al-lg-split > .cmsc-pb-carousel__arrow--prev { margin-inline-end: auto; }
+  .cmsc-pb-carousel__controls--al-lg-split > .cmsc-pb-carousel__arrow--next { margin-inline-start: auto; }
+  .cmsc-pb-carousel__controls--al-lg-dots-start > .cmsc-pb-carousel__dots { order: -1; margin-inline-end: auto; }
+}
+/* R20F (T314): the dots of arrows kept while every slide fits keep their box, so nothing shifts. */
+.cmsc-pb-carousel__dots[hidden] { visibility: hidden; }
+/*
  * T153: the rows below the track span one slide, not the content width, so
  * their alignment is the first slide's — with a track bleeding past the
  * content edge, the controls end where the first slide does. One slide per
@@ -1514,7 +1787,7 @@
 .cmsc-pb-carousel--next-arrow-solid .cmsc-pb-carousel__arrow--next {
   background: var(--pb-arrow-color, var(--cmsb-n-900, #0f172a));
   border-color: transparent;
-  color: #fff;
+  color: var(--pb-arrow-glyph, #fff);
 }
 /*
  * T171: an arrow disabled at an end of a carousel that does not loop (only
@@ -1683,11 +1956,58 @@
 }
 .cmsc-pb-feature-list__icon {
   display: inline-flex;
-  margin-bottom: 8px;
+  margin-bottom: var(--cmsc-fl-icon-space, 8px);
 }
 .cmsc-pb-feature-list__title {
-  margin: 0 0 4px;
+  margin: 0 0 var(--cmsc-fl-title-space, 4px);
   color: var(--cmsb-fg, #15202b);
+}
+/* R19A (T225): the space below the icon and below the title per breakpoint; unset, today's 8 px and 4 px. */
+@media (min-width: 768px) {
+  .cmsc-pb-feature-list__icon {
+    margin-bottom: var(--cmsc-fl-icon-space-md, var(--cmsc-fl-icon-space, 8px));
+  }
+  .cmsc-pb-feature-list__title {
+    margin-bottom: var(--cmsc-fl-title-space-md, var(--cmsc-fl-title-space, 4px));
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-feature-list__icon {
+    margin-bottom: var(--cmsc-fl-icon-space-lg, var(--cmsc-fl-icon-space-md, var(--cmsc-fl-icon-space, 8px)));
+  }
+  .cmsc-pb-feature-list__title {
+    margin-bottom: var(--cmsc-fl-title-space-lg, var(--cmsc-fl-title-space-md, var(--cmsc-fl-title-space, 4px)));
+  }
+}
+/*
+ * R19A (T225): the icon beside the title. The icon takes the first column and
+ * both rows, the title and the text the second, so a wrapped title and the
+ * text start where the title does — a hanging indent. The icon sits on the
+ * title's first baseline; the space below the icon becomes the space beside it.
+ */
+.cmsc-pb-feature-list[data-icon-position='beside'] > .cmsc-pb-feature-list__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--cmsc-fl-icon-space, 12px);
+}
+.cmsc-pb-feature-list[data-icon-position='beside'] .cmsc-pb-feature-list__icon {
+  grid-row: 1 / span 2;
+  grid-column: 1;
+  margin-bottom: 0;
+}
+.cmsc-pb-feature-list[data-icon-position='beside'] > .cmsc-pb-feature-list__item > :not(.cmsc-pb-feature-list__icon) {
+  grid-column: 2;
+}
+@media (min-width: 768px) {
+  .cmsc-pb-feature-list[data-icon-position='beside'] > .cmsc-pb-feature-list__item {
+    column-gap: var(--cmsc-fl-icon-space-md, var(--cmsc-fl-icon-space, 12px));
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-feature-list[data-icon-position='beside'] > .cmsc-pb-feature-list__item {
+    column-gap: var(--cmsc-fl-icon-space-lg, var(--cmsc-fl-icon-space-md, var(--cmsc-fl-icon-space, 12px)));
+  }
 }
 /* Today's title look, while no size token is chosen (a token's class sets size, weight and line height). */
 .cmsc-pb-feature-list__title:not(.cmsc-pb-feature-list__title--token) {
@@ -1700,6 +2020,25 @@
   line-height: 1.45;
   /* T139: the scheme's muted text (a dark Section's is light), today's neutral with no scheme. */
   color: var(--cmsb-fg-muted, var(--cmsb-n-600, #475569));
+}
+/*
+ * R20F (T317): a row gap apart from the gap (which then spaces the columns
+ * only), the line height of lists in an item's text and the space between its
+ * paragraphs — per breakpoint, where chosen; a tier no value reaches keeps
+ * today's (the gap, the text's line height, half a line).
+ */
+.cmsc-pb-feature-list--row-gap { row-gap: var(--cmsc-fl-row-gap, var(--cmsc-fl-gap, 24px)); }
+.cmsc-pb-feature-list--list-leading .cmsc-pb-feature-list__body :is(ul, ol) { line-height: var(--cmsc-fl-list-lh, inherit); }
+.cmsc-pb-feature-list--body-space .cmsc-pb-feature-list__body > * + * { margin-top: var(--cmsc-fl-body-space, 0.5em); }
+@media (min-width: 768px) {
+  .cmsc-pb-feature-list--row-gap { row-gap: var(--cmsc-fl-row-gap-md, var(--cmsc-fl-gap-md, var(--cmsc-fl-gap, 24px))); }
+  .cmsc-pb-feature-list--list-leading .cmsc-pb-feature-list__body :is(ul, ol) { line-height: var(--cmsc-fl-list-lh-md, inherit); }
+  .cmsc-pb-feature-list--body-space .cmsc-pb-feature-list__body > * + * { margin-top: var(--cmsc-fl-body-space-md, 0.5em); }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-feature-list--row-gap { row-gap: var(--cmsc-fl-row-gap-lg, var(--cmsc-fl-gap-lg, var(--cmsc-fl-gap-md, var(--cmsc-fl-gap, 24px)))); }
+  .cmsc-pb-feature-list--list-leading .cmsc-pb-feature-list__body :is(ul, ol) { line-height: var(--cmsc-fl-list-lh-lg, inherit); }
+  .cmsc-pb-feature-list--body-space .cmsc-pb-feature-list__body > * + * { margin-top: var(--cmsc-fl-body-space-lg, 0.5em); }
 }
 
 /* ── Hero ─────────────────────────────────────────────────────────── */
@@ -1895,10 +2234,82 @@
   width: auto;
   height: 40px;
 }
+/*
+ * R19A (T230): the same 40 px, out-ranking the generic picture rules
+ * (`.cmsc-picture > img { width: 100%; height: auto }`), which come later in
+ * this file with the same specificity and made the image its natural size,
+ * cropped by the picture.
+ */
+.cmsc-pb-hero__proof > .cmsc-pb-hero__proof-image,
+.cmsc-pb-hero__proof > .cmsc-pb-hero__proof-image > img {
+  width: auto;
+  max-width: none;
+  height: 40px;
+}
+/* R19A (T229): the space between media above the content and the content, per breakpoint; unset, none (today's). */
+.cmsc-pb-hero__media--above {
+  margin-bottom: var(--cmsc-hero-media-space, 0px);
+}
+@media (min-width: 768px) {
+  .cmsc-pb-hero__media--above {
+    margin-bottom: var(--cmsc-hero-media-space-md, var(--cmsc-hero-media-space, 0px));
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-hero__media--above {
+    margin-bottom: var(--cmsc-hero-media-space-lg, var(--cmsc-hero-media-space-md, var(--cmsc-hero-media-space, 0px)));
+  }
+}
 .cmsc-pb-hero__proof-caption {
   margin: 0;
   font-size: 14px;
   line-height: 1.5;
+}
+/*
+ * R20E (T299): an eyebrow in its own case — e.g. a label above the body — with no capitals and no tracking.
+ * R20E (T300): the social-proof caption below the image (a line of its own) or beside it, per breakpoint
+ * (`data-caption`, `-md`, `-lg`, written only when chosen), and its maximum width (`--pb-hero-proof-max(-md|-lg)`).
+ */
+.cmsc-pb-hero__eyebrow--plain { letter-spacing: normal; text-transform: none; }
+/*
+ * R21G (T330): below, the caption starts a line of its own whatever its
+ * measure — a zero-height break of the row's full width sits between the
+ * image (order 0) and the caption (order 2), because the caption's own
+ * `flex-basis: 100%` is capped by its `max-width` and a narrow caption then
+ * still fits beside the image. The row gap is the caption's top margin
+ * instead (today's 12 px), so the empty break line adds no space.
+ */
+.cmsc-pb-hero__proof:is([data-caption='below'], [data-caption-md='below'], [data-caption-lg='below'])::before { content: ''; display: none; flex-basis: 100%; order: 1; }
+.cmsc-pb-hero__proof[data-caption='below'] { row-gap: 0; }
+.cmsc-pb-hero__proof[data-caption='below']::before { display: block; }
+.cmsc-pb-hero__proof[data-caption='below'] > .cmsc-pb-hero__proof-caption { flex-basis: 100%; order: 2; }
+.cmsc-pb-hero__proof[data-caption='below'] > .cmsc-pb-hero__proof-image + .cmsc-pb-hero__proof-caption { margin-top: 12px; }
+@media (min-width: 768px) {
+  .cmsc-pb-hero__proof[data-caption-md='below'] { row-gap: 0; }
+  .cmsc-pb-hero__proof[data-caption-md='below']::before { display: block; }
+  .cmsc-pb-hero__proof[data-caption-md='below'] > .cmsc-pb-hero__proof-caption { flex-basis: 100%; order: 2; }
+  .cmsc-pb-hero__proof[data-caption-md='below'] > .cmsc-pb-hero__proof-image + .cmsc-pb-hero__proof-caption { margin-top: 12px; }
+  .cmsc-pb-hero__proof[data-caption-md='beside'] { row-gap: 12px; }
+  .cmsc-pb-hero__proof[data-caption-md='beside']::before { display: none; }
+  .cmsc-pb-hero__proof[data-caption-md='beside'] > .cmsc-pb-hero__proof-caption { flex-basis: auto; }
+  .cmsc-pb-hero__proof[data-caption-md='beside'] > .cmsc-pb-hero__proof-image + .cmsc-pb-hero__proof-caption { margin-top: 0; }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-hero__proof[data-caption-lg='below'] { row-gap: 0; }
+  .cmsc-pb-hero__proof[data-caption-lg='below']::before { display: block; }
+  .cmsc-pb-hero__proof[data-caption-lg='below'] > .cmsc-pb-hero__proof-caption { flex-basis: 100%; order: 2; }
+  .cmsc-pb-hero__proof[data-caption-lg='below'] > .cmsc-pb-hero__proof-image + .cmsc-pb-hero__proof-caption { margin-top: 12px; }
+  .cmsc-pb-hero__proof[data-caption-lg='beside'] { row-gap: 12px; }
+  .cmsc-pb-hero__proof[data-caption-lg='beside']::before { display: none; }
+  .cmsc-pb-hero__proof[data-caption-lg='beside'] > .cmsc-pb-hero__proof-caption { flex-basis: auto; }
+  .cmsc-pb-hero__proof[data-caption-lg='beside'] > .cmsc-pb-hero__proof-image + .cmsc-pb-hero__proof-caption { margin-top: 0; }
+}
+.cmsc-pb-hero__proof-caption--measure { max-width: var(--pb-hero-proof-max, none); }
+@media (min-width: 768px) {
+  .cmsc-pb-hero__proof-caption--measure { max-width: var(--pb-hero-proof-max-md, var(--pb-hero-proof-max, none)); }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-hero__proof-caption--measure { max-width: var(--pb-hero-proof-max-lg, var(--pb-hero-proof-max-md, var(--pb-hero-proof-max, none))); }
 }
 .cmsc-pb-hero__content[data-align='center'] .cmsc-pb-hero__actions,
 .cmsc-pb-hero__content[data-align='center'] .cmsc-pb-hero__proof {
@@ -2941,6 +3352,23 @@
     margin-bottom: var(--cmsc-acc-open-gap-lg, var(--cmsc-acc-open-gap-md, var(--cmsc-acc-open-gap)));
   }
 }
+/* R21G (T338): the titles' line height per breakpoint, as their weight (every tier written, today's where none is chosen). */
+.cmsc-pb-accordion--title-leading > .cmsc-pb-accordion__item > .cmsc-pb-accordion__trigger > .cmsc-pb-accordion__title,
+.cmsc-pb-accordion--title-leading > .cmsc-pb-accordion__item > .cmsc-pb-accordion__heading > .cmsc-pb-accordion__trigger > .cmsc-pb-accordion__title {
+  line-height: var(--cmsc-acc-title-lh);
+}
+@media (min-width: 768px) {
+  .cmsc-pb-accordion--title-leading > .cmsc-pb-accordion__item > .cmsc-pb-accordion__trigger > .cmsc-pb-accordion__title,
+  .cmsc-pb-accordion--title-leading > .cmsc-pb-accordion__item > .cmsc-pb-accordion__heading > .cmsc-pb-accordion__trigger > .cmsc-pb-accordion__title {
+    line-height: var(--cmsc-acc-title-lh-md, var(--cmsc-acc-title-lh));
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-accordion--title-leading > .cmsc-pb-accordion__item > .cmsc-pb-accordion__trigger > .cmsc-pb-accordion__title,
+  .cmsc-pb-accordion--title-leading > .cmsc-pb-accordion__item > .cmsc-pb-accordion__heading > .cmsc-pb-accordion__trigger > .cmsc-pb-accordion__title {
+    line-height: var(--cmsc-acc-title-lh-lg, var(--cmsc-acc-title-lh-md, var(--cmsc-acc-title-lh)));
+  }
+}
 /* T179: the icon's size (`--cmsc-acc-icon`); a chevron is 1em square, the plus/minus glyph is text. */
 .cmsc-pb-accordion--icon-size > .cmsc-pb-accordion__item > .cmsc-pb-accordion__trigger > .cmsc-pb-accordion__icon,
 .cmsc-pb-accordion--icon-size > .cmsc-pb-accordion__item > .cmsc-pb-accordion__heading > .cmsc-pb-accordion__trigger > .cmsc-pb-accordion__icon {
@@ -3352,6 +3780,8 @@
   padding: 0;
   border-radius: 999px;
 }
+/* R20E (T296): an icon-only button as a pill — wider than tall, the ends round — 1.15 times its height. */
+.cmsc-btn--icon-only.cmsc-btn--icon-pill { width: calc(var(--cmsc-btn-h) * 1.15); }
 .cmsc-btn--primary-solid,
 .cmsc-btn--primary-outline,
 .cmsc-btn--primary-text {
@@ -3541,8 +3971,9 @@
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
+  /* R19A (T234): one gradient over the whole run, continued across its line breaks, not restarted on each line. */
+  -webkit-box-decoration-break: slice;
+  box-decoration-break: slice;
 }
 /* The scheme's link colour: the accent that stays readable on a dark section. */
 /* T163: an icon of the catalog inside a heading or a caption — the text's size and colour, on its line. */
@@ -3755,7 +4186,10 @@ details.cmsc-read-more--reveal-above[open] > summary {
 .cmsc-read-more--editing > summary {
   display: block;
 }
-/* A check-mark list: a drawn tick in the primary colour instead of a bullet. */
+/*
+ * A check-mark list: a drawn tick in the primary colour instead of a bullet. R20E (T307): a block may give the
+ * check and chevron markers a colour of their own (`--cmsc-list-marker`); unset, today's colours.
+ */
 ul.cmsc-list--check {
   list-style: none;
   padding-left: 0;
@@ -3771,9 +4205,31 @@ ul.cmsc-list--check > li::before {
   top: 0.3em;
   width: 6px;
   height: 11px;
-  border: solid var(--cmsb-color-primary, #1261a6);
+  border: solid var(--cmsc-list-marker, var(--cmsb-color-primary, #1261a6));
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
+}
+/* R19A (T233): more list markers — a chevron, or none (the text keeps its place, no marker). */
+ul.cmsc-list--chevron {
+  list-style: none;
+  padding-left: 0;
+}
+ul.cmsc-list--chevron > li {
+  position: relative;
+  padding-left: 1.25em;
+}
+ul.cmsc-list--chevron > li::before {
+  content: "›";
+  position: absolute;
+  left: 0.15em;
+  top: 0;
+  color: var(--cmsc-list-marker, currentColor);
+  font-weight: 700;
+  line-height: inherit;
+}
+ul.cmsc-list--none {
+  list-style: none;
+  padding-left: 0;
 }
 /* The rich text editor keeps a visually hidden heading on screen, marked, so it can be edited. */
 .cmsc-rich-editor .cmsc-sr-only {
@@ -3870,9 +4326,14 @@ ul.cmsc-list--check > li::before {
 [data-cmsb-scheme] {
   --cmsc-media-bg: transparent;
   --cmsc-surface-tint: rgb(15 23 42 / 6%);
+  /* R19B (T240): a carousel's dots, today's greys on the light schemes. */
+  --cmsc-dot: var(--cmsb-n-300, #cbd5e1);
+  --cmsc-dot-active: var(--cmsb-n-700, #334155);
 }
 [data-cmsb-scheme='dark'] {
   --cmsc-surface-tint: rgb(255 255 255 / 10%);
+  --cmsc-dot: rgb(255 255 255 / 35%);
+  --cmsc-dot-active: var(--cmsb-fg, #f8fafc);
 }
 
 /*
@@ -4020,6 +4481,22 @@ ul.cmsc-list--check > li::before {
     display: block;
   }
 }
+/*
+ * R19C (T263): `data-desktop-from="desktop"` — the background's desktop art
+ * starts at the desktop tier, so between 768 and 1024 px the tiled mobile
+ * image and the mobile video stay (as the picture's source does).
+ */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .cmsc-section__media[data-desktop-from='desktop'] > .cmsc-section__tile {
+    background-image: var(--cmsc-tile-image-mobile, var(--cmsc-tile-image, none));
+  }
+  .cmsc-section__media[data-desktop-from='desktop'] > .cmsc-section__video[data-bp='mobile'] {
+    display: block;
+  }
+  .cmsc-section__media[data-desktop-from='desktop'] > .cmsc-section__video[data-bp='desktop'] {
+    display: none;
+  }
+}
 .cmsc-section__overlay {
   position: absolute;
   inset: 0;
@@ -4126,6 +4603,85 @@ ul.cmsc-list--check > li::before {
 /* `viewport`: the full viewport wide and at least the full viewport tall. */
 .cmsc-section[data-width='viewport'] {
   min-height: 100svh;
+}
+
+/*
+ * R19C (T262): a `custom` width wider than the page container widens the
+ * section itself, centred, up to the viewport less the gutters — no longer
+ * capped by the container. Narrower (and on a phone, where the viewport less
+ * the gutters is the container) it is the container's width, as before.
+ */
+.cmsc-section[data-width='custom'] {
+  --cmsc-section-w: max(100%, min(var(--cmsc-section-max, 1200px), 100vw - 2 * var(--pb-page-padding, var(--cmsb-gutter, 24px))));
+}
+@media (min-width: 768px) {
+  .cmsc-section[data-width='custom'] {
+    --cmsc-section-w: max(
+      100%,
+      min(var(--cmsc-section-max-md, var(--cmsc-section-max, 1200px)), 100vw - 2 * var(--pb-page-padding, var(--cmsb-gutter, 24px)))
+    );
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-section[data-width='custom'] {
+    --cmsc-section-w: max(
+      100%,
+      min(
+        var(--cmsc-section-max-lg, var(--cmsc-section-max-md, var(--cmsc-section-max, 1200px))),
+        100vw - 2 * var(--pb-page-padding, var(--cmsb-gutter, 24px))
+      )
+    );
+  }
+}
+.cmsc-section[data-width='custom'] {
+  width: var(--cmsc-section-w, 100%);
+  margin-left: calc((100% - var(--cmsc-section-w, 100%)) / 2);
+  margin-right: calc((100% - var(--cmsc-section-w, 100%)) / 2);
+}
+
+/*
+ * R19C (T260): a width that differs per breakpoint (`data-width="tiered"`).
+ * The renderer writes each tier's box — width, centring margin, minimum
+ * height — and content frame — max width, side padding — as
+ * `--cmsc-section-box-*` and `--cmsc-section-frame-*` (`-md`, `-lg` per tier),
+ * the values the `data-width` rules above give that width.
+ */
+.cmsc-section[data-width='tiered'] {
+  width: var(--cmsc-section-box-w);
+  margin-left: var(--cmsc-section-box-m);
+  margin-right: var(--cmsc-section-box-m);
+  min-height: var(--cmsc-section-box-mh, auto);
+}
+.cmsc-section[data-width='tiered'] > .cmsc-section__frame {
+  max-width: var(--cmsc-section-frame-max);
+  padding-left: var(--cmsc-section-frame-px);
+  padding-right: var(--cmsc-section-frame-px);
+}
+@media (min-width: 768px) {
+  .cmsc-section[data-width='tiered'] {
+    width: var(--cmsc-section-box-w-md);
+    margin-left: var(--cmsc-section-box-m-md);
+    margin-right: var(--cmsc-section-box-m-md);
+    min-height: var(--cmsc-section-box-mh-md, auto);
+  }
+  .cmsc-section[data-width='tiered'] > .cmsc-section__frame {
+    max-width: var(--cmsc-section-frame-max-md);
+    padding-left: var(--cmsc-section-frame-px-md);
+    padding-right: var(--cmsc-section-frame-px-md);
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-section[data-width='tiered'] {
+    width: var(--cmsc-section-box-w-lg);
+    margin-left: var(--cmsc-section-box-m-lg);
+    margin-right: var(--cmsc-section-box-m-lg);
+    min-height: var(--cmsc-section-box-mh-lg, auto);
+  }
+  .cmsc-section[data-width='tiered'] > .cmsc-section__frame {
+    max-width: var(--cmsc-section-frame-max-lg);
+    padding-left: var(--cmsc-section-frame-px-lg);
+    padding-right: var(--cmsc-section-frame-px-lg);
+  }
 }
 
 /*
@@ -4547,6 +5103,17 @@ ul.cmsc-list--check > li::before {
   border-color: var(--cmsb-border, #d9e0e7);
   color: var(--cmsb-fg-muted, #475569);
 }
+/* R21G (T338): the lists' line height per breakpoint, where chosen; a tier no value reaches keeps the text's. */
+.cmsc-pb-rich-content--list-leading ul,
+.cmsc-pb-rich-content--list-leading ol { line-height: var(--cmsc-rc-list-lh, inherit); }
+@media (min-width: 768px) {
+  .cmsc-pb-rich-content--list-leading ul,
+  .cmsc-pb-rich-content--list-leading ol { line-height: var(--cmsc-rc-list-lh-md, inherit); }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-rich-content--list-leading ul,
+  .cmsc-pb-rich-content--list-leading ol { line-height: var(--cmsc-rc-list-lh-lg, inherit); }
+}
 /* A button list wraps rather than overlaps on a narrow screen. */
 .cmsc-pb-actions {
   display: flex;
@@ -4742,6 +5309,46 @@ ul.cmsc-list--check > li::before {
   line-height: 1.55;
   color: var(--cmsb-fg-muted, #64748b);
 }
+/*
+ * R20F (T315): the space below each heading, between the paragraphs of the
+ * text and between stacked media and text, per breakpoint, where chosen; a
+ * tier no value reaches keeps today's (16 px, the paragraphs' own margins,
+ * 24 px).
+ */
+.cmsc-pb-media-text--heading-space .cmsc-pb-media-text__heading {
+  margin-bottom: var(--cmsc-mt-heading-space, 16px);
+}
+.cmsc-pb-media-text--body-space .cmsc-pb-media-text__body > * {
+  margin-block: 0;
+}
+.cmsc-pb-media-text--body-space .cmsc-pb-media-text__body > * + * {
+  margin-top: var(--cmsc-mt-body-space, 0px);
+}
+.cmsc-pb-media-text--stacked-gap .cmsc-pb-media-text__row {
+  row-gap: var(--cmsc-mt-stacked-gap, 24px);
+}
+@media (min-width: 768px) {
+  .cmsc-pb-media-text--heading-space .cmsc-pb-media-text__heading {
+    margin-bottom: var(--cmsc-mt-heading-space-md, 16px);
+  }
+  .cmsc-pb-media-text--body-space .cmsc-pb-media-text__body > * + * {
+    margin-top: var(--cmsc-mt-body-space-md, 0px);
+  }
+  .cmsc-pb-media-text--stacked-gap .cmsc-pb-media-text__row {
+    row-gap: var(--cmsc-mt-stacked-gap-md, 24px);
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-media-text--heading-space .cmsc-pb-media-text__heading {
+    margin-bottom: var(--cmsc-mt-heading-space-lg, 16px);
+  }
+  .cmsc-pb-media-text--body-space .cmsc-pb-media-text__body > * + * {
+    margin-top: var(--cmsc-mt-body-space-lg, 0px);
+  }
+  .cmsc-pb-media-text--stacked-gap .cmsc-pb-media-text__row {
+    row-gap: var(--cmsc-mt-stacked-gap-lg, 24px);
+  }
+}
 .cmsc-pb-media-text__footnote {
   margin-top: 24px;
   font-size: 14px;
@@ -4784,6 +5391,10 @@ ul.cmsc-list--check > li::before {
   display: inline-flex;
   margin-bottom: 16px;
 }
+/* R19C (T264): a transparent text box — the image (or, stacked on mobile, the section) shows through. */
+.cmsc-pb-panel[data-text-box='transparent'] > .cmsc-pb-panel__content {
+  background-color: transparent;
+}
 @media (max-width: 767.98px) {
   .cmsc-pb-panel[data-mobile-text='top'] > .cmsc-pb-panel__media { order: 2; }
 }
@@ -4813,6 +5424,25 @@ ul.cmsc-list--check > li::before {
 @media (min-width: 1024px) {
   .cmsc-pb-panel {
     min-height: var(--cmsc-panel-min-h-lg, var(--cmsc-panel-min-h-md, var(--cmsc-panel-min-h, 75vh)));
+  }
+}
+/*
+ * R20F (T316): on phones, the text over the image — both in one grid cell,
+ * the image at its own height (a tall mobile art keeps its shape) and the
+ * text at the top or the bottom of it, by the text position.
+ */
+@media (max-width: 767.98px) {
+  .cmsc-pb-panel[data-mobile-layout='overlay'] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cmsc-pb-panel[data-mobile-layout='overlay'] > .cmsc-pb-panel__media { grid-area: 1 / 1; aspect-ratio: auto; }
+  .cmsc-pb-panel[data-mobile-layout='overlay'] > .cmsc-pb-panel__content {
+    grid-area: 1 / 1;
+    align-self: start;
+  }
+  .cmsc-pb-panel[data-mobile-layout='overlay'][data-mobile-text='bottom'] > .cmsc-pb-panel__content {
+    align-self: end;
   }
 }
 
@@ -4966,9 +5596,20 @@ ul.cmsc-list--check > li::before {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  min-height: 60vh;
+  /* R19A (T231): a minimum height per breakpoint; unset, today's 60vh. */
+  min-height: var(--cmsc-statement-min-h, 60vh);
   overflow: hidden;
   isolation: isolate;
+}
+@media (min-width: 768px) {
+  .cmsc-pb-statement--bleed {
+    min-height: var(--cmsc-statement-min-h-md, var(--cmsc-statement-min-h, 60vh));
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-statement--bleed {
+    min-height: var(--cmsc-statement-min-h-lg, var(--cmsc-statement-min-h-md, var(--cmsc-statement-min-h, 60vh)));
+  }
 }
 .cmsc-pb-statement--bleed[data-text-position='center'] {
   justify-content: center;
@@ -5047,6 +5688,43 @@ ul.cmsc-list--check > li::before {
   overflow: hidden;
   border-radius: inherit;
 }
+/* R19B (T249): a corner label over the image (e.g. "Read more"), apart from the caption, 12 px from its corner. */
+.cmsc-pb-carousel-image__media:has(> .cmsc-pb-carousel-image__more) {
+  position: relative;
+}
+.cmsc-pb-carousel-image__more {
+  --cmsc-more-inset: 12px;
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.cmsc-pb-carousel-image__more-icon {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+}
+.cmsc-pb-carousel-image__more--bottom-right { right: var(--cmsc-more-inset); bottom: var(--cmsc-more-inset); }
+.cmsc-pb-carousel-image__more--bottom-left { left: var(--cmsc-more-inset); bottom: var(--cmsc-more-inset); }
+.cmsc-pb-carousel-image__more--top-right { right: var(--cmsc-more-inset); top: var(--cmsc-more-inset); }
+.cmsc-pb-carousel-image__more--top-left { left: var(--cmsc-more-inset); top: var(--cmsc-more-inset); }
+/*
+ * R20E (T292): a caption on the read-more label's edge (both at the bottom, or both at the top) is lifted
+ * above the label's line — the label's inset plus its line box — so the two never share a line, however
+ * narrow the card. The caption's own padding is the space between them.
+ */
+.cmsc-pb-carousel-image--more-clear-bottom,
+.cmsc-pb-carousel-image--more-clear-top {
+  --cmsc-more-clear-inset: 12px;
+  --cmsc-more-clear-line: calc(1.3 * 0.875rem);
+}
+.cmsc-pb-carousel-image--more-clear-bottom .cmsc-pb-carousel-image__caption { bottom: calc(var(--cmsc-more-clear-inset) + var(--cmsc-more-clear-line)); }
+.cmsc-pb-carousel-image--more-clear-top .cmsc-pb-carousel-image__caption { top: calc(var(--cmsc-more-clear-inset) + var(--cmsc-more-clear-line)); }
 .cmsc-pb-carousel-image__picture > img {
   transition: transform 400ms ease;
 }
@@ -5161,6 +5839,69 @@ ul.cmsc-list--check > li::before {
 }
 .cmsc-pb-carousel-split__actions {
   margin-top: 20px;
+}
+/*
+ * R20F (T310): the media and the text on a 12-column grid from the tablet up —
+ * the columns the block writes (`--cmsc-split-media-col|text-col`), mirrored
+ * for media at the end — and, from the desktop only, stacked on a tablet.
+ */
+@media (min-width: 768px) {
+  .cmsc-pb-carousel-split--columns {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--cmsc-grid-gap-md, var(--cmsb-gutter, 24px));
+  }
+  .cmsc-pb-carousel-split--columns > .cmsc-pb-carousel-split__media {
+    grid-column: var(--cmsc-split-media-col);
+    grid-row: 1;
+  }
+  .cmsc-pb-carousel-split--columns > .cmsc-pb-carousel-split__text {
+    grid-column: var(--cmsc-split-text-col);
+    grid-row: 1;
+  }
+}
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .cmsc-pb-carousel-split[data-side-by-side='desktop'] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .cmsc-pb-carousel-split[data-side-by-side='desktop'] > .cmsc-pb-carousel-split__media,
+  .cmsc-pb-carousel-split[data-side-by-side='desktop'] > .cmsc-pb-carousel-split__text {
+    grid-column: auto;
+    grid-row: auto;
+    order: 0;
+  }
+}
+/*
+ * R21G (T336): the text indented to a hanging title's text. The text column is
+ * a two-column grid — the title's icon, then its text — whose column gap is
+ * the icon's space (`--cmsc-hang-gap`, written on the column); the title is a
+ * subgrid of it with the hanging pair as its two items, so the text below
+ * starts where the title's text does. Everything else spans both columns.
+ */
+.cmsc-pb-carousel-split--body-indent > .cmsc-pb-carousel-split__text { display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; column-gap: var(--cmsc-hang-gap, 0.35em); }
+.cmsc-pb-carousel-split--body-indent > .cmsc-pb-carousel-split__text > * { grid-column: 1 / -1; }
+.cmsc-pb-carousel-split--body-indent > .cmsc-pb-carousel-split__text > .cmsc-pb-carousel-split__body { grid-column: 2; }
+.cmsc-pb-carousel-split--body-indent .cmsc-pb-carousel-split__title { display: grid; grid-template-columns: subgrid; align-items: baseline; }
+.cmsc-pb-carousel-split--body-indent .cmsc-pb-carousel-split__title .cmsc-hang { display: contents; }
+/*
+ * R21G (T336): the space between stacked media and text, below the title and
+ * above the carousel's controls in the slide, per breakpoint where chosen; a
+ * tier no value reaches keeps today's (24, 12 and 24 px).
+ */
+.cmsc-pb-carousel-split.cmsc-pb-carousel-split--stacked-gap { row-gap: var(--cmsc-split-stacked-gap, 24px); }
+.cmsc-pb-carousel-split--title-space .cmsc-pb-carousel-split__title { margin-bottom: var(--cmsc-split-title-space, 12px); }
+.cmsc-pb-carousel-split--controls-space .cmsc-pb-carousel__controls--slide { margin-top: var(--cmsc-split-controls-space, 24px); }
+@media (min-width: 768px) {
+  .cmsc-pb-carousel-split--body-indent > .cmsc-pb-carousel-split__text { column-gap: var(--cmsc-hang-gap-md, var(--cmsc-hang-gap, 0.35em)); }
+  .cmsc-pb-carousel-split.cmsc-pb-carousel-split--stacked-gap { row-gap: var(--cmsc-split-stacked-gap-md, 24px); }
+  .cmsc-pb-carousel-split--title-space .cmsc-pb-carousel-split__title { margin-bottom: var(--cmsc-split-title-space-md, 12px); }
+  .cmsc-pb-carousel-split--controls-space .cmsc-pb-carousel__controls--slide { margin-top: var(--cmsc-split-controls-space-md, 24px); }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-carousel-split--body-indent > .cmsc-pb-carousel-split__text { column-gap: var(--cmsc-hang-gap-lg, var(--cmsc-hang-gap-md, var(--cmsc-hang-gap, 0.35em))); }
+  .cmsc-pb-carousel-split.cmsc-pb-carousel-split--stacked-gap { row-gap: var(--cmsc-split-stacked-gap-lg, 24px); }
+  .cmsc-pb-carousel-split--title-space .cmsc-pb-carousel-split__title { margin-bottom: var(--cmsc-split-title-space-lg, 12px); }
+  .cmsc-pb-carousel-split--controls-space .cmsc-pb-carousel__controls--slide { margin-top: var(--cmsc-split-controls-space-lg, 24px); }
 }
 
 /* cms.LinkTile: the whole tile is the link. */
@@ -5289,15 +6030,34 @@ ul.cmsc-list--check > li::before {
   justify-content: space-between;
   gap: 24px;
   height: 100%;
-  min-height: 180px;
-  padding: 20px;
+  min-height: var(--pb-dl-min-h, 180px);
+  padding: var(--pb-dl-pad, 20px);
   box-sizing: border-box;
   overflow: hidden;
   border: 1px solid var(--cmsb-border, #d9e0e7);
-  border-radius: 8px;
-  background: var(--cmsb-bg, #ffffff);
+  border-radius: var(--pb-dl-radius, 8px);
+  background: var(--pb-dl-bg, var(--cmsb-bg, #ffffff));
   color: var(--cmsb-fg, #15202b);
   text-decoration: none;
+}
+/*
+ * R19B (T247): the padding per breakpoint (`--pb-dl-pad(-md|-lg)`); the title size's tiers follow its base rule.
+ * R20E (T301): the minimum height per breakpoint (`--pb-dl-min-h(-md|-lg)`), today's 180 px unset.
+ */
+@media (min-width: 768px) {
+  .cmsc-pb-download-tile {
+    min-height: var(--pb-dl-min-h-md, var(--pb-dl-min-h, 180px));
+    padding: var(--pb-dl-pad-md, var(--pb-dl-pad, 20px));
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-download-tile {
+    min-height: var(--pb-dl-min-h-lg, var(--pb-dl-min-h-md, var(--pb-dl-min-h, 180px)));
+    padding: var(--pb-dl-pad-lg, var(--pb-dl-pad-md, var(--pb-dl-pad, 20px)));
+  }
+}
+.cmsc-pb-download-tile--no-border {
+  border-color: transparent;
 }
 .cmsc-pb-download-tile:focus-visible {
   outline: 2px solid var(--cmsb-color-primary, #1261a6);
@@ -5323,6 +6083,7 @@ ul.cmsc-list--check > li::before {
   font-weight: 700;
   letter-spacing: 0.04em;
 }
+/* R23 (T444): the title's own size is inline (`textStyleAttrs`): a type token or Custom px. */
 .cmsc-pb-download-tile__title {
   font-size: 1.125rem;
   font-weight: 600;
@@ -5351,6 +6112,45 @@ ul.cmsc-list--check > li::before {
 .cmsc-pb-download-tile--hover-image:hover .cmsc-pb-download-tile__hover,
 .cmsc-pb-download-tile--hover-image:focus-visible .cmsc-pb-download-tile__hover {
   opacity: 0.18;
+}
+/* R19B (T248): the hover image in full, under a dark gradient so the text over it stays legible. */
+.cmsc-pb-download-tile--hover-full .cmsc-pb-download-tile__hover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgb(0 0 0 / 80%), rgb(0 0 0 / 20%));
+}
+.cmsc-pb-download-tile--hover-full:is(:hover, :focus-visible) .cmsc-pb-download-tile__hover {
+  opacity: 1;
+}
+.cmsc-pb-download-tile--hover-full:is(:hover, :focus-visible) {
+  color: #ffffff;
+}
+.cmsc-pb-download-tile--hover-full:is(:hover, :focus-visible) :is(.cmsc-pb-download-tile__subtitle, .cmsc-pb-download-tile__label) {
+  color: rgb(255 255 255 / 85%);
+}
+/* R19B (T248): the link as a round icon button pinned to the bottom end, ringed in the text colour. */
+.cmsc-pb-download-tile__icon-button {
+  position: relative;
+  z-index: 1;
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-top: auto;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  box-sizing: border-box;
+  transition: background-color 150ms ease;
+}
+.cmsc-pb-download-tile__icon {
+  width: 40%;
+  height: 40%;
+}
+.cmsc-pb-download-tile--icon-link:is(:hover, :focus-visible) .cmsc-pb-download-tile__icon-button {
+  background-color: rgb(127 127 127 / 20%);
 }
 @media (prefers-reduced-motion: reduce) {
   .cmsc-pb-download-tile__hover {
@@ -5687,6 +6487,13 @@ ul.cmsc-list--check > li::before {
 .cmsc-pb-product-listing__footer {
   margin-top: 24px;
 }
+/* R19B (T244): the footer button centred or at the end (the start is today's). */
+.cmsc-pb-product-listing__footer--center {
+  justify-content: center;
+}
+.cmsc-pb-product-listing__footer--end {
+  justify-content: flex-end;
+}
 
 /* cms.LinkList: rows of a title, a description and a button. */
 .cmsc-pb-link-list__heading {
@@ -5707,6 +6514,10 @@ ul.cmsc-list--check > li::before {
 }
 .cmsc-pb-link-list--divided .cmsc-pb-link-list__item + .cmsc-pb-link-list__item {
   border-top: 1px solid var(--cmsb-border, var(--cmsb-n-200, #e2e8f0));
+}
+/* R20F (T320): the same rule under the last row too. */
+.cmsc-pb-link-list--divided-end .cmsc-pb-link-list__item:last-child {
+  border-bottom: 1px solid var(--cmsb-border, var(--cmsb-n-200, #e2e8f0));
 }
 .cmsc-pb-link-list__text {
   flex: 1 1 260px;
@@ -5843,6 +6654,49 @@ ul.cmsc-list--check > li::before {
 .cmsc-pb-signup__message--error {
   color: #b91c1c;
 }
+/*
+ * R19B (T252): the button inside the field — the input and the button share one
+ * box (the field's border, the input borderless inside it), rounded or a pill;
+ * the topics as a grid of columns (`--pb-topic-cols`).
+ */
+.cmsc-pb-signup__control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 4px;
+  border: 1px solid var(--cmsb-n-300, #cbd5e1);
+  border-radius: 8px;
+  background: #fff;
+  box-sizing: border-box;
+}
+.cmsc-pb-signup__control:focus-within {
+  outline: 2px solid var(--cmsb-color-primary, #1261a6);
+  outline-offset: 2px;
+}
+.cmsc-pb-signup__control .cmsc-pb-signup__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 36px;
+  border: 0;
+  padding: 6px 8px;
+  background: transparent;
+}
+.cmsc-pb-signup__control .cmsc-pb-signup__input:focus-visible {
+  outline: none;
+}
+.cmsc-pb-signup__control .cmsc-pb-signup__button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 6px 16px;
+}
+.cmsc-pb-signup--pill :is(.cmsc-pb-signup__control, .cmsc-pb-signup__input, .cmsc-pb-signup__button) {
+  border-radius: 999px;
+}
+.cmsc-pb-signup__topics--columns {
+  display: grid;
+  grid-template-columns: repeat(var(--pb-topic-cols, 2), minmax(0, 1fr));
+}
 
 /* cms.NewsletterSignup's optional consent checkbox (feature 163, T076). */
 .cmsc-pb-newsletter__consent {
@@ -5856,4 +6710,377 @@ ul.cmsc-list--check > li::before {
   width: 18px;
   height: 18px;
   margin: 2px 0 0;
+}
+
+/* ── R19A: text and content options (`specs/163-page-builder-marketing-pages/` T223–T239) ── */
+
+/*
+ * T223: a block text's own size, weight and line height that differ per
+ * breakpoint (`textStyleAttrs`); one value for every width is inline instead.
+ * Every tier is written, a tier on Default carrying the block's own value. At
+ * the end of the stylesheet, so they win over a block's own single-class rule.
+ */
+.cmsc-pb-ts-size {
+  font-size: var(--pb-ts-size);
+}
+.cmsc-pb-ts-weight {
+  font-weight: var(--pb-ts-weight);
+}
+.cmsc-pb-ts-leading {
+  line-height: var(--pb-ts-leading);
+}
+/* R23 (T435): a type token's own letter spacing, when the token differs per breakpoint. */
+.cmsc-pb-ts-tracking {
+  letter-spacing: var(--pb-ts-tracking);
+}
+@media (min-width: 768px) {
+  .cmsc-pb-ts-size {
+    font-size: var(--pb-ts-size-md);
+  }
+  .cmsc-pb-ts-weight {
+    font-weight: var(--pb-ts-weight-md);
+  }
+  .cmsc-pb-ts-leading {
+    line-height: var(--pb-ts-leading-md);
+  }
+  .cmsc-pb-ts-tracking {
+    letter-spacing: var(--pb-ts-tracking-md);
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-ts-size {
+    font-size: var(--pb-ts-size-lg);
+  }
+  .cmsc-pb-ts-weight {
+    font-weight: var(--pb-ts-weight-lg);
+  }
+  .cmsc-pb-ts-leading {
+    line-height: var(--pb-ts-leading-lg);
+  }
+  .cmsc-pb-ts-tracking {
+    letter-spacing: var(--pb-ts-tracking-lg);
+  }
+}
+
+/* T233: a text size on a run of rich text — a type token's size (its brand variable, the built-in px as fallback). */
+.cmsc-fs--display { font-size: var(--cmsb-t-display-size, 40px); }
+.cmsc-fs--h1 { font-size: var(--cmsb-t-h1-size, 48px); }
+.cmsc-fs--h2 { font-size: var(--cmsb-t-h2-size, 40px); }
+.cmsc-fs--h3 { font-size: var(--cmsb-t-h3-size, 32px); }
+.cmsc-fs--h4 { font-size: var(--cmsb-t-h4-size, 26px); }
+.cmsc-fs--h5 { font-size: var(--cmsb-t-h5-size, 22px); }
+.cmsc-fs--h6 { font-size: var(--cmsb-t-h6-size, 18px); }
+.cmsc-fs--lead { font-size: var(--cmsb-t-lead-size, 18px); }
+.cmsc-fs--body { font-size: var(--cmsb-t-body-size, 16px); }
+.cmsc-fs--small { font-size: var(--cmsb-t-small-size, 14px); }
+@media (min-width: 1024px) {
+  .cmsc-fs--display { font-size: var(--cmsb-t-display-size, 56px); }
+  .cmsc-fs--lead { font-size: var(--cmsb-t-lead-size, 20px); }
+}
+
+/*
+ * T226: a heading led by an inline icon, with a hanging indent — the icon and
+ * the rest of the text in two boxes side by side, so a wrapped line starts
+ * under the text, not under the icon. The icon keeps its own vertical offset
+ * (an inline-block on the text's baseline).
+ */
+.cmsc-hang {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--cmsc-hang-gap, 0.35em);
+  max-width: 100%;
+  vertical-align: top;
+  text-align: start;
+}
+.cmsc-hang__icon {
+  display: inline-block;
+  flex: none;
+}
+.cmsc-hang__text {
+  min-width: 0;
+}
+@media (min-width: 768px) {
+  .cmsc-hang {
+    gap: var(--cmsc-hang-gap-md, var(--cmsc-hang-gap, 0.35em));
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-hang {
+    gap: var(--cmsc-hang-gap-lg, var(--cmsc-hang-gap-md, var(--cmsc-hang-gap, 0.35em)));
+  }
+}
+
+/*
+ * T235: stats beside an image on a 12-column grid from the tablet up — the
+ * image's and the figures' columns (`grid-column` values the block writes,
+ * mirrored for an image at the end) — and the figures' vertical position.
+ */
+@media (min-width: 768px) {
+  .cmsc-pb-stats-block--columns {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--cmsc-grid-gap-md, var(--cmsb-gutter, 24px));
+  }
+  .cmsc-pb-stats-block--columns > .cmsc-pb-stats-block__media {
+    grid-column: var(--cmsc-stats-media-col);
+    grid-row: 1;
+  }
+  .cmsc-pb-stats-block--columns > .cmsc-pb-stats-block__figures {
+    grid-column: var(--cmsc-stats-figures-col);
+    grid-row: 1;
+  }
+  .cmsc-pb-stats-block[data-figures-align='start'] > .cmsc-pb-stats-block__figures {
+    align-self: start;
+  }
+  .cmsc-pb-stats-block[data-figures-align='end'] > .cmsc-pb-stats-block__figures {
+    align-self: end;
+  }
+  .cmsc-pb-stats-block[data-figures-align='spread'] > .cmsc-pb-stats-block__figures {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+  }
+  .cmsc-pb-stats-block[data-figures-align='spread'] > .cmsc-pb-stats-block__figures > .cmsc-pb-stats {
+    flex: 1 1 auto;
+    align-content: space-between;
+  }
+}
+/* R21G (T335): image and figures side by side from the desktop only — stacked on a tablet, image first, as on a phone. */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .cmsc-pb-stats-block[data-side-by-side='desktop'] { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .cmsc-pb-stats-block[data-side-by-side='desktop'] > :is(.cmsc-pb-stats-block__media, .cmsc-pb-stats-block__figures) { grid-column: auto; grid-row: auto; order: 0; }
+}
+
+/*
+ * T237: a call-to-action card's image inset — the space between the image and
+ * the card's edges, whatever the card's own padding (32 / 24 px on a phone,
+ * 48 px from the tablet). The edge between the image and the text keeps the
+ * card's gap.
+ */
+.cmsc-pb-cta-card--image-inset > .cmsc-pb-cta-card__media {
+  margin: calc(var(--cmsc-cta-image-inset) - 32px) calc(var(--cmsc-cta-image-inset) - 24px) 0;
+}
+@media (min-width: 768px) {
+  .cmsc-pb-cta-card--image-inset > .cmsc-pb-cta-card__media {
+    align-self: stretch;
+    margin: calc(var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset)) - 48px);
+  }
+  .cmsc-pb-cta-card--image-inset[data-image-side='end'] > .cmsc-pb-cta-card__media {
+    margin-left: 0;
+  }
+  .cmsc-pb-cta-card--image-inset[data-image-side='start'] > .cmsc-pb-cta-card__media {
+    margin-right: 0;
+  }
+}
+/* R21G (T334): the inset per breakpoint (`-md`, `-lg`, each read only where written). */
+@media (min-width: 1024px) {
+  .cmsc-pb-cta-card--image-inset > .cmsc-pb-cta-card__media {
+    margin: calc(var(--cmsc-cta-image-inset-lg, var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset))) - 48px);
+  }
+}
+
+/*
+ * R20F (T318): the card's padding per breakpoint (`--cmsc-cta-pad`), where
+ * chosen; a tier no value reaches keeps today's 32 / 24 px (48 px from the
+ * tablet). An image inset measures from it, as it does from today's padding.
+ */
+.cmsc-pb-cta-card--padding { padding: var(--cmsc-cta-pad, 32px 24px); }
+.cmsc-pb-cta-card--padding.cmsc-pb-cta-card--image-inset > .cmsc-pb-cta-card__media {
+  margin: calc(var(--cmsc-cta-image-inset) - var(--cmsc-cta-pad, 32px)) calc(var(--cmsc-cta-image-inset) - var(--cmsc-cta-pad, 24px)) 0;
+}
+@media (min-width: 768px) {
+  .cmsc-pb-cta-card--padding { padding: var(--cmsc-cta-pad-md, 48px); }
+  .cmsc-pb-cta-card--padding.cmsc-pb-cta-card--image-inset > .cmsc-pb-cta-card__media { margin: calc(var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset)) - var(--cmsc-cta-pad-md, 48px)); }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-cta-card--padding { padding: var(--cmsc-cta-pad-lg, 48px); }
+  .cmsc-pb-cta-card--padding.cmsc-pb-cta-card--image-inset > .cmsc-pb-cta-card__media { margin: calc(var(--cmsc-cta-image-inset-lg, var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset))) - var(--cmsc-cta-pad-lg, 48px)); }
+}
+@media (min-width: 768px) {
+  .cmsc-pb-cta-card--padding.cmsc-pb-cta-card--image-inset[data-image-side='end'] > .cmsc-pb-cta-card__media { margin-left: 0; }
+  .cmsc-pb-cta-card--padding.cmsc-pb-cta-card--image-inset[data-image-side='start'] > .cmsc-pb-cta-card__media { margin-right: 0; }
+  /* R20F (T318): the image's width in columns of 12 — the two tracks the block writes, text first unless the image is at the start. */
+  .cmsc-pb-cta-card--image-cols[data-image-side] { grid-template-columns: var(--cmsc-cta-cols-md, repeat(2, minmax(0, 1fr))); }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-cta-card--image-cols[data-image-side] { grid-template-columns: var(--cmsc-cta-cols-lg, var(--cmsc-cta-cols-md, repeat(2, minmax(0, 1fr)))); }
+}
+
+/*
+ * R21G (T334): while the card is stacked, the image below the text
+ * (`data-mobile-image="below"`), its inset then at the sides and the bottom;
+ * and stacked up to the desktop (`data-side-by-side="desktop"`), the tablet
+ * then laid out as a phone with the tablet's padding. Each attribute is written
+ * only when chosen, with an image.
+ */
+@media (max-width: 767.98px) {
+  .cmsc-pb-cta-card[data-mobile-image='below'] > .cmsc-pb-cta-card__media { order: 0; }
+  .cmsc-pb-cta-card--image-inset[data-mobile-image='below'] > .cmsc-pb-cta-card__media { margin: 0 calc(var(--cmsc-cta-image-inset) - 24px) calc(var(--cmsc-cta-image-inset) - 32px); }
+  .cmsc-pb-cta-card--padding.cmsc-pb-cta-card--image-inset[data-mobile-image='below'] > .cmsc-pb-cta-card__media {
+    margin: 0 calc(var(--cmsc-cta-image-inset) - var(--cmsc-cta-pad, 24px)) calc(var(--cmsc-cta-image-inset) - var(--cmsc-cta-pad, 32px));
+  }
+}
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .cmsc-pb-cta-card[data-image-side][data-side-by-side='desktop'] { grid-template-columns: minmax(0, 1fr); }
+  .cmsc-pb-cta-card[data-image-side][data-side-by-side='desktop'] > .cmsc-pb-cta-card__media { order: -1; }
+  .cmsc-pb-cta-card[data-image-side][data-side-by-side='desktop'][data-mobile-image='below'] > .cmsc-pb-cta-card__media { order: 0; }
+  .cmsc-pb-cta-card--image-inset[data-image-side][data-side-by-side='desktop'] > .cmsc-pb-cta-card__media {
+    margin: calc(var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset)) - 48px) calc(var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset)) - 48px) 0;
+  }
+  .cmsc-pb-cta-card--image-inset[data-image-side][data-side-by-side='desktop'][data-mobile-image='below'] > .cmsc-pb-cta-card__media {
+    margin: 0 calc(var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset)) - 48px) calc(var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset)) - 48px);
+  }
+  .cmsc-pb-cta-card--padding.cmsc-pb-cta-card--image-inset[data-image-side][data-side-by-side='desktop'] > .cmsc-pb-cta-card__media {
+    margin: calc(var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset)) - var(--cmsc-cta-pad-md, 48px)) calc(var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset)) - var(--cmsc-cta-pad-md, 48px)) 0;
+  }
+  .cmsc-pb-cta-card--padding.cmsc-pb-cta-card--image-inset[data-image-side][data-side-by-side='desktop'][data-mobile-image='below'] > .cmsc-pb-cta-card__media {
+    margin: 0 calc(var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset)) - var(--cmsc-cta-pad-md, 48px)) calc(var(--cmsc-cta-image-inset-md, var(--cmsc-cta-image-inset)) - var(--cmsc-cta-pad-md, 48px));
+  }
+}
+
+/* T238: media and text side by side from the desktop only — stacked on a tablet, as on a phone. */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .cmsc-pb-media-text__row[data-side-by-side='desktop'] {
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: normal;
+  }
+  .cmsc-pb-media-text__row[data-side-by-side='desktop'] > .cmsc-pb-media-text__media {
+    order: 0;
+  }
+  .cmsc-pb-media-text__row[data-side-by-side='desktop'][data-mobile-order='text-first'] > .cmsc-pb-media-text__media {
+    order: 2;
+  }
+}
+/*
+ * R21G (T332): media and text on a 12-column grid from the side-by-side tier —
+ * the columns the block writes for media at the start and at the end
+ * (`--cmsc-mt-media-col|text-col`, `-end`), so alternating rows mirror — in
+ * place of the split. Stacked on a tablet when side by side from the desktop.
+ */
+@media (min-width: 768px) {
+  .cmsc-pb-media-text--columns .cmsc-pb-media-text__row { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--cmsc-grid-gap-md, var(--cmsb-gutter, 24px)); }
+  .cmsc-pb-media-text--columns .cmsc-pb-media-text__row > .cmsc-pb-media-text__media { grid-column: var(--cmsc-mt-media-col); grid-row: 1; }
+  .cmsc-pb-media-text--columns .cmsc-pb-media-text__row > .cmsc-pb-media-text__text { grid-column: var(--cmsc-mt-text-col); grid-row: 1; }
+  .cmsc-pb-media-text--columns .cmsc-pb-media-text__row[data-media-side='end'] > .cmsc-pb-media-text__media { grid-column: var(--cmsc-mt-media-col-end); }
+  .cmsc-pb-media-text--columns .cmsc-pb-media-text__row[data-media-side='end'] > .cmsc-pb-media-text__text { grid-column: var(--cmsc-mt-text-col-end); }
+}
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .cmsc-pb-media-text--columns .cmsc-pb-media-text__row[data-side-by-side='desktop'] { grid-template-columns: minmax(0, 1fr); column-gap: normal; }
+  .cmsc-pb-media-text--columns .cmsc-pb-media-text__row[data-side-by-side='desktop'] > :is(.cmsc-pb-media-text__media, .cmsc-pb-media-text__text) { grid-column: auto; grid-row: auto; }
+}
+/*
+ * R22I (T370): the 12-column layouts' column gap is their own — the block's
+ * `columnGapPx` per breakpoint (`--cmsc-grid-gap`, `-md`, `-lg`) — not the page
+ * frame's side gutter as such. Unset, today's gutter (R23 T433: the brand's
+ * grid-gap hook is gone with the per-tier gutters).
+ */
+@media (min-width: 1024px) {
+  .cmsc-pb-stats-block--columns,
+  .cmsc-pb-carousel-split--columns,
+  .cmsc-pb-media-text--columns .cmsc-pb-media-text__row {
+    column-gap: var(--cmsc-grid-gap-lg, var(--cmsb-gutter, 24px));
+  }
+}
+/* R22I (T372): a card stacked up to the desktop keeps its list in one column on a tablet too. */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .cmsc-pb-cta-card[data-side-by-side='desktop'] > .cmsc-pb-cta-card__text > .cmsc-pb-cta-card__list[data-columns='2'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* R22I (T374): the space below the card's heading per breakpoint, where chosen; a tier no value reaches keeps today's 16 px. */
+.cmsc-pb-cta-card--heading-space .cmsc-pb-cta-card__heading {
+  margin-bottom: var(--cmsc-cta-heading-space, 16px);
+}
+@media (min-width: 768px) {
+  .cmsc-pb-cta-card--heading-space .cmsc-pb-cta-card__heading {
+    margin-bottom: var(--cmsc-cta-heading-space-md, 16px);
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-cta-card--heading-space .cmsc-pb-cta-card__heading {
+    margin-bottom: var(--cmsc-cta-heading-space-lg, 16px);
+  }
+}
+/*
+ * R22I (T378): the icon beside or above the title per breakpoint — the list
+ * carries a position per tier (`data-icon-position`, `-md`, `-lg`) only when
+ * they differ; one position stays today's attribute. `above` undoes `beside`.
+ */
+@media (min-width: 768px) {
+  .cmsc-pb-feature-list[data-icon-position-md='beside'] > .cmsc-pb-feature-list__item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--cmsc-fl-icon-space-md, var(--cmsc-fl-icon-space, 12px));
+  }
+  .cmsc-pb-feature-list[data-icon-position-md='beside'] .cmsc-pb-feature-list__icon {
+    grid-row: 1 / span 2;
+    grid-column: 1;
+    margin-bottom: 0;
+  }
+  .cmsc-pb-feature-list[data-icon-position-md='beside'] > .cmsc-pb-feature-list__item > :not(.cmsc-pb-feature-list__icon) {
+    grid-column: 2;
+  }
+  .cmsc-pb-feature-list[data-icon-position-md='above'] > .cmsc-pb-feature-list__item {
+    display: list-item;
+  }
+  .cmsc-pb-feature-list[data-icon-position-md='above'] .cmsc-pb-feature-list__icon {
+    margin-bottom: var(--cmsc-fl-icon-space-md, var(--cmsc-fl-icon-space, 8px));
+  }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-feature-list[data-icon-position-lg='beside'] > .cmsc-pb-feature-list__item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--cmsc-fl-icon-space-lg, var(--cmsc-fl-icon-space-md, var(--cmsc-fl-icon-space, 12px)));
+  }
+  .cmsc-pb-feature-list[data-icon-position-lg='beside'] .cmsc-pb-feature-list__icon {
+    grid-row: 1 / span 2;
+    grid-column: 1;
+    margin-bottom: 0;
+  }
+  .cmsc-pb-feature-list[data-icon-position-lg='beside'] > .cmsc-pb-feature-list__item > :not(.cmsc-pb-feature-list__icon) {
+    grid-column: 2;
+  }
+  .cmsc-pb-feature-list[data-icon-position-lg='above'] > .cmsc-pb-feature-list__item {
+    display: list-item;
+  }
+  .cmsc-pb-feature-list[data-icon-position-lg='above'] .cmsc-pb-feature-list__icon {
+    margin-bottom: var(--cmsc-fl-icon-space-lg, var(--cmsc-fl-icon-space-md, var(--cmsc-fl-icon-space, 8px)));
+  }
+}
+/* R22I (T378): items with a width of their own in columns of 12 on desktops; the others keep their columns' share. */
+@media (min-width: 1024px) {
+  .cmsc-pb-feature-list--spans {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+  .cmsc-pb-feature-list--spans > .cmsc-pb-feature-list__item {
+    grid-column: span var(--cmsc-fl-span, var(--cmsc-fl-default-span, 4));
+  }
+}
+/* R22I (T380): an icon after the sign-up button's label. */
+.cmsc-pb-signup__button--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.cmsc-pb-signup__button-icon {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+}
+/*
+ * R22I (T375, T379): a line height per breakpoint over a text sized by a type
+ * token (a figure's value, a carousel header's heading): one class per tier
+ * written (`tierLeading`), none below the first one set, so there the token's
+ * own applies. The class is doubled and the rules sit last, so they win over
+ * the token's rule and a block's own.
+ */
+.cmsc-pb-lh.cmsc-pb-lh { line-height: var(--pb-lh); }
+@media (min-width: 768px) {
+  .cmsc-pb-lh-md.cmsc-pb-lh-md { line-height: var(--pb-lh-md); }
+}
+@media (min-width: 1024px) {
+  .cmsc-pb-lh-lg.cmsc-pb-lh-lg { line-height: var(--pb-lh-lg); }
 }

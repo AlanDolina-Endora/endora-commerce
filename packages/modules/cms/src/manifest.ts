@@ -469,8 +469,9 @@ export const manifest = defineModuleManifest({
       category: 'layout',
       contexts: ['cms'],
       fields: {},
-      // T117: the settings are top-level props; these sit on the editor's Responsive tab.
-      responsiveFields: ['spaceTop', 'spaceBottom', 'contentPosition', 'overlap'],
+      // T117: the settings are top-level props; these sit on the editor's Responsive tab
+      // (R19C, T260/T261: the width and the background outset too).
+      responsiveFields: ['width', 'spaceTop', 'spaceBottom', 'contentPosition', 'overlap'],
       weight: 5,
     },
     // Feature 163, T158 (plan § Owner ruling 2026-10-26): the top-level container
@@ -567,17 +568,20 @@ export const manifest = defineModuleManifest({
         'margin',
         'padding',
         'border',
+        // R19A (T226), R21G (T337).
+        'textMaxWidth', 'textMaxWidthPx',
       ],
       weight: 10,
     },
     {
       name: 'cms.Text',
-      translatable: [{ path: 'text' }, { path: 'tiptapContent', format: 'tiptap' }],
+      // R19A (T232): `text` is inline rich text once edited; a plain string stored before is read as plain text.
+      translatable: [{ path: 'text', format: 'tiptap' }, { path: 'tiptapContent', format: 'tiptap' }],
       labelKey: 'blocks.text.label',
       descriptionKey: 'blocks.text.description',
       category: 'content',
       contexts: ['cms'],
-      fields: { text: { type: 'text', label: 'Text' } },
+      fields: { text: { type: 'richtext', label: 'Text' } },
       responsiveFields: [
         'fontSize',
         'fontWeight',
@@ -599,7 +603,7 @@ export const manifest = defineModuleManifest({
       category: 'content',
       contexts: ['cms'],
       fields: { content: { type: 'richtext', label: 'Content' } },
-      responsiveFields: ['textMaxWidth', 'textMaxWidthPx', 'margin', 'padding', 'border'],
+      responsiveFields: ['textMaxWidth', 'textMaxWidthPx', 'margin', 'padding', 'border', 'textSize', 'textSizePx', 'listLineHeight'],
       weight: 30,
     },
     {
@@ -623,6 +627,7 @@ export const manifest = defineModuleManifest({
           ],
         },
       },
+      // R19B (T246): an icon-only button's size per breakpoint.
       responsiveFields: ['button', 'align', 'fullWidth', 'margin', 'padding', 'border'],
       weight: 40,
     },
@@ -638,7 +643,8 @@ export const manifest = defineModuleManifest({
         src: { type: 'text', label: 'Image URL', required: true },
         alt: { type: 'text', label: 'Alt text' },
       },
-      responsiveFields: ['widthMode', 'widthPx', 'ratio', 'align', 'margin', 'padding', 'border'],
+      // R19B (T251): the caption's placement, size and alignment per breakpoint.
+      responsiveFields: ['widthMode', 'widthPx', 'ratio', 'align', 'captionPlacement', 'captionSize', 'captionSizePx', 'captionAlign', 'captionMaxWidthPx', 'margin', 'padding', 'border'],
       weight: 50,
     },
     {
@@ -712,6 +718,16 @@ export const manifest = defineModuleManifest({
         'headingWeight',
         'align',
         'titleWeight',
+        // R19A (T224, T225).
+        'titleLineHeight',
+        'bodySize',
+        'bodySizePx',
+        'bodyLineHeight',
+        // R20F (T317).
+        'rowGapPx',
+        'listLineHeight',
+        // R22I.
+        'iconPosition',
       ],
       previewIcon: 'layout',
       weight: 80,
@@ -762,6 +778,29 @@ export const manifest = defineModuleManifest({
         'border',
         'titleWeight',
         'align',
+        // R19A (T227–T229).
+        'subheadingLineHeight',
+        'subheadingMaxWidth',
+        'subheadingMaxWidthPx',
+        'statementLineHeight',
+        'statementMaxWidth',
+        'statementMaxWidthPx',
+        'bodySize',
+        'bodySizePx',
+        'bodyLineHeight',
+        'bodyMaxWidth',
+        'bodyMaxWidthPx',
+        'gapsPx',
+        'mediaSpace',
+        'mediaSpacePx',
+        // R20E.
+        'titleLineHeight',
+        'eyebrowSizePx',
+        'eyebrowLineHeight',
+        'proofCaptionPlacement',
+        'proofCaptionMaxWidthPx',
+        // R23 (T436).
+        'eyebrowSize',
       ],
       weight: 90,
     },
@@ -795,7 +834,13 @@ export const manifest = defineModuleManifest({
         body: { type: 'richtext', label: 'Text' },
       },
       // Feature 163, T160: the item titles' size per breakpoint.
-      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'featureTitleSize', 'featureTitleSizePx', 'buttons', 'buttonsFullWidth', 'headingWeight', 'featureTitleWeight'],
+      responsiveFields: [
+        'headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'featureTitleSize', 'featureTitleSizePx', 'buttons', 'buttonsFullWidth', 'headingWeight', 'featureTitleWeight',
+        // R20F (T315): the text size.
+        'bodySize', 'bodySizePx', 'bodyLineHeight', 'headingLineHeight',
+        // R22I.
+        'columnGapPx', 'featureBodySize', 'featureBodySizePx',
+      ],
       weight: 92,
     },
     {
@@ -814,6 +859,7 @@ export const manifest = defineModuleManifest({
         image: { type: 'object', label: 'Image', required: true },
         heading: { type: 'richtext', label: 'Heading' },
       },
+      // R20F (T316): the text box's margin and padding.
       responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'buttons', 'buttonsFullWidth', 'minHeight', 'headingWeight'],
       weight: 94,
     },
@@ -834,7 +880,8 @@ export const manifest = defineModuleManifest({
         heading: { type: 'richtext', label: 'Heading' },
         buttons: { type: 'array', label: 'Buttons' },
       },
-      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'buttons', 'buttonsFullWidth', 'headingWeight'],
+      // R20F (T318): the card's padding and the image's columns.
+      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'buttons', 'buttonsFullWidth', 'headingWeight', 'imageColumns', 'bodySize', 'bodySizePx', 'textMaxWidth', 'textMaxWidthPx'],
       weight: 96,
     },
     {
@@ -849,7 +896,21 @@ export const manifest = defineModuleManifest({
       category: 'content',
       contexts: ['cms'],
       fields: { heading: { type: 'richtext', label: 'Heading' } },
-      responsiveFields: ['headingSize', 'headingSizePx', 'textMaxWidth', 'textMaxWidthPx', 'headingWeight', 'align'],
+      responsiveFields: [
+        'headingSize',
+        'headingSizePx',
+        'textMaxWidth',
+        'textMaxWidthPx',
+        'headingWeight',
+        'align',
+        // R19A (T231).
+        'minHeight',
+        'minHeightPx',
+        'headingLineHeight',
+        'bodySize',
+        'bodySizePx',
+        'bodyLineHeight',
+      ],
       weight: 98,
     },
     {
@@ -866,7 +927,8 @@ export const manifest = defineModuleManifest({
       category: 'content',
       contexts: ['cms'],
       fields: { heading: { type: 'richtext', label: 'Heading' } },
-      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'headingWeight'],
+      // R19A (T236): the row titles' size and weight.
+      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'headingWeight', 'titleSize', 'titleSizePx', 'titleLineHeight'],
       weight: 99,
     },
     {
@@ -896,7 +958,7 @@ export const manifest = defineModuleManifest({
       category: 'content',
       contexts: ['cms'],
       fields: { quote: { type: 'richtext', label: 'Quote' } },
-      responsiveFields: ['margin', 'padding', 'border'],
+      responsiveFields: ['margin', 'padding', 'border', 'quoteSize', 'quoteSizePx'],
       weight: 110,
     },
     {
@@ -928,6 +990,13 @@ export const manifest = defineModuleManifest({
         'border',
         'headingWeight',
         'align',
+        // R19A (T235).
+        'labelSize',
+        'labelSizePx',
+        // R20F (T319).
+        'labelLineHeight',
+        // R22I.
+        'columnGapPx', 'valueLineHeight',
       ],
       weight: 120,
     },
@@ -1021,6 +1090,8 @@ export const manifest = defineModuleManifest({
         'padding',
         'border',
         'headingWeight',
+        // R22I.
+        'headingLineHeight',
       ],
       weight: 10,
     },
@@ -1051,7 +1122,7 @@ export const manifest = defineModuleManifest({
       // T185: the title weight; T186: the space below an open panel and after an open item.
       responsiveFields: [
         'titleSize', 'titleSizePx', 'titleWeight', 'titlePadding', 'titlePaddingPx', 'panelGap', 'panelGapPx', 'itemGap', 'itemGapPx',
-        'panelPaddingBottom', 'panelPaddingBottomPx', 'openItemGap', 'openItemGapPx', 'margin', 'padding', 'border',
+        'panelPaddingBottom', 'panelPaddingBottomPx', 'openItemGap', 'openItemGapPx', 'margin', 'padding', 'border', 'titleLineHeight',
       ],
       weight: 40,
     },
@@ -1063,8 +1134,9 @@ export const manifest = defineModuleManifest({
       category: 'internal',
       contexts: ['cms'],
       fields: { span: { type: 'number', label: 'Width (1–12)' } },
-      // Feature 163, T159: the column's order in the row per breakpoint; T165: its placement in the row's grid.
-      responsiveFields: ['span', 'stackOrder', 'rowSpan', 'columnStart', 'rowStart', 'margin', 'padding', 'border'],
+      // Feature 163, T159: the column's order in the row per breakpoint; T165: its placement in the row's grid;
+      // R19C (T265): its box's outset past the track.
+      responsiveFields: ['span', 'stackOrder', 'rowSpan', 'columnStart', 'rowStart', 'margin', 'padding', 'border', 'outsetPx'],
       weight: 10,
     },
     {
@@ -1082,13 +1154,15 @@ export const manifest = defineModuleManifest({
     // `slides` (contracts/blocks.md, research R-12).
     {
       name: 'cms.CarouselImage',
-      translatable: [{ path: 'image.alt' }, { path: 'caption', format: 'tiptap' }],
+      // R19B (T249): the read-more label is prose too.
+      translatable: [{ path: 'image.alt' }, { path: 'caption', format: 'tiptap' }, { path: 'moreLabel' }],
       labelKey: 'blocks.carouselImage.label',
       descriptionKey: 'blocks.carouselImage.description',
       category: 'internal',
       contexts: ['cms'],
       fields: {},
-      // Feature 163, T188: the caption's weight per breakpoint too.
+      // Feature 163, T188: the caption's weight per breakpoint too. R19B (T249, T250): the caption's
+      // padding and the read-more label's size.
       responsiveFields: ['captionSize', 'captionSizePx', 'captionWeight'],
       weight: 30,
     },
@@ -1105,7 +1179,13 @@ export const manifest = defineModuleManifest({
       category: 'internal',
       contexts: ['cms'],
       fields: {},
-      responsiveFields: ['buttons', 'buttonsFullWidth'],
+      // R20F (T311, T312): the title's and the text's type, the space after a hanging icon.
+      responsiveFields: [
+        'buttons', 'buttonsFullWidth',
+        'titleSize', 'titleSizePx', 'titleLineHeight', 'bodySize', 'bodySizePx', 'bodyLineHeight',
+        // R22I.
+        'columnGapPx',
+      ],
       weight: 40,
     },
     {
@@ -1128,7 +1208,8 @@ export const manifest = defineModuleManifest({
       category: 'internal',
       contexts: ['cms'],
       fields: {},
-      responsiveFields: [],
+      // R19B (T247, T248): the card's padding, the title's size and the icon button's size per breakpoint.
+      responsiveFields: ['titleSize', 'titleSizePx'],
       weight: 60,
     },
     {
