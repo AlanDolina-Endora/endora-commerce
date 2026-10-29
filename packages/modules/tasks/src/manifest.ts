@@ -308,7 +308,8 @@ export const manifest = defineModuleManifest({
   /**
    * The e-mails this module sends (R-17, R-18). Their default subject and body
    * are pushed into `emailDefaultsPort` from an ungated boot hook; the list in
-   * the digest is one preformatted variable because the body tree has no loop.
+   * the digest loops over the Tasks with `{{for}}`; `taskList` is still sent
+   * because it is the variable the manifest declares (T073).
    */
   transactionalEmails: [
     {
