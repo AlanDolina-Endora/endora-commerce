@@ -162,6 +162,24 @@ describe('ReferenceField — the trigger table is the `kinds` prop', () => {
     await waitFor(() => expect(storedText(field())).toBe(`see [[task:${TASK_ID}]] `));
   });
 
+  it('never shrinks a suggestion’s number for its title: the title is what truncates (165 T095)', async () => {
+    // jsdom lays nothing out, so the flex contract is what is held: the label
+    // (the record's number, what the chip shows) keeps its width; the sublabel (the title) may shrink to nothing and truncates.
+    const long = 'A very long Task title that goes on and on well past the width of any popup list';
+    searchDocuments.mockResolvedValue({ groups: [{ kind: 'task', items: [{ id: TASK_ID, label: 'TSK-000042', sublabel: long }] }] });
+    mount(<Harness />);
+    await userEvent.type(field(), '@@');
+    const option = within(await screen.findByRole('listbox', { name: core('references.suggest.title.document') })).getByRole(
+      'option',
+    );
+    const number = within(option).getByText('TSK-000042');
+    expect(number).toHaveClass('shrink-0');
+    expect(number).not.toHaveClass('min-w-0');
+    const title = within(option).getByText(long);
+    expect(title).toHaveClass('min-w-0', 'truncate');
+    expect(title).not.toHaveClass('shrink-0');
+  });
+
   it('shows only the groups the adapter answers — a group it leaves out is not offered', async () => {
     searchDocuments.mockResolvedValue({ groups: [{ kind: 'task', items: [{ id: TASK_ID, label: 'TSK-000042' }] }] });
     mount(<Harness />);
