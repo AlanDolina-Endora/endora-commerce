@@ -13,6 +13,7 @@ import { cmsSocialMetadata } from '../lib/seo/cms-share-metadata';
 import { cmsRenderLocation, type PageSearchParams } from '../lib/page-builder/render-location';
 import { seo } from './seo';
 import { LocalizedLink } from '../lib/i18n/localized-link';
+import { localizedAlternates } from '../lib/i18n/navigation';
 
 /**
  * Indexable (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010/FR-012). The
@@ -28,13 +29,15 @@ export async function generateMetadata(): Promise<Metadata> {
   const { ctx } = await getServerContext();
   const { cmsPageSlug } = await getHomepageConfig(ctx);
   const cmsPage = cmsPageSlug ? await getCmsPageBySlug(cmsPageSlug, ctx).catch(() => null) : null;
-  if (!cmsPage) return { alternates: { canonical: seo.route } };
-  const social = cmsSocialMetadata(cmsPage, seo.route);
+  // Feature 167 — canonical under the language prefix, hreflang alternates, x-default.
+  const alternates = await localizedAlternates(seo.route);
+  if (!cmsPage) return { alternates: { ...alternates, canonical: alternates.canonical } };
+  const social = cmsSocialMetadata(cmsPage, alternates.canonical);
   return {
     title: social.title,
     description: cmsPage.meta.description ?? undefined,
     keywords: cmsPage.meta.keywords ?? undefined,
-    alternates: { canonical: seo.route },
+    alternates: { ...alternates, canonical: alternates.canonical },
     openGraph: social.openGraph,
     twitter: social.twitter,
   };

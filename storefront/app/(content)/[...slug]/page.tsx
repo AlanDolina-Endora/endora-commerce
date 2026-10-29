@@ -13,7 +13,7 @@ import { cmsSocialMetadata } from '../../../lib/seo/cms-share-metadata';
 import { canonicalPath } from '../../../lib/seo/route-seo';
 import { cmsRenderLocation, type PageSearchParams } from '../../../lib/page-builder/render-location';
 import { seo } from './seo';
-import { localePermanentRedirect } from '../../../lib/i18n/navigation';
+import { localePermanentRedirect, localizedAlternates } from '../../../lib/i18n/navigation';
 
 interface PageProps {
   params: Promise<{ slug: string[] }>;
@@ -44,15 +44,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   // R19D: the canonical address is the page's public path, which differs from
   // the request for the flat slug of a nested page (that request redirects).
   const canonical = canonicalPath(seo.route, { slug: publicPath(page, path).split('/') });
-  // Feature 163 (FR-033, FR-034): the sharing card — image, locale and its
-  // alternates. No `alternates.languages`: there are no per-language URLs.
-  const social = cmsSocialMetadata(page, canonical);
+  // Feature 167 — the same page under every channel language's prefix: canonical in
+  // the current language, hreflang alternates and x-default (url-shape §8).
+  const alternates = await localizedAlternates(canonical);
+  // Feature 163 (FR-033, FR-034): the sharing card — image, locale and its alternates.
+  const social = cmsSocialMetadata(page, alternates.canonical);
   return {
     title: social.title,
     description: page.meta.description ?? undefined,
     keywords: page.meta.keywords ?? undefined,
     // Indexable (FR-010/FR-012).
-    alternates: { canonical },
+    alternates: { ...alternates, canonical: alternates.canonical },
     openGraph: social.openGraph,
     twitter: social.twitter,
   };

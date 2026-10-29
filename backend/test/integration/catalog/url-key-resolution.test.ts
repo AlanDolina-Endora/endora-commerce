@@ -422,7 +422,7 @@ describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
       });
       expect(res.statusCode, res.body).toBe(200);
       return (res.json() as {
-        data: { slug: string; paths: { canonical: string; alternates: Array<{ languageCode: string; path: string }> } };
+        data: { slug: string; paths: { canonical: string; alternates: Array<{ languageCode: string; path: string }>; xDefault: string } };
       }).data;
     };
 
@@ -434,6 +434,23 @@ describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
       { languageCode: 'pl-PL', path: `/pl/p/${k('klucz')}` },
     ]);
     expect((await pdp(c2, 'pl-PL')).paths.canonical).toBe(`/pl/p/${k('klucz-c2')}`);
+    // Feature 167 (url-shape §8) — x-default is the unprefixed URL of the default
+    // language's key, in both setting states.
+    expect(atC1pl.paths.xDefault).toBe(`/p/${k('wrench')}`);
+    await sql(`update sales_channels set prefix_default_language = false where id = ?`, [c1.id]);
+    await h.salesChannels.cache.invalidateAll();
+    try {
+      const off = await pdp(c1, 'en-US');
+      expect(off.paths.canonical).toBe(`/p/${k('wrench')}`);
+      expect([...off.paths.alternates].sort((a, b) => a.languageCode.localeCompare(b.languageCode))).toEqual([
+        { languageCode: 'en-US', path: `/p/${k('wrench')}` },
+        { languageCode: 'pl-PL', path: `/pl/p/${k('klucz')}` },
+      ]);
+      expect(off.paths.xDefault).toBe(`/p/${k('wrench')}`);
+    } finally {
+      await sql(`update sales_channels set prefix_default_language = true where id = ?`, [c1.id]);
+      await h.salesChannels.cache.invalidateAll();
+    }
     expect((await pdp(c1, 'en-US')).slug).toBe(k('wrench'));
 
     // An alternate is listed only where the product is available to the anonymous audience.
