@@ -326,6 +326,23 @@ describe('PageEditor breadcrumb settings (feature 163)', () => {
     });
   });
 
+  // R21H (T355): the trail over the first section, off by default (a stored page without the field reads off).
+  it('shows "Show the breadcrumbs over the first section" off and saves it on', async () => {
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({ data: edited } as never);
+    renderEdited();
+    await screen.findByRole('heading', { level: 1, name: 'Edited page' });
+
+    const settings = screen.getByRole('complementary', { name: shell('settings') });
+    const overlay = within(settings).getByRole('checkbox', { name: copy('pageEditor.breadcrumbs.overlay') });
+    expect((overlay as HTMLInputElement).checked).toBe(false);
+    expect(within(settings).getByText(copy('pageEditor.breadcrumbs.overlayHelp'))).toBeTruthy();
+    fireEvent.click(overlay);
+    fireEvent.click(screen.getByRole('button', { name: copy('common.save') }));
+
+    await waitFor(() => expect(patch).toHaveBeenCalled());
+    expect(patch.mock.calls[0]![1]).toMatchObject({ breadcrumbsOverlay: true });
+  });
+
   it('offers neither the page itself nor its descendants as its parent', async () => {
     renderEdited();
     await screen.findByRole('heading', { level: 1, name: 'Edited page' });
@@ -391,8 +408,44 @@ describe('PageEditor breadcrumb settings (feature 163)', () => {
     }
   });
 
+  /**
+   * Feature 163 R19D (T286): "Include the parent's path in the address". Off,
+   * the address is the flat slug, as for every page stored before the option;
+   * on, the editor shows the address under the parent's path and saves the
+   * option.
+   */
+  it('shows the address under the parent path once the page includes it, and saves the option', async () => {
+    const read = apiClient.get as unknown as { getMockImplementation(): ((path: string) => Promise<unknown>) | undefined };
+    const fallback = read.getMockImplementation()!;
+    vi.spyOn(apiClient, 'get').mockImplementation(((path: string) => {
+      if (path === '/api/v1/admin/cms/pages/root-1') {
+        return Promise.resolve({
+          data: { ...stored, id: 'root-1', name: 'Client zone', slug: 'client-zone', parentPageId: null, parentPathInUrl: false },
+        });
+      }
+      return fallback(path);
+    }) as never);
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({ data: edited } as never);
+    renderEdited();
+    await screen.findByRole('heading', { level: 1, name: 'Edited page' });
+
+    const settings = screen.getByRole('complementary', { name: shell('settings') });
+    expect(within(settings).getByText('/edited')).toBeTruthy();
+    const nested = within(settings).getByRole('checkbox', { name: copy('pageEditor.parentPathInUrl') });
+    expect((nested as HTMLInputElement).checked).toBe(false);
+
+    fireEvent.click(nested);
+    expect(await within(settings).findByText('/client-zone/edited')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: copy('common.save') }));
+    await waitFor(() => expect(patch).toHaveBeenCalled());
+    expect(patch.mock.calls[0]![1]).toMatchObject({ parentPageId: 'root-1', parentPathInUrl: true });
+  });
+
   it('ships every breadcrumb label in both languages, translated', () => {
     const keys = [
+      'pageEditor.parentPathInUrl',
+      'pageEditor.parentPathInUrlHelp',
       'pageEditor.breadcrumbs.title',
       'pageEditor.breadcrumbs.parent',
       'pageEditor.breadcrumbs.parentHelp',

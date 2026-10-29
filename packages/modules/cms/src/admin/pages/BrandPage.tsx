@@ -20,6 +20,7 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   ColorPicker,
   Input,
   Label,
@@ -141,6 +142,66 @@ function NumberField(props: {
       />
     </div>
   );
+}
+
+/**
+ * R20F (T322): an optional factor — empty means 1 and stores nothing. The text
+ * typed is kept as it is while typing (so "1." or an empty field never jumps
+ * back), and the draft takes the number once it is one.
+ */
+function FactorField(props: {
+  id: string;
+  label: string;
+  value: number | undefined;
+  onChange: (value: number | undefined) => void;
+  disabled: boolean;
+  /** R21H: the same field for an optional width in px (defaults: a factor, 0.5–2). */
+  min?: number;
+  max?: number;
+  step?: number;
+}): ReactElement {
+  const [text, setText] = useState(props.value === undefined ? '' : String(props.value));
+  useEffect(() => {
+    setText((current) => {
+      const parsed = current.trim() === '' ? undefined : Number(current);
+      return parsed === props.value ? current : props.value === undefined ? '' : String(props.value);
+    });
+  }, [props.value]);
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={props.id}>{props.label}</Label>
+      <Input
+        id={props.id}
+        type="number"
+        inputMode="decimal"
+        value={text}
+        min={props.min ?? 0.5}
+        max={props.max ?? 2}
+        step={props.step ?? 0.01}
+        disabled={props.disabled}
+        onChange={(e): void => {
+          setText(e.target.value);
+          props.onChange(e.target.value.trim() === '' ? undefined : Number(e.target.value));
+        }}
+      />
+    </div>
+  );
+}
+
+type TierScale = NonNullable<CmsBrandTokens['tierScale']>;
+
+/**
+ * One tier-scale option set or removed; an emptied scale is removed whole, so
+ * a brand that never chose one stores nothing. R21H: the fluid end goes with
+ * the fluid sizes.
+ */
+function setTierScale<K extends keyof TierScale>(draft: CmsBrandTokens, key: K, value: TierScale[K] | undefined): void {
+  const next: TierScale = { ...(draft.tierScale ?? {}) };
+  if (value === undefined) delete next[key];
+  else next[key] = value;
+  if (key === 'fluidDesktop' && value === undefined) delete next.fluidUntilPx;
+  if (Object.keys(next).length > 0) draft.tierScale = next;
+  else delete draft.tierScale;
 }
 
 function BrandCard(props: { title: string; description?: string; children: ReactNode }): ReactElement {
@@ -580,6 +641,54 @@ export function BrandPage(): ReactNode {
                     onChange={(value): void => edit((d) => void (d.layout[key] = value))}
                   />
                 ))}
+              </div>
+              {/* R20F (T322): the type and spacing scale on a tablet and a small desktop; empty is 1. */}
+              <p className="text-sm text-muted-foreground">{t('brand.layout.scaleHint')}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(['tablet', 'smallDesktop'] as const).map((tier) => (
+                  <FactorField
+                    key={tier}
+                    id={`brand-tier-scale-${tier}`}
+                    label={t(tier === 'tablet' ? 'brand.layout.tabletScale' : 'brand.layout.smallDesktopScale')}
+                    value={draft.tierScale?.[tier]}
+                    disabled={disabled}
+                    onChange={(value): void => edit((d) => setTierScale(d, tier, value))}
+                  />
+                ))}
+              </div>
+              {/* R21H (T351, T352): fluid desktop sizes and scaled buttons. */}
+              <p className="text-sm text-muted-foreground">{t('brand.layout.tierHint')}</p>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    id="brand-tier-scale-fluidDesktop"
+                    checked={draft.tierScale?.fluidDesktop === true}
+                    disabled={disabled}
+                    onChange={(event): void => edit((d) => setTierScale(d, 'fluidDesktop', event.target.checked ? true : undefined))}
+                  />
+                  {t('brand.layout.fluidDesktop')}
+                </label>
+                {draft.tierScale?.fluidDesktop === true ? (
+                  <FactorField
+                    id="brand-tier-scale-fluidUntilPx"
+                    label={t('brand.layout.fluidUntilPx')}
+                    value={draft.tierScale?.fluidUntilPx}
+                    min={1025}
+                    max={3840}
+                    step={1}
+                    disabled={disabled}
+                    onChange={(value): void => edit((d) => setTierScale(d, 'fluidUntilPx', value))}
+                  />
+                ) : null}
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    id="brand-tier-scale-buttons"
+                    checked={draft.tierScale?.buttons === true}
+                    disabled={disabled}
+                    onChange={(event): void => edit((d) => setTierScale(d, 'buttons', event.target.checked ? true : undefined))}
+                  />
+                  {t('brand.layout.scaleButtons')}
+                </label>
               </div>
             </BrandCard>
           </div>

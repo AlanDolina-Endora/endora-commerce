@@ -145,6 +145,8 @@ export {
 export { InlineRichTextEditor, inlineRichTextExtensions } from './components/InlineRichTextEditor.js';
 export type { InlineRichTextEditorProps } from './components/InlineRichTextEditor.js';
 export * from './fields/inline-rich-text-field.js';
+// R20E (T296): the button look fields, shared by every embedded button's editor (the admin's ButtonSpec field).
+export { BUTTON_LOOK_FIELDS } from './fields/shared-fields.js';
 
 /**
  * The CMS renderer map — **the React half only**, keyed by namespaced block name
@@ -198,7 +200,7 @@ export const defaultPageBuilderConfig: Config = {
       ...(Column as unknown as ComponentConfig),
       contexts: ['cms'],
       // T159: the column's order in the row per breakpoint; T165: its placement in the row's grid.
-      responsiveFields: ['span', 'stackOrder', 'rowSpan', 'columnStart', 'rowStart', 'margin', 'padding', 'border'],
+      responsiveFields: ['span', 'stackOrder', 'rowSpan', 'columnStart', 'rowStart', 'margin', 'padding', 'border', 'outsetPx'],
     }),
     'cms.Text': definePageBuilderComponent({
       ...(Text as unknown as ComponentConfig),
@@ -208,22 +210,24 @@ export const defaultPageBuilderConfig: Config = {
     'cms.RichContent': definePageBuilderComponent({
       ...(withHideOn(RichContent as unknown as ComponentConfig) as ComponentConfig),
       contexts: ['cms'],
-      responsiveFields: ['textMaxWidth', 'textMaxWidthPx', 'margin', 'padding', 'border'],
+      responsiveFields: ['textMaxWidth', 'textMaxWidthPx', 'margin', 'padding', 'border', 'textSize', 'textSizePx', 'listLineHeight'],
     }),
     'cms.Heading': definePageBuilderComponent({
       ...(Heading as unknown as ComponentConfig),
       contexts: ['cms'],
-      responsiveFields: ['size', 'fontSize', 'fontWeight', 'align', 'lineHeight', 'margin', 'padding', 'border'],
+      responsiveFields: ['size', 'fontSize', 'fontWeight', 'align', 'lineHeight', 'margin', 'padding', 'border', 'textMaxWidth', 'textMaxWidthPx'],
     }),
     'cms.Button': definePageBuilderComponent({
       ...(Button as unknown as ComponentConfig),
       contexts: ['cms'],
+      // R19B (T246): an icon-only button's size per breakpoint.
       responsiveFields: ['button', 'align', 'fullWidth', 'margin', 'padding', 'border'],
     }),
     'cms.Image': definePageBuilderComponent({
       ...(Image as unknown as ComponentConfig),
       contexts: ['cms'],
-      responsiveFields: ['widthMode', 'widthPx', 'ratio', 'align', 'margin', 'padding', 'border'],
+      // R19B (T251): the caption's placement, size and alignment per breakpoint.
+      responsiveFields: ['widthMode', 'widthPx', 'ratio', 'align', 'captionPlacement', 'captionSize', 'captionSizePx', 'captionAlign', 'captionMaxWidthPx', 'margin', 'padding', 'border'],
     }),
     'cms.Icons': definePageBuilderComponent({
       ...(Icons as unknown as ComponentConfig),
@@ -259,6 +263,16 @@ export const defaultPageBuilderConfig: Config = {
         'headingWeight',
         'align',
         'titleWeight',
+        // R19A (T224, T225).
+        'titleLineHeight',
+        'bodySize',
+        'bodySizePx',
+        'bodyLineHeight',
+        // R20F (T317).
+        'rowGapPx',
+        'listLineHeight',
+        // R22I.
+        'iconPosition',
       ],
     }),
     'cms.Hero': definePageBuilderComponent({
@@ -283,28 +297,73 @@ export const defaultPageBuilderConfig: Config = {
         'border',
         'titleWeight',
         'align',
+        // R19A (T227–T229).
+        'subheadingLineHeight',
+        'subheadingMaxWidth',
+        'subheadingMaxWidthPx',
+        'statementLineHeight',
+        'statementMaxWidth',
+        'statementMaxWidthPx',
+        'bodySize',
+        'bodySizePx',
+        'bodyLineHeight',
+        'bodyMaxWidth',
+        'bodyMaxWidthPx',
+        'gapsPx',
+        'mediaSpace',
+        'mediaSpacePx',
+        // R20E.
+        'titleLineHeight',
+        'eyebrowSizePx',
+        'eyebrowLineHeight',
+        'proofCaptionPlacement',
+        'proofCaptionMaxWidthPx',
+        // R23 (T436).
+        'eyebrowSize',
       ],
     }),
     // Feature 163 (T047) — the composition blocks of US3 (contracts/blocks.md).
     'cms.MediaText': definePageBuilderComponent({
       ...(MediaText as unknown as ComponentConfig),
       contexts: ['cms'],
-      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'featureTitleSize', 'featureTitleSizePx', 'buttons', 'buttonsFullWidth', 'headingWeight', 'featureTitleWeight'],
+      responsiveFields: [
+        'headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'featureTitleSize', 'featureTitleSizePx', 'buttons', 'buttonsFullWidth', 'headingWeight', 'featureTitleWeight',
+        // R20F (T315): the text size.
+        'bodySize', 'bodySizePx', 'bodyLineHeight', 'headingLineHeight',
+        // R22I.
+        'columnGapPx', 'featureBodySize', 'featureBodySizePx',
+      ],
     }),
     'cms.BackgroundPanel': definePageBuilderComponent({
       ...(BackgroundPanel as unknown as ComponentConfig),
       contexts: ['cms'],
+      // R20F (T316): the text box's margin and padding.
       responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'buttons', 'buttonsFullWidth', 'minHeight', 'headingWeight'],
     }),
     'cms.CtaCard': definePageBuilderComponent({
       ...(CtaCard as unknown as ComponentConfig),
       contexts: ['cms'],
-      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'buttons', 'buttonsFullWidth', 'headingWeight'],
+      // R20F (T318): the card's padding and the image's columns.
+      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'buttons', 'buttonsFullWidth', 'headingWeight', 'imageColumns', 'bodySize', 'bodySizePx', 'textMaxWidth', 'textMaxWidthPx'],
     }),
     'cms.Statement': definePageBuilderComponent({
       ...(Statement as unknown as ComponentConfig),
       contexts: ['cms'],
-      responsiveFields: ['headingSize', 'headingSizePx', 'textMaxWidth', 'textMaxWidthPx', 'headingWeight', 'align'],
+      responsiveFields: [
+        'headingSize',
+        'headingSizePx',
+        'textMaxWidth',
+        'textMaxWidthPx',
+        'headingWeight',
+        'align',
+        // R19A (T231).
+        'minHeight',
+        'minHeightPx',
+        'headingLineHeight',
+        'bodySize',
+        'bodySizePx',
+        'bodyLineHeight',
+      ],
     }),
     'cms.LogoStrip': definePageBuilderComponent({
       ...(LogoStrip as unknown as ComponentConfig),
@@ -314,7 +373,7 @@ export const defaultPageBuilderConfig: Config = {
     'cms.Testimonial': definePageBuilderComponent({
       ...(Testimonial as unknown as ComponentConfig),
       contexts: ['cms'],
-      responsiveFields: ['margin', 'padding', 'border'],
+      responsiveFields: ['margin', 'padding', 'border', 'quoteSize', 'quoteSizePx'],
     }),
     'cms.Stats': definePageBuilderComponent({
       ...(Stats as unknown as ComponentConfig),
@@ -334,6 +393,13 @@ export const defaultPageBuilderConfig: Config = {
         'border',
         'headingWeight',
         'align',
+        // R19A (T235).
+        'labelSize',
+        'labelSizePx',
+        // R20F (T319).
+        'labelLineHeight',
+        // R22I.
+        'columnGapPx', 'valueLineHeight',
       ],
     }),
     'cms.AnnouncementBar': definePageBuilderComponent({
@@ -379,12 +445,12 @@ export const defaultPageBuilderConfig: Config = {
     'catalog.ProductGrid': definePageBuilderComponent({
       ...(ProductGrid as unknown as ComponentConfig),
       contexts: ['cms'],
-      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'columns', 'gap', 'view', 'margin', 'padding', 'border', 'equalItemHeight', 'gapPx', 'headingWeight'],
+      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'columns', 'gap', 'view', 'margin', 'padding', 'border', 'equalItemHeight', 'gapPx', 'headingWeight', 'leadSize', 'leadSizePx', 'headingLineHeight'],
     }),
     'catalog.ProductSlider': definePageBuilderComponent({
       ...(ProductSlider as unknown as ComponentConfig),
       contexts: ['cms'],
-      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'slidesPerView', 'gap', 'gapPx', 'controlsPlacement', 'controlsAlign', 'margin', 'padding', 'border', 'headingWeight'],
+      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'slidesPerView', 'gap', 'gapPx', 'controlsPlacement', 'controlsAlign', 'margin', 'padding', 'border', 'headingWeight', 'leadSize', 'leadSizePx', 'headingLineHeight'],
     }),
     'catalog.CategoryList': definePageBuilderComponent({
       ...(CategoryList as unknown as ComponentConfig),
@@ -400,7 +466,8 @@ export const defaultPageBuilderConfig: Config = {
     'cms.LinkList': definePageBuilderComponent({
       ...(LinkList as unknown as ComponentConfig),
       contexts: ['cms'],
-      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'headingWeight'],
+      // R19A (T236): the row titles' size and weight.
+      responsiveFields: ['headingSize', 'headingSizePx', 'headingMaxWidth', 'headingMaxWidthPx', 'headingWeight', 'titleSize', 'titleSizePx', 'titleLineHeight'],
     }),
     // Feature 163 (T069) — declared by the `blog` manifest, rendered from here (research R-15).
     'blog.LatestPosts': definePageBuilderComponent({
@@ -412,6 +479,8 @@ export const defaultPageBuilderConfig: Config = {
         'cardPadding', 'cardPaddingPx', 'cardTextPadding', 'cardTextPaddingPx', 'imageRatio', 'cardTitleSize', 'cardTitleSizePx', 'cardTitleWeight',
         'leadSize', 'leadSizePx', 'headerButtonPlacement', 'headerButtonFullWidth',
         'headingWeight',
+        // R22I.
+        'headingLineHeight',
       ],
     }),
     // Feature 163 (T054) — the Carousel and its item blocks (research R-12).
@@ -435,6 +504,8 @@ export const defaultPageBuilderConfig: Config = {
         'padding',
         'border',
         'headingWeight',
+        // R22I.
+        'headingLineHeight',
       ],
     }),
     'cms.Slide': definePageBuilderComponent({
@@ -446,12 +517,19 @@ export const defaultPageBuilderConfig: Config = {
       ...(CarouselImage as unknown as ComponentConfig),
       contexts: ['cms'],
       // Feature 163, T144: the caption's size per breakpoint; T188: its weight.
+      // R19B (T249, T250): the caption's padding and the read-more label's size per breakpoint.
       responsiveFields: ['captionSize', 'captionSizePx', 'captionWeight'],
     }),
     'cms.CarouselSplit': definePageBuilderComponent({
       ...(CarouselSplit as unknown as ComponentConfig),
       contexts: ['cms'],
-      responsiveFields: ['buttons', 'buttonsFullWidth'],
+      // R20F (T311, T312): the title's and the text's type, the space after a hanging icon.
+      responsiveFields: [
+        'buttons', 'buttonsFullWidth',
+        'titleSize', 'titleSizePx', 'titleLineHeight', 'bodySize', 'bodySizePx', 'bodyLineHeight',
+        // R22I.
+        'columnGapPx',
+      ],
     }),
     'cms.LinkTile': definePageBuilderComponent({
       ...(LinkTile as unknown as ComponentConfig),
@@ -462,6 +540,8 @@ export const defaultPageBuilderConfig: Config = {
     'cms.DownloadTile': definePageBuilderComponent({
       ...(DownloadTile as unknown as ComponentConfig),
       contexts: ['cms'],
+      // R19B (T247, T248): the card's padding, the title's size and the icon button's size per breakpoint.
+      responsiveFields: ['titleSize', 'titleSizePx'],
     }),
     'cms.Tabs': definePageBuilderComponent({
       ...(Tabs as unknown as ComponentConfig),
@@ -475,7 +555,7 @@ export const defaultPageBuilderConfig: Config = {
       // T185: the title weight; T186: the space below an open panel and after an open item.
       responsiveFields: [
         'titleSize', 'titleSizePx', 'titleWeight', 'titlePadding', 'titlePaddingPx', 'panelGap', 'panelGapPx', 'itemGap', 'itemGapPx',
-        'panelPaddingBottom', 'panelPaddingBottomPx', 'openItemGap', 'openItemGapPx', 'margin', 'padding', 'border',
+        'panelPaddingBottom', 'panelPaddingBottomPx', 'openItemGap', 'openItemGapPx', 'margin', 'padding', 'border', 'titleLineHeight',
       ],
     }),
     'cms.RawHtml': definePageBuilderComponent({

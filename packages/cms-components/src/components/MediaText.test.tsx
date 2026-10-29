@@ -383,7 +383,9 @@ describe('cms.MediaText feature titles: size and weight (T160)', () => {
   it('a size per breakpoint: the token class and the sizes per breakpoint (published)', () => {
     const host = dom([withRow({ featureTitleSize: { base: 'custom', desktop: 'h5' }, featureTitleSizePx: { base: 20 } })]);
     const span = host.querySelector<HTMLElement>('.cmsc-pb-media-text__feature-title-text')!;
-    expect(span.className).toBe('cmsc-pb-media-text__feature-title-text cmsc-t--body cmsc-pb-text-size');
+    // R21H (T350, deliberately changed — standing rule 13): the desktop tier's token carries its line height and weight.
+    expect(span.className).toBe('cmsc-pb-media-text__feature-title-text cmsc-t--body cmsc-pb-text-size cmsc-pb-text-token');
+    expect(span.style.getPropertyValue('--pb-text-lh-lg')).toContain('--cmsb-t-h5-lh');
     expect(span.style.getPropertyValue('--pb-text-size')).toBe('20px');
     expect(span.style.getPropertyValue('--pb-text-size-md')).toBe('20px');
     expect(span.style.getPropertyValue('--pb-text-size-lg')).toContain('--cmsb-t-h5-size');

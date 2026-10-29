@@ -2,7 +2,12 @@
 
 import type { ReactNode } from 'react';
 import { createColorField, type BreakpointTier } from '@endora-commerce/page-builder-core';
-import type { ProductCardTextLine, ProductCardVariant, ProductListingAdditions } from '../../schema/component-types.js';
+import type {
+  ProductCardTextLine,
+  ProductCardVariant,
+  ProductListingAdditions,
+  ProductListingFooterAlign,
+} from '../../schema/component-types.js';
 import { textWeightCss, textWeightField } from '../typography.js';
 import { BUTTON_SPEC_OBJECT_FIELDS, specAtTier } from '../Button.js';
 import { ButtonView } from '../ButtonView.js';
@@ -56,14 +61,34 @@ export const PRODUCT_LISTING_CARD_FIELDS = {
   ctaLabel: { type: 'text' as const, label: 'Card link label' },
 };
 
-/** T168: the divider's colour is offered once a line is chosen. */
-export function withoutUnusedCardFields(fields: Record<string, unknown>, props: { cardDivider?: unknown }): Record<string, unknown> {
+/**
+ * T168: the divider's colour is offered once a line is chosen; R19B (T244) the
+ * footer button's alignment once that button has a label.
+ */
+export function withoutUnusedCardFields(
+  fields: Record<string, unknown>,
+  props: { cardDivider?: unknown; footerButton?: { label?: unknown } | undefined },
+): Record<string, unknown> {
   if (props.cardDivider !== 'line') delete fields['cardDividerColor'];
+  const label = props.footerButton?.label;
+  if (typeof label !== 'string' || label.trim() === '') delete fields['footerButtonAlign'];
   return fields;
 }
 
+const FOOTER_ALIGNS: readonly ProductListingFooterAlign[] = ['start', 'center', 'end'];
+
 export const PRODUCT_LISTING_FOOTER_FIELDS = {
   footerButton: { type: 'object' as const, label: 'Button below the products', objectFields: BUTTON_SPEC_OBJECT_FIELDS },
+  // R19B (T244): the button's alignment; Left is today's.
+  footerButtonAlign: {
+    type: 'select' as const,
+    label: 'Button alignment',
+    options: [
+      { label: 'Left', value: 'start' },
+      { label: 'Center', value: 'center' },
+      { label: 'Right', value: 'end' },
+    ],
+  },
 };
 
 /** The card style a listing renders: the stored one, else the listing's own default. */
@@ -114,8 +139,10 @@ export function ProductListingFooter({
 }): ReactNode {
   const button = props.footerButton;
   if (!button || !button.label?.trim()) return null;
+  // R19B (T244): centred or at the end; the start (unset) is today's.
+  const align = FOOTER_ALIGNS.includes(props.footerButtonAlign as ProductListingFooterAlign) ? props.footerButtonAlign : 'start';
   return (
-    <div className="cmsc-pb-product-listing__footer cmsc-pb-actions">
+    <div className={`cmsc-pb-product-listing__footer cmsc-pb-actions${align !== 'start' ? ` cmsc-pb-product-listing__footer--${align}` : ''}`}>
       <ButtonView button={tier !== null ? specAtTier(button, tier) : button} />
     </div>
   );

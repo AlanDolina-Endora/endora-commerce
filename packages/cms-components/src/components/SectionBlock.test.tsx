@@ -75,18 +75,20 @@ describe('cms.Section at the top level', () => {
   });
 
   // T148 (deliberately changed, standing rule 13): the overlap joins the Responsive tab.
-  it('puts space above, space below, content position and overlap on the Responsive tab, and nothing else', () => {
+  // R19C (T260; deliberately changed, standing rule 13): so does the width. R23 (T449): the outset (T261) was removed.
+  it('puts the width, space above, space below, content position and overlap on the Responsive tab, and nothing else', () => {
     const fields = (sectionConfig?.fields ?? {}) as Record<string, Field>;
     const responsive = Object.entries(fields)
       .filter(([, field]) => isResponsiveField(field))
       .map(([name]) => name)
       .sort();
-    expect(responsive).toEqual(['contentPosition', 'overlap', 'spaceBottom', 'spaceTop']);
+    expect(responsive).toEqual(['contentPosition', 'overlap', 'spaceBottom', 'spaceTop', 'width']);
     expect([...getResponsiveFields(sectionConfig as ComponentConfig)].sort()).toEqual([
       'contentPosition',
       'overlap',
       'spaceBottom',
       'spaceTop',
+      'width',
     ]);
     expect(fields['contentPosition']?.type).toBe('select');
   });
@@ -107,6 +109,27 @@ describe('cms.Section at the top level', () => {
     expect(await resolve({})).not.toContain('customMaxWidthPx');
     expect(await resolve({ width: 'wide' })).not.toContain('customMaxWidthPx');
     expect(await resolve({ width: 'custom' })).toContain('customMaxWidthPx');
+  });
+
+  // R19C (T260): with a width per breakpoint, a setting shows when any breakpoint's width takes it.
+  it('shows the custom max width and the content width when any breakpoint\'s width takes them; no outset (R23)', async () => {
+    const resolve = async (props: Record<string, unknown>): Promise<string[]> =>
+      Object.keys(
+        await sectionConfig!.resolveFields!({ props: { ...defaults, id: 's-1', ...props } } as never, {
+          fields: sectionConfig!.fields,
+          lastFields: sectionConfig!.fields,
+          changed: {},
+          lastData: null,
+          metadata: {},
+          appState: {},
+          parent: { type: 'root', props: { id: 'root' } },
+        } as never),
+      );
+    expect(await resolve({})).not.toContain('outsetPx');
+    expect(await resolve({ width: { base: 'bleed', desktop: 'contained' } })).not.toContain('outsetPx');
+    expect(await resolve({ width: { base: 'bleed', desktop: 'contained' } })).toContain('contentWidth');
+    expect(await resolve({ width: { base: 'contained', desktop: 'custom' } })).toContain('customMaxWidthPx');
+    expect(await resolve({ width: { base: 'contained' } })).not.toContain('contentWidth');
   });
 
   it('renders a custom max width from its plain px value', () => {

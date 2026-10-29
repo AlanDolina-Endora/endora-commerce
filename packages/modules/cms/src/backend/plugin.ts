@@ -83,7 +83,7 @@ export interface CmsModuleOptions {
    * module's own Redis entries were dropped. `backend/index.ts` binds it to the
    * EventBus; a composition that passes nothing publishes nothing.
    */
-  publishContentChange?: (change: CmsContentChange) => void;
+  publishContentChange?: (change: CmsContentChange) => void | Promise<void>;
   /**
    * Feature 151 — the Page Builder translation's configuration, resolved per
    * request (settings, credential, model). `backend/index.ts` binds it to the

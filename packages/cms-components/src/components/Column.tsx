@@ -11,6 +11,7 @@ import {
   normalizeResponsive,
   PB_RESPONSIVE_METADATA,
   RESPONSIVE_HIDE_ON_CLASS,
+  SECTION_OUTSET_PX_MAX,
   resolveColumnSpan,
   stackOrderAttributes,
 } from '@endora-commerce/page-builder-core';
@@ -32,6 +33,38 @@ import {
 import { COLUMN_SLOT_EDIT_PROPS } from '../editor/slot-edit-props.js';
 
 const HIDE_ON_FIELD = createHideOnField();
+
+const COLUMN_OUTSET_FIELD = {
+  type: 'number' as const,
+  label: 'Background outset (px)',
+  min: 0,
+  max: SECTION_OUTSET_PX_MAX,
+  step: 1,
+  metadata: PB_RESPONSIVE_METADATA,
+};
+
+/**
+ * R19C (T265): the outset per breakpoint as `--pb-col-outset(-md|-lg)` — or,
+ * for the editor canvas's tier, that tier's as the base — or `null` when it is
+ * unset or zero wherever it would apply.
+ */
+function columnOutsetVars(
+  value: ColumnProps['outsetPx'],
+  tier: ReturnType<typeof usePreviewBreakpointTier> | null,
+): Record<string, string> | null {
+  if (value === undefined || value === null) return null;
+  const responsive = normalizeResponsive<number>(value, 0);
+  const px = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0);
+  const base = px(responsive.base);
+  const tablet = px(responsive.tablet ?? responsive.base);
+  const desktop = px(responsive.desktop ?? responsive.tablet ?? responsive.base);
+  if (tier !== null) {
+    const own = tier === 'desktop' ? desktop : tier === 'tablet' ? tablet : base;
+    return own > 0 ? { '--pb-col-outset': `${own}px` } : null;
+  }
+  if (base === 0 && tablet === 0 && desktop === 0) return null;
+  return { '--pb-col-outset': `${base}px`, '--pb-col-outset-md': `${tablet}px`, '--pb-col-outset-lg': `${desktop}px` };
+}
 
 /**
  * T156 (`specs/163-page-builder-marketing-pages/`): how a column taller than
@@ -180,12 +213,14 @@ function ColumnShell({
   distribute,
   stackOrder,
   placement,
+  outsetPx,
   editing,
   tier,
   dragRef,
   children,
 }: {
   span: ColumnProps['span'];
+  outsetPx?: ColumnProps['outsetPx'];
   hideOn: ColumnProps['hideOn'];
   distribute: ColumnProps['distribute'];
   stackOrder?: ColumnProps['stackOrder'];
@@ -199,16 +234,20 @@ function ColumnShell({
   const order = editing ? null : stackOrderAttributes(stackOrder);
   // T165: published only; nothing for a column one row high at the next free place.
   const place = editing || !placement ? null : columnPlacementAttributes({ span, ...placement });
+  // R19C (T265): the box's outset past the track, per breakpoint (the editor canvas: its tier's).
+  const outset = columnOutsetVars(outsetPx, editing ? tier : null);
+  // R22I (T373): no `align-self` of its own — the Row's `align-items` (stretch unless the Row says otherwise) places it.
   return (
     <div
       ref={dragRef ?? undefined}
-      className={`cmsc-pb-row-col cmsc:min-w-0 cmsc:self-stretch ${RESPONSIVE_HIDE_ON_CLASS}`}
-      style={{ ...columnSpanStyle(span, tier, editing), ...(order?.style ?? {}), ...(place?.style ?? {}) }}
+      className={`cmsc-pb-row-col cmsc:min-w-0 ${RESPONSIVE_HIDE_ON_CLASS}`}
+      style={{ ...columnSpanStyle(span, tier, editing), ...(order?.style ?? {}), ...(place?.style ?? {}), ...(outset ?? {}) }}
       {...hideOnDataAttrs(hideOn)}
       data-pb-editing={editing ? '1' : '0'}
       {...distributeAttr(distribute)}
       {...(order ? { 'data-pb-order': order['data-pb-order'] } : {})}
       {...(place ? { 'data-pb-place': place['data-pb-place'] } : {})}
+      {...(outset ? { 'data-pb-outset': '1' } : {})}
     >
       {children}
     </div>
@@ -226,12 +265,13 @@ const ColumnEditingRender: PuckComponent<ColumnProps> = (props) => {
     rowSpan: _rowSpan,
     columnStart: _columnStart,
     rowStart: _rowStart,
+    outsetPx,
     puck,
     ...box
   } = props;
 
   return (
-    <ColumnShell span={span} hideOn={hideOn} distribute={distribute} editing tier={tier} dragRef={puck?.dragRef}>
+    <ColumnShell span={span} hideOn={hideOn} distribute={distribute} outsetPx={outsetPx} editing tier={tier} dragRef={puck?.dragRef}>
       <BoxStyled previewTier={tier} className="cmsc-pb-column-inner cmsc:h-full cmsc:w-full" {...box}>
         <Content {...COLUMN_SLOT_EDIT_PROPS} className={`${COLUMN_SLOT_EDIT_PROPS.className} ${COLUMN_STACK_CLASS}`} />
       </BoxStyled>
@@ -240,13 +280,14 @@ const ColumnEditingRender: PuckComponent<ColumnProps> = (props) => {
 };
 
 const ColumnPublishedRender: PuckComponent<ColumnProps> = (props) => {
-  const { content: Content, span, hideOn, distribute, stackOrder, rowSpan, columnStart, rowStart, ...box } = props;
+  const { content: Content, span, hideOn, distribute, stackOrder, rowSpan, columnStart, rowStart, outsetPx, ...box } = props;
 
   return (
     <ColumnShell
       span={span}
       hideOn={hideOn}
       distribute={distribute}
+      outsetPx={outsetPx}
       stackOrder={stackOrder}
       placement={{ rowSpan, columnStart, rowStart }}
       editing={false}
@@ -347,6 +388,8 @@ const columnConfig: ComponentConfig<{ props: ColumnProps }> = {
     background: BACKGROUND_FIELD,
     cornerRadius: CORNER_RADIUS_FIELD,
     shadow: SHADOW_FIELD,
+    // R19C (T265): the box reaches past the column on each side, the content padded back (Responsive tab); unset, none.
+    outsetPx: COLUMN_OUTSET_FIELD,
   },
   defaultProps: {
     span: 12,

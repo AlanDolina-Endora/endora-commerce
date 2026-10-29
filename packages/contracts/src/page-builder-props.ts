@@ -6,6 +6,7 @@ import {
   BACKGROUND_SIZE_PERCENT_MAX,
   BACKGROUND_SIZE_PX_MAX,
   COLOR_TOKEN_RE,
+  DESKTOP_FROM_TIERS,
   EMPHASIS_VARIANTS,
   FOCAL_TOKENS,
   HEX_COLOR_RE,
@@ -104,6 +105,9 @@ export type ButtonStyle = z.infer<typeof buttonStyleSchema>;
 export type ButtonFill = z.infer<typeof buttonFillSchema>;
 export type ButtonSize = z.infer<typeof buttonSizeSchema>;
 export type ButtonIconPosition = z.infer<typeof buttonIconPositionSchema>;
+/** R20E (T296): an icon-only button's shape — today's circle, or a pill 1.15 times as wide as it is tall. */
+export const buttonIconOnlyShapeSchema = z.enum(['circle', 'pill']);
+export type ButtonIconOnlyShape = z.infer<typeof buttonIconOnlyShapeSchema>;
 
 export const buttonSpecSchema = z
   .object({
@@ -116,6 +120,13 @@ export const buttonSpecSchema = z
     textColor: colorValueSchema.optional(),
     icon: iconNameSchema.optional(),
     iconPosition: buttonIconPositionSchema.optional(),
+    // R20E (T296): the look options `cms.Button` has had since R19B, on every embedded button too. Unset is today's.
+    /** The outline fill transparent instead of the scheme's background. */
+    transparentOutline: z.boolean().optional(),
+    /** The border's colour. */
+    borderColor: colorValueSchema.optional(),
+    /** An icon-only button's shape. R23 (T447): its px size and a pill's px width were removed (stripped on parse). */
+    iconOnlyShape: buttonIconOnlyShapeSchema.optional(),
   })
   .superRefine((value, ctx) => {
     // An icon-only button is still named for a screen reader: its label is the
@@ -149,6 +160,8 @@ export const responsiveImageSchema = z.object({
   ratio: responsiveSchema(aspectTokenSchema).optional(),
   fit: z.enum(['cover', 'contain']).optional(),
   position: focalTokenSchema.optional(),
+  // R19C (T263): the tier from which the desktop image replaces the mobile one; unset, the tablet tier (768 px), as before.
+  desktopFrom: z.enum(DESKTOP_FROM_TIERS).optional(),
 });
 export type ResponsiveImage = z.infer<typeof responsiveImageSchema>;
 
@@ -172,6 +185,7 @@ export type SectionScheme = z.infer<typeof sectionSchemeSchema>;
  */
 export const SECTION_WIDTHS = ['contained', 'wide', 'full', 'viewport', 'bleed', 'custom'] as const;
 export const sectionWidthSchema = z.enum(SECTION_WIDTHS);
+
 export type SectionWidth = z.infer<typeof sectionWidthSchema>;
 
 /**
@@ -226,6 +240,8 @@ export const sectionBackgroundSchema = z.object({
   decorativeSize: backgroundSizeSchema.optional(),
   decorativeRepeat: backgroundRepeatSchema.optional(),
   decorativePosition: focalTokenSchema.optional(),
+  // R19C (T263): the tier from which the desktop image or video replaces the mobile one; unset, the tablet tier.
+  desktopFrom: z.enum(DESKTOP_FROM_TIERS).optional(),
 });
 export type SectionBackground = z.infer<typeof sectionBackgroundSchema>;
 
@@ -245,7 +261,8 @@ export const sectionSettingsSchema = z.object({
   background: sectionBackgroundSchema.optional(),
   spaceTop: responsiveSchema(spaceValueSchema).default('l'),
   spaceBottom: responsiveSchema(spaceValueSchema).default('l'),
-  width: sectionWidthSchema.default('contained'),
+  // R19C (T260): per breakpoint; a stored single width is read as it is.
+  width: responsiveSchema(sectionWidthSchema).default('contained'),
   // With `full`, `viewport` or `bleed` only: the content frame inside that background (T124).
   contentWidth: sectionContentWidthSchema.optional(),
   // One px value, on the editor's main tab with the custom width (T117).

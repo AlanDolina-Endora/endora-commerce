@@ -314,6 +314,20 @@ export function ResponsiveImageControl({ value, onChange, readOnly }: Responsive
         onUrl={(mobileSrc): void => update({ mobileSrc })}
         onAsset={(mobileAssetId): void => update({ mobileAssetId })}
       />
+      {/* R19C (T263): with a mobile image, the breakpoint from which the desktop image takes over; the default writes nothing. */}
+      {(image.mobileSrc ?? '').trim() !== '' || (image.mobileAssetId ?? '') !== '' ? (
+        <Labelled label={t('pageBuilder.imageField.desktopFrom')}>
+          <select
+            className={inputClassName}
+            disabled={readOnly === true}
+            value={image.desktopFrom === 'desktop' ? 'desktop' : 'tablet'}
+            onChange={(e): void => update({ desktopFrom: e.target.value === 'desktop' ? 'desktop' : undefined })}
+          >
+            <option value="tablet">{t('pageBuilder.imageField.desktopFrom.tablet')}</option>
+            <option value="desktop">{t('pageBuilder.imageField.desktopFrom.desktop')}</option>
+          </select>
+        </Labelled>
+      ) : null}
       <Labelled label={t('pageBuilder.imageField.alt')}>
         <input
           type="text"

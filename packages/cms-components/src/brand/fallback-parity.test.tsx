@@ -592,11 +592,16 @@ describe('fallback parity with no brand tokens (standing rule 9)', () => {
     expect(builtCss.replace(/\s+/g, '')).toContain('--cmsc-slide-w:calc((100%-(var(--cmsc-spv)-1)*var(--cmsc-gap))/var(--cmsc-spv))');
     // Today's dot colours, drawn 8 px inside a 24 px target.
     // (The minifier reorders declarations, so each is read on its own.)
+    // R19B (T240, deliberately widened): the scheme's colour (`--cmsc-dot*`, set only inside
+    // `[data-cmsb-scheme]`) comes first; without it, today's literal. R23 (T448) removed the
+    // editor's own dot colours (`--pb-dot-*`).
     const dot = /\.cmsc-pb-carousel__dot:?:before\{([^}]*)\}/.exec(builtCss)?.[1] ?? '';
-    for (const declaration of ['background:var(--cmsb-n-300,#cbd5e1)', 'border-radius:50%', 'width:8px', 'height:8px']) {
+    for (const declaration of ['background:var(--cmsc-dot,var(--cmsb-n-300,#cbd5e1))', 'border-radius:50%', 'width:8px', 'height:8px']) {
       expect(dot.replace(/\s+/g, ''), declaration).toContain(declaration);
     }
-    expect(builtCss.replace(/\s+/g, '')).toMatch(/\.cmsc-pb-carousel__dot--active:?:before\{background:var\(--cmsb-n-700,#334155\)/);
+    expect(builtCss.replace(/\s+/g, '')).toMatch(
+      /\.cmsc-pb-carousel__dot--active:?:before\{background:var\(--cmsc-dot-active,var\(--cmsb-n-700,#334155\)\)/,
+    );
   });
 
   it('cms.ContentSlider default render (T054): the same arrows below the track, today\'s 16 px gap on mobile, no autoplay', () => {

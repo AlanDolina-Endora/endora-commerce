@@ -135,6 +135,9 @@ any CMS page:
 | Topics | Up to 12 checkboxes, each a label and a newsletter **tag code**; the ticked ones are added to the subscriber as tags. **Topics required** asks for at least one. A topic whose tag code is not a valid code is not offered. |
 | Consent label | The text of the consent checkbox, which is always shown and always required. It is inline rich text, so it can link to the privacy policy. |
 | Layout | Inline (field and button on one line) or boxed. |
+| Button placement, field shape | **Beside the field** (default) or **Inside the field**: the e-mail field and the button share one box, **Rounded** (default) or a **Pill**. |
+| Topic columns | The topics as a grid of 1–4 columns; left empty, they flow in one wrapping row. |
+| Hide the email label | Hides the e-mail field's label visually; it stays the field's label, so screen readers still read it. Use a placeholder so sighted visitors know what to type. |
 | Messages | The texts shown after a sign-up: pending confirmation, subscribed, and the refusals (consent missing, invalid e-mail, no topic chosen, service unavailable). |
 
 Every text is translatable with the Page Builder's **Translate** action. At

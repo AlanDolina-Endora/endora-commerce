@@ -29,10 +29,13 @@ import {
 import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
 import { resolveImageUrl, type CmsAssetMap } from '../utils/resolve-image-url.js';
 import { ratioVars, sanitizeRatio, uniformRatio } from '../utils/aspect-ratio.js';
-import { PICTURE_MOBILE_MEDIA } from './Picture.js';
+import { pictureMobileMedia } from './Picture.js';
 import { overlayStyle } from './Section.js';
 import { BUTTON_SPEC_OBJECT_FIELDS } from './Button.js';
 import { blockLink, blockLinkTarget, carriedBlockLink } from '../utils/link-href.js';
+import { responsivePxVars } from './responsive-px.js';
+import { textStyleAttrs, type TextStyleValues } from './text-style.js';
+import { sizeFieldWithDefault, sizePxField } from '../fields/section-block-fields.js';
 
 /**
  * R17 (T214): the source an image is edited with — the stored one; with none
@@ -82,6 +85,7 @@ const CONTENT_KEYS = [
   'assetId',
   'mobileSrc',
   'mobileAssetId',
+  'desktopFrom',
   'alt',
   'href',
   'linkTarget',
@@ -95,6 +99,10 @@ const CONTENT_KEYS = [
   'overlay',
   'caption',
   'captionPlacement',
+  'captionSize',
+  'captionSizePx',
+  'captionAlign',
+  'captionMaxWidthPx',
 ] as const;
 
 type ImageContentProps = Partial<Pick<ImageProps, (typeof CONTENT_KEYS)[number]>>;
@@ -169,7 +177,9 @@ function ImageContent({
   const overlay = overlayStyle(props.overlay);
   const framed = hasRatio || overlay !== null;
   const caption = typeof props.caption === 'string' ? props.caption.trim() : '';
-  const placement = props.captionPlacement === 'beside' ? 'beside' : 'below';
+  // R19B (T251): a placement per breakpoint; the base one (in the editor, the previewed one) is today's attribute.
+  const placements = captionPlacements(props.captionPlacement, tier);
+  const placement = placements.base;
   const figureTakesWidth = caption !== '' && placement === 'below';
 
   const look = imageStyle(props, tier);
@@ -196,7 +206,7 @@ function ImageContent({
   let media: ReactNode =
     desktopSrc && mobileSrc && mobileSrc !== desktopSrc ? (
       <picture className="cmsc-pb-image__picture">
-        <source media={PICTURE_MOBILE_MEDIA} srcSet={mobileSrc} />
+        <source media={pictureMobileMedia(props.desktopFrom)} srcSet={mobileSrc} />
         {img}
       </picture>
     ) : (
@@ -240,16 +250,117 @@ function ImageContent({
   }
 
   if (caption === '') return media;
+  const ownCaption = captionLook(props, tier);
+  // R20E (T293): the caption's maximum width per breakpoint.
+  const captionMeasure = captionMeasureVars(props, tier);
+  const captionStyle = ownCaption || captionMeasure ? { ...(ownCaption?.style ?? {}), ...(captionMeasure ?? {}) } : null;
+  // R20E (T293): below at the base and beside from a breakpoint up — the figure takes the image's width only
+  // while the caption is below; beside, the image keeps that width in a wrapper and the caption gets its column.
+  const tiered = figureTakesWidth && (placements.tablet !== undefined || placements.desktop !== undefined);
   return (
     <figure
-      className={['cmsc-pb-image__figure', figureTakesWidth ? (widthClass ?? '') : ''].filter(Boolean).join(' ')}
+      className={['cmsc-pb-image__figure', tiered ? 'cmsc-pb-image__figure--tiered' : figureTakesWidth ? (widthClass ?? '') : '']
+        .filter(Boolean)
+        .join(' ')}
       data-caption={placement}
-      {...(figureTakesWidth ? { style: size } : {})}
+      {...(placements.tablet ? { 'data-caption-md': placements.tablet } : {})}
+      {...(placements.desktop ? { 'data-caption-lg': placements.desktop } : {})}
+      {...(tiered
+        ? { style: { '--pb-img-fig-w': String(size.width ?? 'auto') } as CSSProperties }
+        : figureTakesWidth
+          ? { style: size }
+          : {})}
     >
-      {media}
-      <figcaption className="cmsc-pb-image__caption">{caption}</figcaption>
+      {tiered ? <span className="cmsc-pb-image__media">{media}</span> : media}
+      <figcaption
+        className={[
+          'cmsc-pb-image__caption',
+          ...(ownCaption?.classes ?? []),
+          captionMeasure ? 'cmsc-pb-image__caption--measure' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        {...(captionStyle ? { style: captionStyle as CSSProperties } : {})}
+      >
+        {caption}
+      </figcaption>
     </figure>
   );
+}
+
+type CaptionPlacement = 'below' | 'beside';
+const CAPTION_ALIGNS = new Set(['start', 'center', 'end']);
+
+/**
+ * R19B (T251): the caption's placement at the base breakpoint, and at the
+ * tablet and desktop ones **only where it changes** from the breakpoint below
+ * (published); in the editor, the previewed breakpoint's alone.
+ */
+function captionPlacements(
+  value: unknown,
+  tier: 'mobile' | 'tablet' | 'desktop' | null,
+): { base: CaptionPlacement; tablet?: CaptionPlacement; desktop?: CaptionPlacement } {
+  const one = (entry: unknown): CaptionPlacement | undefined =>
+    entry === 'beside' ? 'beside' : entry === 'below' ? 'below' : undefined;
+  if (value === null || typeof value !== 'object') return { base: one(value) ?? 'below' };
+  const stored = value as Record<string, unknown>;
+  const base = one(stored['base']) ?? 'below';
+  const tablet = one(stored['tablet']) ?? base;
+  const desktop = one(stored['desktop']) ?? tablet;
+  if (tier !== null) return { base: tier === 'desktop' ? desktop : tier === 'tablet' ? tablet : base };
+  return {
+    base,
+    ...(tablet !== base ? { tablet } : {}),
+    ...(desktop !== tablet ? { desktop } : {}),
+  };
+}
+
+/** R19B (T251): the alignment per breakpoint as `--pb-img-caption-align(-md|-lg)`, only what is set. */
+function captionAlignVars(value: unknown, tier: 'mobile' | 'tablet' | 'desktop' | null): Record<string, string> {
+  const valid = (entry: unknown): string | undefined => (typeof entry === 'string' && CAPTION_ALIGNS.has(entry) ? entry : undefined);
+  const stored = value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : { base: value };
+  const base = valid(stored['base']);
+  const tablet = valid(stored['tablet']);
+  const desktop = valid(stored['desktop']);
+  if (tier !== null) {
+    const at = tier === 'desktop' ? (desktop ?? tablet ?? base) : tier === 'tablet' ? (tablet ?? base) : base;
+    return at ? { '--pb-img-caption-align': at } : {};
+  }
+  return {
+    ...(base ? { '--pb-img-caption-align': base } : {}),
+    ...(tablet ? { '--pb-img-caption-align-md': tablet } : {}),
+    ...(desktop ? { '--pb-img-caption-align-lg': desktop } : {}),
+  };
+}
+
+/** Today's caption (`.cmsc-pb-image__caption`): the small size at 1.5, read by a breakpoint left on Default. */
+const CAPTION_TODAY = { size: 'var(--cmsb-t-small-size, 14px)', lineHeight: '1.5' };
+
+/**
+ * R23 (T446): the caption's size — a type token or Custom px (`captionSize`);
+ * a Custom px stored by R19B without a size (`captionSizePx` alone) reads as Custom.
+ */
+export function captionSizeOf(props: Pick<ImageProps, 'captionSize' | 'captionSizePx'>): TextStyleValues['size'] {
+  if (props.captionSize !== undefined && props.captionSize !== null) return props.captionSize as TextStyleValues['size'];
+  return props.captionSizePx !== undefined && props.captionSizePx !== null ? 'custom' : undefined;
+}
+
+/**
+ * R19B (T251): the caption's alignment per breakpoint; R23 (T446): its size (a
+ * token, which brings its line height, weight and tracking, or Custom px). Its
+ * colour and weight are the scheme's muted text (today's). Nothing when unset.
+ */
+function captionLook(props: ImageContentProps, tier: 'mobile' | 'tablet' | 'desktop' | null): { classes: string[]; style: Record<string, string> } | null {
+  const size = textStyleAttrs({ size: captionSizeOf(props), sizePx: props.captionSizePx }, tier, CAPTION_TODAY);
+  const align = captionAlignVars(props.captionAlign, tier);
+  const style = { ...size.style, ...align };
+  if (size.classes.length === 0 && Object.keys(style).length === 0) return null;
+  return { classes: [...(Object.keys(align).length > 0 ? ['cmsc-pb-image__caption--styled'] : []), ...size.classes], style };
+}
+
+/** R20E (T293): `--pb-img-caption-max(-md|-lg)` in px, only what is set; `null` when unset. */
+function captionMeasureVars(props: ImageContentProps, tier: 'mobile' | 'tablet' | 'desktop' | null): Record<string, string> | null {
+  return responsivePxVars('img-caption-max', props.captionMaxWidthPx, tier, { min: 40, max: 1200 });
 }
 
 const ImageEditingRender: PuckComponent<ImageProps> = (props) => {
@@ -329,15 +440,48 @@ const imageConfig: ComponentConfig<ImageProps> = {
     // T127: art direction — the image shown below the tablet tier, from the same source.
     mobileSrc: { type: 'text', label: 'Mobile image URL' },
     mobileAssetId: { type: 'text', label: 'Mobile image' },
+    // R21G (T337): with a mobile image, where the desktop image starts (R19C's choice for image fields).
+    desktopFrom: {
+      type: 'select',
+      label: 'Mobile image shown on',
+      options: [
+        { label: 'Phones (below 768 px)', value: 'tablet' },
+        { label: 'Phones and tablets (below 1024 px)', value: 'desktop' },
+      ],
+    },
     alt: { type: 'text', label: 'Alt text' },
     caption: { type: 'textarea', label: 'Caption' },
     captionPlacement: {
       type: 'select',
       label: 'Caption placement',
+      // R19B (T251): per breakpoint (Responsive tab); a placement stored as one value applies to all.
+      metadata: PB_RESPONSIVE_METADATA,
       options: [
         { label: 'Below the image', value: 'below' },
         { label: 'Beside the image', value: 'beside' },
       ],
+    },
+    // R19B (T251): the caption's look; unset is today's small muted text at the start.
+    // R23 (T446): the size is a type token or Custom px (the established pattern).
+    captionSize: sizeFieldWithDefault('Caption size') as never,
+    captionSizePx: sizePxField('Custom caption size (px)', 8, 64) as never,
+    captionAlign: {
+      type: 'select',
+      label: 'Caption alignment',
+      metadata: PB_RESPONSIVE_METADATA,
+      options: [
+        { label: 'Left', value: 'start' },
+        { label: 'Center', value: 'center' },
+        { label: 'Right', value: 'end' },
+      ],
+    },
+    // R20E (T293): the caption's maximum width per breakpoint (Responsive tab), e.g. a caption beside the image.
+    captionMaxWidthPx: {
+      type: 'number',
+      label: 'Custom caption max width (px)',
+      min: 40,
+      max: 1200,
+      metadata: PB_RESPONSIVE_METADATA,
     },
     // R17 (T212): the shared link (the admin gives it the page, product, category and file pickers).
     link: { ...BUTTON_SPEC_OBJECT_FIELDS.link, label: 'Link (optional)' },
@@ -437,7 +581,14 @@ const imageConfig: ComponentConfig<ImageProps> = {
   resolveData: ({ props }) => {
     const carried = carriedBlockLink(props);
     const source = props.imageSource === undefined && imageShownSource(props) === 'url' ? { imageSource: 'url' as const } : {};
-    return { props: carried || 'imageSource' in source ? ({ ...props, ...(carried ?? {}), ...source } as unknown as typeof props) : props };
+    // R23 (T446): a caption Custom px stored by R19B without a size is shown as the Custom size it renders as.
+    const captionSize = (props.captionSize === undefined || props.captionSize === null) && captionSizeOf(props) === 'custom' ? { captionSize: 'custom' as const } : {};
+    return {
+      props:
+        carried || 'imageSource' in source || 'captionSize' in captionSize
+          ? ({ ...props, ...(carried ?? {}), ...source, ...captionSize } as unknown as typeof props)
+          : props,
+    };
   },
   resolveFields: (data, { fields }) => {
     // T214: a stored image with no source shows the URL fields when it has a URL (it renders by URL).
@@ -452,7 +603,16 @@ const imageConfig: ComponentConfig<ImageProps> = {
     }
     if (typeof data.props.caption !== 'string' || data.props.caption.trim() === '') {
       delete next.captionPlacement;
+      delete next.captionSize;
+      delete next.captionSizePx;
+      delete next.captionAlign;
+      delete next.captionMaxWidthPx;
+    } else if (captionSizeOf(data.props) !== 'custom' && !Object.values(Object(data.props.captionSize)).includes('custom')) {
+      delete next.captionSizePx;
     }
+    // R21G (T337): the tier the desktop image starts at, with a mobile image only.
+    const hasMobile = [data.props.mobileSrc, data.props.mobileAssetId].some((value) => typeof value === 'string' && value.trim() !== '');
+    if (!hasMobile) delete next.desktopFrom;
     if (!shouldShowImageCustomWidthField(data.props.widthMode)) {
       delete next.widthPx;
     }

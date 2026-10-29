@@ -251,6 +251,9 @@
   "blocks.latestPosts.fields.controls.fields.disabledArrowLook.options.outline-light": "Light outline (dark backgrounds)",
   "blocks.latestPosts.fields.controls.fields.disabledArrowLook.options.color": "Color",
   "blocks.latestPosts.fields.controls.fields.disabledArrowColor.label": "Disabled arrow color",
+  "blocks.latestPosts.fields.controls.fields.arrowGlyphColor.label": "Arrow icon color (solid style)",
+  "blocks.latestPosts.fields.controls.fields.hideArrowsOn.label": "Hide the arrows on",
+  "blocks.latestPosts.fields.controls.fields.hideDotsOn.label": "Hide the dots on",
   "blocks.latestPosts.fields.controlsPlacement.label": "Arrow placement",
   "blocks.latestPosts.fields.controlsPlacement.options.below": "Below the slides",
   "blocks.latestPosts.fields.controlsPlacement.options.header": "In the header",
@@ -397,5 +400,16 @@
   "blocks.latestPosts.fields.readMoreWeight.options.500": "Medium (500)",
   "blocks.latestPosts.fields.readMoreWeight.options.600": "Semibold (600)",
   "blocks.latestPosts.fields.readMoreWeight.options.700": "Bold (700)",
-  "blocks.latestPosts.fields.readMoreWeight.options.800": "Extra bold (800)"
+  "blocks.latestPosts.fields.readMoreWeight.options.800": "Extra bold (800)",
+  "blocks.latestPosts.fields.controlsAlign.options.dots-start": "Dots at the start, arrows at the end",
+  "blocks.latestPosts.fields.controls.fields.arrowsWhenFit.label": "Keep the arrows when all slides fit",
+  "blocks.latestPosts.fields.headingLineHeight.label": "Heading line height",
+  "blocks.latestPosts.fields.leadWeight.label": "Lead weight",
+  "blocks.latestPosts.fields.leadWeight.options.300": "Light (300)",
+  "blocks.latestPosts.fields.leadWeight.options.400": "Regular (400)",
+  "blocks.latestPosts.fields.leadWeight.options.500": "Medium (500)",
+  "blocks.latestPosts.fields.leadWeight.options.600": "Semibold (600)",
+  "blocks.latestPosts.fields.leadWeight.options.700": "Bold (700)",
+  "blocks.latestPosts.fields.leadWeight.options.800": "Extra bold (800)",
+  "blocks.latestPosts.fields.leadWeight.options.default": "Default"
 }

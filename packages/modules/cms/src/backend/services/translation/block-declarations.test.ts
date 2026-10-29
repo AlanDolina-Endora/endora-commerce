@@ -41,6 +41,10 @@ const FIXTURES: Record<string, { props: Record<string, unknown>; expected: strin
       fullWidth: { base: X('width'), desktop: X('width') },
       button: { label: P('label'), link: { kind: 'page', slug: X('slug') }, style: X('style'), icon: X('icon'), backgroundColor: X('bg') },
       align: X('align'),
+      // R19B (T245, T246): the outline fill, the icon button's size and the border colour are options.
+      transparentOutline: true,
+      iconSizePx: { base: 72, desktop: 116 },
+      borderColor: X('border'),
     },
     expected: [P('label')],
   },
@@ -58,6 +62,11 @@ const FIXTURES: Record<string, { props: Record<string, unknown>; expected: strin
       overlay: { kind: X('kind'), direction: X('direction') },
       caption: P('caption'),
       captionPlacement: X('placement'),
+      // R19B (T251): the caption's look per breakpoint is an option.
+      captionSizePx: { base: 10, tablet: 12 },
+      captionAlign: { base: X('align'), tablet: X('align') },
+      captionWeight: X('weight'),
+      captionColor: X('color'),
     },
     expected: [P('alt'), P('caption')],
   },
@@ -457,6 +466,12 @@ const FIXTURES: Record<string, { props: Record<string, unknown>; expected: strin
         // T171: the disabled arrows' look and colour are options.
         disabledArrowLook: X('disabled look'),
         disabledArrowColor: X('disabled color'),
+        // R19B (T240–T242): the glyph and dot colours and the breakpoints hiding them are options.
+        arrowGlyphColor: X('glyph'),
+        dotColor: X('dot'),
+        activeDotColor: X('active dot'),
+        hideArrowsOn: { mobile: true },
+        hideDotsOn: { tablet: true },
       },
       // T171: so is the loop.
       loop: false,
@@ -519,10 +534,16 @@ const FIXTURES: Record<string, { props: Record<string, unknown>; expected: strin
       captionWeight: { base: X('weight'), desktop: X('weight desktop') },
       // T172: the caption's hover colour is an option.
       captionHoverColor: X('hover color'),
+      // R19B (T249, T250): the read-more label is prose; its corner, size, icon and the caption's padding are not.
+      captionPaddingPx: { base: 24, desktop: 40 },
+      moreLabel: P('more label'),
+      moreLabelPlacement: X('corner'),
+      moreLabelSizePx: { base: 14 },
+      moreLabelIcon: X('icon'),
       link: { kind: 'url', href: X('href') },
       tags: X('tags'),
     },
-    expected: [P('image alt'), P('caption')],
+    expected: [P('image alt'), P('caption'), P('more label')],
   },
   'cms.CarouselSplit': {
     props: {
@@ -578,6 +599,18 @@ const FIXTURES: Record<string, { props: Record<string, unknown>; expected: strin
       linkLabel: P('download label'),
       hoverImage: { imageSource: X('source'), assetId: X('asset'), alt: P('hover alt') },
       tags: X('tags'),
+      // R19B (T247, T248): the card's look is options, never prose.
+      scheme: X('scheme'),
+      cardBackground: X('bg'),
+      cardBorder: false,
+      cornerRadius: X('radius'),
+      paddingPx: { base: 24 },
+      titleSizePx: { base: 32 },
+      showType: false,
+      hoverImageLook: X('hover look'),
+      linkLook: X('link look'),
+      iconButtonSizePx: { base: 72 },
+      iconButtonBorderColor: X('ring'),
     },
     expected: [P('download title'), P('download subtitle'), P('download label'), P('hover alt')],
   },

@@ -27,6 +27,7 @@ import { mediaRadiusPx } from '../utils/media-radius.js';
 import { buttonWidthClasses, buttonWidthField } from './button-full-width.js';
 import { ItemText } from './item-text.js';
 import { textWeightCss, textWeightField } from './typography.js';
+import { singleWeight } from './text-style.js';
 import { useBlockData } from '../hooks/use-block-data.js';
 import { blogPostsDataRequest, LATEST_POSTS_DEFAULT_LIMIT, LATEST_POSTS_MAX_LIMIT } from '../utils/block-data.js';
 import { CarouselShell } from './carousel/CarouselShell.js';
@@ -307,6 +308,8 @@ function LatestPostsBody({
         size={props.leadSize as TextSize | ResponsiveProp<TextSize> | undefined}
         sizePx={props.leadSizePx}
         font={undefined}
+        /* R22I (T379): the lead's weight — R23 (T435): one value for every breakpoint. */
+        weight={singleWeight(props.leadWeight)}
         fallback="body"
         tier={tier}
       >
@@ -412,6 +415,8 @@ const LATEST_POSTS_FIELDS = {
   // T189: the header's lead and button.
   leadSize: sizeFieldWithDefault('Lead size'),
   leadSizePx: sizePxField('Custom lead size (px)', 10, 80),
+  // R22I (T379): the lead's weight; Default keeps today's. R23 (T435): one value.
+  leadWeight: textWeightField('Lead weight'),
   leadColor: createColorField({ label: 'Lead color' }),
   headerButtonPlacement: {
     type: 'select' as const,
@@ -500,6 +505,7 @@ const latestPostsConfig: ComponentConfig<{ props: LatestPostsProps }> = {
     for (const [key, field] of Object.entries((params?.fields as Record<string, unknown> | undefined) ?? LATEST_POSTS_FIELDS)) {
       if (key === 'gapPx' && !usesCustom(props.gap)) continue;
       if (key === 'headingSizePx' && !usesCustom(props.headingSize)) continue;
+      if (key === 'headingLineHeight' && !usesCustom(props.headingSize)) continue;
       if (key === 'leadSizePx' && !usesCustom(props.leadSize)) continue;
       if (key === 'cardTitleSizePx' && !usesCustom(props.cardTitleSize)) continue;
       if (key === 'cardPaddingPx' && !usesCustom(props.cardPadding)) continue;

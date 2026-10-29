@@ -22,6 +22,7 @@ import {
 } from '../fields/shared-fields.js';
 import { CmsProductCardView } from './CmsProductCard.js';
 import { CAROUSEL_HEADER_FIELDS, CarouselHeaderBlock } from './carousel/carousel-parts.js';
+import { LISTING_LEAD_FIELDS, listingLeadOptions } from './listing-lead.js';
 import {
   PRODUCT_LISTING_CARD_FIELDS,
   PRODUCT_LISTING_FOOTER_FIELDS,
@@ -82,6 +83,11 @@ function ProductGridBody({
     cardDividerColor: _cardDividerColor,
     ctaLabel: _ctaLabel,
     footerButton: _footerButton,
+    footerButtonAlign: _footerButtonAlign,
+    leadSize: _leadSize,
+    leadSizePx: _leadSizePx,
+    leadWeight: _leadWeight,
+    leadColor: _leadColor,
     ...box
   } = props;
   // Provided by the page's server render on the storefront; fetched from an effect only in
@@ -139,10 +145,12 @@ function ProductGridBody({
   // Today's list view shows the horizontal card; a chosen style wins in either view.
   const variant = listingCardVariant(props, gridView === 'list' ? 'horizontal' : 'default');
   const headerTier = editing ? tier : null;
+  const leadOptions = listingLeadOptions(props, headerTier);
 
   return (
     <BoxStyled {...box} {...(editing ? { previewTier: tier } : {})}>
-      <CarouselHeaderBlock props={props} tier={headerTier} />
+      {/* R21G (T338): the lead's own look, when one is chosen. */}
+      <CarouselHeaderBlock props={props} tier={headerTier} {...(leadOptions ? { options: leadOptions } : {})} />
       <ul
         className={listClass}
         style={{
@@ -202,6 +210,8 @@ const productGridConfig: ComponentConfig<ProductGridProps> = {
     gap: { type: 'select', label: 'Gap', metadata: PB_RESPONSIVE_METADATA, options: GAP_OPTIONS },
     gapPx: { ...gapPxField('Custom gap (px)'), max: 48 },
     ...CAROUSEL_HEADER_FIELDS,
+    // R21G (T338): the header lead's size, weight and colour.
+    ...LISTING_LEAD_FIELDS,
     ...PRODUCT_LISTING_CARD_FIELDS,
     ...PRODUCT_LISTING_FOOTER_FIELDS,
     margin: BOX_MARGIN_FIELD,
@@ -236,7 +246,10 @@ const productGridConfig: ComponentConfig<ProductGridProps> = {
     const resolved = resolveProductSourceFields(fields as never, data.props.source ?? 'manual') as Record<string, unknown>;
     if (!usesCustom(numericGapAsCustom(data.props.gap, data.props.gapPx)?.gap ?? data.props.gap)) delete resolved['gapPx'];
     if (!usesCustom(data.props.headingSize)) delete resolved['headingSizePx'];
+    // R23 (T435): the heading's line height with a Custom px size only.
+    if (!usesCustom(data.props.headingSize)) delete resolved['headingLineHeight'];
     if (!usesCustom(data.props.headingMaxWidth)) delete resolved['headingMaxWidthPx'];
+    if (!usesCustom(data.props.leadSize)) delete resolved['leadSizePx'];
     withoutUnusedCardFields(resolved, data.props);
     return resolved as typeof fields;
   },

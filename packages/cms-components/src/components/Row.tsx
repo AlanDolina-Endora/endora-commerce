@@ -124,11 +124,26 @@ function editingRowMinHeight(
   return px > 0 ? `${px}px` : undefined;
 }
 
+/**
+ * R22I (T373): a Row's vertical alignment as stored, with `'center'` — the
+ * wording `cms.MediaText` uses for the same choice — read as the Row's
+ * `'middle'`, per breakpoint (it fell back to `stretch` before). Anything else
+ * is passed on unchanged; unset stays unset.
+ */
+export function rowVerticalAlign(value: unknown): RowProps['verticalAlign'] {
+  const one = (entry: unknown): unknown => (entry === 'center' ? 'middle' : entry);
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([tier, entry]) => [tier, one(entry)])) as RowProps['verticalAlign'];
+  }
+  return one(value) as RowProps['verticalAlign'];
+}
+
 function RowColumnsSlot({
   content: slotContent,
   gap,
   rowGap,
-  verticalAlign,
+  verticalAlign: storedVerticalAlign,
   columnDivider,
   reverseOnMobile,
   tier,
@@ -144,6 +159,8 @@ function RowColumnsSlot({
   editing: boolean;
 }): ReactElement {
   const Content = slotContent;
+  // R22I (T373): `'center'` read as `'middle'`; the columns follow the row's alignment (they no longer stretch themselves).
+  const verticalAlign = rowVerticalAlign(storedVerticalAlign);
   // Prefer CSS vars + @media (same as publish). Inline `gap` on a 12-column grid
   // applies between every track (11 gutters); editing used to add +12/+8 which
   // overflowed the mobile canvas (11×36px ≈ 396px).

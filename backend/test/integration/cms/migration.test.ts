@@ -164,6 +164,38 @@ describe('cms migration (T008 — 035_cms_init)', () => {
     for (const scheme of ['light', 'muted', 'dark']) expect(checks[0]!.def).toContain(`'${scheme}'`);
   });
 
+  /**
+   * Feature 163 R19D (T284): whether a page's address includes its parent's
+   * path. Off by default, so every stored page keeps its flat address.
+   */
+  it('adds parent_path_in_url to cms_pages, not null and off by default (163 R19D)', async () => {
+    const conn = db.orm.em.getConnection();
+    const rows = await conn.execute<
+      Array<{ data_type: string; is_nullable: string; column_default: string | null }>
+    >(
+      `select data_type, is_nullable, column_default
+       from information_schema.columns
+       where table_schema = 'public' and table_name = 'cms_pages' and column_name = 'parent_path_in_url'`,
+    );
+    expect(rows).toEqual([{ data_type: 'boolean', is_nullable: 'NO', column_default: 'false' }]);
+  });
+
+  /**
+   * Feature 163 R21H (T355): whether a page draws its breadcrumb trail over
+   * its first section. Off by default, so every stored page keeps its band.
+   */
+  it('adds breadcrumbs_overlay to cms_pages, not null and off by default (163 R21H)', async () => {
+    const conn = db.orm.em.getConnection();
+    const rows = await conn.execute<
+      Array<{ data_type: string; is_nullable: string; column_default: string | null }>
+    >(
+      `select data_type, is_nullable, column_default
+       from information_schema.columns
+       where table_schema = 'public' and table_name = 'cms_pages' and column_name = 'breadcrumbs_overlay'`,
+    );
+    expect(rows).toEqual([{ data_type: 'boolean', is_nullable: 'NO', column_default: 'false' }]);
+  });
+
   it('seeds 23 base Hook codes with is_system=true', async () => {
     const conn = db.orm.em.getConnection();
     const rows = await conn.execute<Array<{ code: string }>>(

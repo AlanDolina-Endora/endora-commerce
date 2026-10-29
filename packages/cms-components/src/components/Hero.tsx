@@ -6,6 +6,7 @@ import type { JSONContent } from '@tiptap/core';
 import {
   buildResponsiveSpacingVars,
   createColorField,
+  createToggleField,
   isSpaceToken,
   PB_RESPONSIVE_METADATA,
   plainTextToInlineRichText,
@@ -41,8 +42,8 @@ import type {
 import { useBreakpointVideo } from '../hooks/use-breakpoint-video.js';
 import { useReveal } from '../hooks/use-reveal.js';
 import { splitHtmlWords } from '../utils/split-words.js';
-import { alignField, GAP_OPTIONS, revealField } from '../fields/section-block-fields.js';
-import { alignTierAttrs, responsiveAlign } from './section-parts.js';
+import { alignField, GAP_OPTIONS, revealField, sizeFieldWithDefault } from '../fields/section-block-fields.js';
+import { alignTierAttrs, isEmptyInline, responsiveAlign, tokensOf } from './section-parts.js';
 import { colorValueToCss, resolveColorValue } from '../utils/color-value.js';
 import { absolutizeMediaUrl } from '../utils/resolve-image-url.js';
 import { pickBySource } from '../utils/media-source.js';
@@ -66,9 +67,11 @@ import {
 } from '../fields/shared-fields.js';
 import { createInlineRichTextField } from '../fields/inline-rich-text-field.js';
 import { createRichTextDocField } from '../fields/rich-text-doc-field.js';
-import { isTypeToken, TYPE_SCALE_FALLBACKS, textWeightField, typeTokenSizeCss } from './typography.js';
+import { isTypeToken, TYPE_SCALE_FALLBACKS, textWeightField, tokenTierStyle, typeTokenSizeCss } from './typography.js';
 import { responsiveWeightProps, WeightSpan } from './item-text.js';
 import { textMaxWidthAttrs, textMaxWidthField, textMaxWidthPxField } from './text-max-width.js';
+import { customOnlyLeading, lineHeightField, singleWeight, textStyleAttrs } from './text-style.js';
+import { responsivePxVars } from './responsive-px.js';
 
 /**
  * `cms.Hero` (`specs/163-page-builder-marketing-pages/` contracts/blocks.md,
@@ -398,13 +401,6 @@ const DEFAULT_TEXT: Record<HeroTextRole, { level: HeadingTag; size: TypeToken }>
   statement: { level: 'p', size: 'h4' },
 };
 
-function isEmptyInline(value: unknown): boolean {
-  if (value === undefined || value === null) return true;
-  if (typeof value === 'string') return value.trim() === '';
-  const content = (value as { content?: Array<{ content?: unknown[] }> }).content;
-  return !Array.isArray(content) || content.every((paragraph) => !Array.isArray(paragraph?.content) || paragraph.content.length === 0);
-}
-
 /** A size at one tier: a token, or a literal px (`'custom'` with its `…SizePx`). */
 function sizeAt(
   size: HeroTextSize | ResponsiveProp<HeroTextSize>,
@@ -436,6 +432,7 @@ function HeroText({
   maxWidthPx,
   align,
   alignTiers,
+  lineHeight,
 }: {
   role: HeroTextRole;
   value: unknown;
@@ -456,6 +453,11 @@ function HeroText({
   align?: 'left' | 'center' | 'right';
   /** R17 (T206): the tablet's and desktop's alignment, when they differ (published only). */
   alignTiers?: { md: 'left' | 'center' | 'right'; lg: 'left' | 'center' | 'right' } | undefined;
+  /**
+   * R19A (T227): a line height per breakpoint over the size's own; unset writes
+   * nothing. R23 (T435): only where the size is Custom px — a token brings its own.
+   */
+  lineHeight?: HeroProps['statementLineHeight'];
 }): ReactNode {
   if (isEmptyInline(value)) return null;
   const defaults = DEFAULT_TEXT[role];
@@ -491,6 +493,10 @@ function HeroText({
         style['--pb-text-size'] = sizeCss(sizes.mobile, 'mobile');
         style['--pb-text-size-md'] = sizeCss(sizes.tablet, 'tablet');
         style['--pb-text-size-lg'] = sizeCss(sizes.desktop, 'desktop');
+        // R21H (T350): each tier's token's line height, weight and tracking.
+        const tiered = tokenTierStyle(tokensOf(sizes), 'token' in lead ? lead.token : defaults.size);
+        classes.push(...tiered.classes);
+        Object.assign(style, tiered.style);
       }
     }
   }
@@ -503,6 +509,15 @@ function HeroText({
   // R17 (T211): the weight per breakpoint; one weight is the inline `font-weight` it was.
   const weighed = responsiveWeightProps(weight, tier);
   Object.assign(style, weighed.inline);
+  // R19A (T227): the line height; a tier left empty among set ones keeps the role's token line height.
+  // R23 (T435): only from a breakpoint sized in Custom px — a token brings its own.
+  const todayToken = defaults.size;
+  const leading = textStyleAttrs({ size: 'custom', lineHeight: customOnlyLeading(size, lineHeight) }, tier, {
+    size: 'inherit',
+    lineHeight: `var(--cmsb-t-${todayToken}-lh, ${TYPE_SCALE_FALLBACKS[todayToken].lineHeight})`,
+  });
+  classes.push(...leading.classes);
+  Object.assign(style, leading.style);
 
   return (
     <Tag
@@ -518,27 +533,157 @@ function HeroText({
   );
 }
 
+/** Today's eyebrow (`.cmsc-pb-hero__eyebrow`): 14 px, 600, at 1.4 — read by a breakpoint left unset (R20E). */
+const EYEBROW_TODAY = { size: '14px', weight: '600', lineHeight: '1.4' };
+
+/**
+ * The eyebrow's size: R23 (T436) a type token or Custom px (`eyebrowSize`); a
+ * Custom px stored by R20E without a size (`eyebrowSizePx` alone) reads as Custom.
+ */
+function eyebrowSizeOf(props: HeroProps): HeroProps['eyebrowSize'] {
+  if (props.eyebrowSize !== undefined && props.eyebrowSize !== null) return props.eyebrowSize;
+  return props.eyebrowSizePx !== undefined && props.eyebrowSizePx !== null ? 'custom' : undefined;
+}
+
+/**
+ * R20E (T299): the eyebrow, with its own size, line height, case and colour
+ * when set. R23 (T436): the size is a type token (which brings its line
+ * height, weight and tracking) or Custom px (with a line height of its own);
+ * the eyebrow's colour is the hero's one accent colour.
+ */
+function HeroEyebrow({ props, tier }: { props: HeroProps; tier: BreakpointTier | null }): ReactNode {
+  const text = props.eyebrow?.trim();
+  if (!text) return null;
+  const look = textStyleAttrs(
+    {
+      size: eyebrowSizeOf(props),
+      sizePx: props.eyebrowSizePx,
+      lineHeight: props.eyebrowLineHeight,
+      color: props.eyebrowColor || undefined,
+    },
+    tier,
+    EYEBROW_TODAY,
+  );
+  const className = ['cmsc-pb-hero__eyebrow', props.eyebrowUppercase === false ? 'cmsc-pb-hero__eyebrow--plain' : '', ...look.classes]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <p className={className} {...(Object.keys(look.style).length > 0 ? { style: look.style as CSSProperties } : {})}>
+      {props.eyebrow}
+    </p>
+  );
+}
+
+type ProofCaptionPlacement = 'below' | 'beside';
+
+/**
+ * R20E (T300): the caption's placement at the base breakpoint, and at the
+ * tablet and desktop ones only where it changes (published); in the editor,
+ * the previewed breakpoint's. `null` when unset (today's: beside, wrapping).
+ */
+function proofCaptionPlacements(
+  value: HeroProps['proofCaptionPlacement'],
+  tier: BreakpointTier | null,
+): { base: ProofCaptionPlacement; tablet?: ProofCaptionPlacement; desktop?: ProofCaptionPlacement } | null {
+  if (value === undefined || value === null) return null;
+  const one = (entry: unknown): ProofCaptionPlacement | undefined => (entry === 'below' || entry === 'beside' ? entry : undefined);
+  const stored = typeof value === 'object' ? (value as Record<string, unknown>) : { base: value };
+  const base = one(stored['base']) ?? 'beside';
+  const tablet = one(stored['tablet']) ?? base;
+  const desktop = one(stored['desktop']) ?? tablet;
+  if (tier !== null) return { base: tier === 'desktop' ? desktop : tier === 'tablet' ? tablet : base };
+  return { base, ...(tablet !== base ? { tablet } : {}), ...(desktop !== tablet ? { desktop } : {}) };
+}
+
+/**
+ * R20E (T300): the social proof — the image and the caption with its own
+ * placement and measure when set. R23 (T436): the caption's own size, weight,
+ * line height and colour are gone; it keeps today's small, muted text.
+ */
+function HeroSocialProofLine({ props, tier }: { props: HeroProps; tier: BreakpointTier | null }): ReactNode {
+  const proof = props.socialProof;
+  const proofImage = proof?.image;
+  const hasProofImage = Boolean(proofImage && (proofImage.src || proofImage.assetId || proofImage.mobileSrc || proofImage.mobileAssetId));
+  const caption = proof?.caption?.trim() ?? '';
+  if (!hasProofImage && caption === '') return null;
+  const measure = responsivePxVars('hero-proof-max', props.proofCaptionMaxWidthPx, tier, { min: 40, max: 1200 });
+  const placements = caption !== '' ? proofCaptionPlacements(props.proofCaptionPlacement, tier) : null;
+  const captionClass = ['cmsc-pb-hero__proof-caption', measure ? 'cmsc-pb-hero__proof-caption--measure' : ''].filter(Boolean).join(' ');
+  const captionStyle = { ...(measure ?? {}) };
+  return (
+    <div
+      className="cmsc-pb-hero__proof"
+      {...(placements ? { 'data-caption': placements.base } : {})}
+      {...(placements?.tablet ? { 'data-caption-md': placements.tablet } : {})}
+      {...(placements?.desktop ? { 'data-caption-lg': placements.desktop } : {})}
+    >
+      {hasProofImage ? <Picture className="cmsc-pb-hero__proof-image" image={proofImage!} /> : null}
+      {caption !== '' ? (
+        <p className={captionClass} {...(Object.keys(captionStyle).length > 0 ? { style: captionStyle as CSSProperties } : {})}>
+          {caption}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Today's body (`.cmsc-pb-hero__body`): 16 px at 1.65, read by a breakpoint left on Default (R19A). */
+const BODY_TODAY = { size: '16px', lineHeight: '1.65' };
+
 function HeroBodyText({
-  body,
+  props,
+  tier,
   revealTarget = false,
   wordStart,
+  align,
+  alignTiers,
 }: {
-  body: HeroProps['body'];
+  props: HeroProps;
+  tier: BreakpointTier | null;
   revealTarget?: boolean;
   wordStart?: number | undefined;
+  align?: 'left' | 'center' | 'right';
+  alignTiers?: { md: 'left' | 'center' | 'right'; lg: 'left' | 'center' | 'right' } | undefined;
 }): ReactNode {
-  const value = body as unknown;
+  const value = props.body as unknown;
   if (value === undefined || value === null) return null;
-  const className = revealTarget ? 'cmsc-pb-hero__body cmsc-reveal-target' : 'cmsc-pb-hero__body';
+  // R19A (T227): the body's own size, weight, line height and measure — written only when chosen.
+  const text = textStyleAttrs(
+    {
+      size: props.bodySize,
+      sizePx: props.bodySizePx,
+      weight: props.bodyWeight,
+      lineHeight: props.bodyLineHeight,
+    },
+    tier,
+    BODY_TODAY,
+  );
+  const measure =
+    props.bodyMaxWidth === undefined
+      ? null
+      : textMaxWidthAttrs({ textMaxWidth: props.bodyMaxWidth, ...(props.bodyMaxWidthPx !== undefined ? { textMaxWidthPx: props.bodyMaxWidthPx } : {}) }, tier);
+  const className = [
+    'cmsc-pb-hero__body',
+    ...(revealTarget ? ['cmsc-reveal-target'] : []),
+    ...text.classes,
+    ...(measure ? [measure.className] : []),
+  ].join(' ');
+  const style = { ...(measure?.style ?? {}), ...text.style };
+  const attrs = {
+    className,
+    ...(Object.keys(style).length > 0 ? { style: style as CSSProperties } : {}),
+    ...(measure && (align === 'center' || align === 'right' || alignTiers) ? { 'data-align': align ?? 'left' } : {}),
+    ...(measure ? alignTierAttrs(alignTiers) : {}),
+  };
   // A plain string (a seeder may write one) is one paragraph.
   if (typeof value === 'string') {
     if (value.trim() === '') return null;
     if (wordStart !== undefined) {
       const escaped = value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return <div className={className} dangerouslySetInnerHTML={{ __html: `<p>${splitHtmlWords(escaped, wordStart).html}</p>` }} />;
+      return <div {...attrs} dangerouslySetInnerHTML={{ __html: `<p>${splitHtmlWords(escaped, wordStart).html}</p>` }} />;
     }
     return (
-      <div className={className}>
+      <div {...attrs}>
         <p>{value}</p>
       </div>
     );
@@ -546,7 +691,7 @@ function HeroBodyText({
   const html = htmlFromTiptap(value as JSONContent);
   if (html === '' || html === '<p></p>') return null;
   const shown = wordStart === undefined ? html : splitHtmlWords(html, wordStart).html;
-  return <div className={className} dangerouslySetInnerHTML={{ __html: shown }} />;
+  return <div {...attrs} dangerouslySetInnerHTML={{ __html: shown }} />;
 }
 
 // ── Layout values ────────────────────────────────────────────────────
@@ -567,11 +712,29 @@ function minHeightAt(props: HeroProps, tier: BreakpointTier): string {
   return MIN_HEIGHT_CSS[value] ?? 'auto';
 }
 
-function gapAt(gaps: HeroProps['gaps'], tier: BreakpointTier): string {
-  const token = resolveResponsive<SpaceToken>(gaps, tier, 'm');
-  const safe: SpaceToken = isSpaceToken(token) ? token : 'm';
+/**
+ * A space at a tier: a token's variable with its built-in px, or — R19A
+ * (T228, T229) — the Custom px. A Custom tier with no px, or an unknown value,
+ * reads as `fallback`, as an unknown value always did.
+ */
+function spaceAt(
+  space: HeroProps['gaps'],
+  spacePx: number | ResponsiveProp<number> | undefined,
+  tier: BreakpointTier,
+  fallback: SpaceToken,
+): string {
+  const value = resolveResponsive<SpaceToken | 'custom'>(space, tier, fallback);
+  if (value === 'custom') {
+    const px = resolveResponsive<number>(spacePx, tier, Number.NaN);
+    if (typeof px === 'number' && Number.isFinite(px)) return `${Math.max(0, px)}px`;
+  }
+  const safe: SpaceToken = isSpaceToken(value) ? value : fallback;
   const [mobilePx, desktopPx] = SECTION_SPACE_FALLBACKS[safe];
   return `var(--cmsb-space-${safe}, ${tier === 'desktop' ? desktopPx : mobilePx}px)`;
+}
+
+function gapAt(gaps: HeroProps['gaps'], tier: BreakpointTier, gapsPx?: HeroProps['gapsPx']): string {
+  return spaceAt(gaps, gapsPx, tier, 'm');
 }
 
 /** The min height and the gap as one value for the previewed tier, or per breakpoint as custom properties. */
@@ -582,22 +745,32 @@ function layoutStyle(props: HeroProps, tier: BreakpointTier | null): CSSProperti
     ['tablet', '-md'],
     ['desktop', '-lg'],
   ];
+  // R19A (T229): the space below media above the content, only while such media is there and a space is chosen.
+  const mediaSpace = props.mediaSpace !== undefined && props.mediaPlacement === 'above' && hasVisualMedia(props.media);
   if (tier !== null) {
     style['minHeight'] = minHeightAt(props, tier);
-    if (props.gaps !== undefined) style['--cmsc-hero-gap'] = gapAt(props.gaps, tier);
+    if (props.gaps !== undefined) style['--cmsc-hero-gap'] = gapAt(props.gaps, tier, props.gapsPx);
+    if (mediaSpace) style['--cmsc-hero-media-space'] = spaceAt(props.mediaSpace, props.mediaSpacePx, tier, 'none');
     return style as CSSProperties;
   }
   for (const [at, suffix] of tiers) {
     style[`--cmsc-hero-min-h${suffix}`] = minHeightAt(props, at);
-    if (props.gaps !== undefined) style[`--cmsc-hero-gap${suffix}`] = gapAt(props.gaps, at);
+    if (props.gaps !== undefined) style[`--cmsc-hero-gap${suffix}`] = gapAt(props.gaps, at, props.gapsPx);
+  }
+  if (mediaSpace) {
+    for (const [at, suffix] of tiers) style[`--cmsc-hero-media-space${suffix}`] = spaceAt(props.mediaSpace, props.mediaSpacePx, at, 'none');
   }
   return style as CSSProperties;
 }
 
-/** The CSS of one `spaceAfter` entry at a tier: a token with its built-in px, or the Custom px. */
+/**
+ * The CSS of one `spaceAfter` entry at a tier: a token with its built-in px, or the Custom px —
+ * one number, or a value stored per breakpoint (read at the tier, as the other px fields are).
+ */
 function spaceAfterCss(entry: HeroSpaceAfter, tier: BreakpointTier): string {
   if (entry.space === 'custom') {
-    const px = typeof entry.spacePx === 'number' && Number.isFinite(entry.spacePx) ? Math.max(0, entry.spacePx) : 0;
+    const value = resolveResponsive<number>(entry.spacePx, tier, 0);
+    const px = typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
     return `${px}px`;
   }
   const token = entry.space as SpaceToken;
@@ -745,16 +918,12 @@ function HeroBody({ props: stored, tier }: { props: HeroProps; tier: BreakpointT
   const textColor = props.textColor ? (colorValueToCss(props.textColor) ?? resolveColorValue(props.textColor)) : undefined;
   const paint = paintOf(media);
   const buttons = (props.buttons ?? []).filter((button) => button && typeof button === 'object');
-  const proof = props.socialProof;
-  const proofImage = proof?.image;
-  const hasProofImage = Boolean(proofImage && (proofImage.src || proofImage.assetId || proofImage.mobileSrc || proofImage.mobileAssetId));
-  const caption = proof?.caption?.trim() ?? '';
   // Image or video media may reach the window's edges (T133); a solid or gradient paint is the hero's own box.
   const wideMedia = props.mediaWidth === 'viewport' && hasVisualMedia(media);
   const spaced = spaceAfterAttrs(heroElementSpaces(props.order, props.spaceAfter), tier);
 
   const elements: Record<HeroElement, ReactNode> = {
-    eyebrow: props.eyebrow?.trim() ? <p key="eyebrow" className="cmsc-pb-hero__eyebrow">{props.eyebrow}</p> : null,
+    eyebrow: <HeroEyebrow key="eyebrow" props={props} tier={tier} />,
     title: (
       <HeroText
         key="title"
@@ -767,6 +936,7 @@ function HeroBody({ props: stored, tier }: { props: HeroProps; tier: BreakpointT
         weight={props.titleWeight}
         maxWidth={props.titleMaxWidth}
         maxWidthPx={props.titleMaxWidthPx}
+        lineHeight={props.titleLineHeight}
         align={align}
         alignTiers={aligned.tiers}
       />
@@ -780,6 +950,12 @@ function HeroBody({ props: stored, tier }: { props: HeroProps; tier: BreakpointT
         size={props.subheadingSize}
         sizePx={props.subheadingSizePx}
         tier={tier}
+        weight={singleWeight(props.subheadingWeight)}
+        lineHeight={props.subheadingLineHeight}
+        maxWidth={props.subheadingMaxWidth}
+        maxWidthPx={props.subheadingMaxWidthPx}
+        align={align}
+        alignTiers={aligned.tiers}
       />
     ),
     statement: (
@@ -791,6 +967,12 @@ function HeroBody({ props: stored, tier }: { props: HeroProps; tier: BreakpointT
         size={props.statementSize}
         sizePx={props.statementSizePx}
         tier={tier}
+        weight={singleWeight(props.statementWeight)}
+        lineHeight={props.statementLineHeight}
+        maxWidth={props.statementMaxWidth}
+        maxWidthPx={props.statementMaxWidthPx}
+        align={align}
+        alignTiers={aligned.tiers}
         revealTarget={fadeUp}
         {...(words ? { wordStart: 0 } : {})}
       />
@@ -798,7 +980,10 @@ function HeroBody({ props: stored, tier }: { props: HeroProps; tier: BreakpointT
     body: (
       <HeroBodyText
         key="body"
-        body={props.body}
+        props={props}
+        tier={tier}
+        align={align}
+        alignTiers={aligned.tiers}
         revealTarget={fadeUp}
         wordStart={words ? (isEmptyInline(props.statement) ? 0 : countInlineRichWords(props.statement as never)) : undefined}
       />
@@ -811,13 +996,7 @@ function HeroBody({ props: stored, tier }: { props: HeroProps; tier: BreakpointT
           ))}
         </div>
       ) : null,
-    socialProof:
-      hasProofImage || caption !== '' ? (
-        <div key="socialProof" className="cmsc-pb-hero__proof">
-          {hasProofImage ? <Picture className="cmsc-pb-hero__proof-image" image={proofImage!} /> : null}
-          {caption !== '' ? <p className="cmsc-pb-hero__proof-caption">{caption}</p> : null}
-        </div>
-      ) : null,
+    socialProof: <HeroSocialProofLine key="socialProof" props={props} tier={tier} />,
   };
 
   return (
@@ -1021,6 +1200,13 @@ const HERO_FIELDS = {
   overlay: OVERLAY_FIELD,
   textColor: createColorField({ label: 'Text color' }),
   eyebrow: { type: 'text' as const, label: 'Eyebrow' },
+  // R20E (T299): the eyebrow's look — e.g. as a label above the body; unset is today's small uppercase line.
+  // R23 (T436): a size (a type token or Custom px), the line height with Custom px only, no weight.
+  eyebrowSize: sizeFieldWithDefault('Eyebrow size'),
+  eyebrowSizePx: sizePxField('Custom eyebrow size (px)'),
+  eyebrowLineHeight: lineHeightField('Eyebrow line height'),
+  eyebrowUppercase: createToggleField({ label: 'Eyebrow in capitals', defaultValue: true }),
+  eyebrowColor: createColorField({ label: 'Eyebrow color' }),
   title: createInlineRichTextField({ label: 'Title' }),
   titleLevel: levelField('Title level'),
   titleSize: sizeField('Title size'),
@@ -1029,15 +1215,33 @@ const HERO_FIELDS = {
   titleWeight: { ...textWeightField('Title weight'), metadata: PB_RESPONSIVE_METADATA },
   titleMaxWidth: textMaxWidthField('Title max width'),
   titleMaxWidthPx: textMaxWidthPxField('Custom title max width (px)'),
+  // R20E (T298): the title's line height per breakpoint — R23 (T435): with a Custom size only.
+  titleLineHeight: lineHeightField('Title line height'),
   subheading: createInlineRichTextField({ label: 'Subheading' }),
   subheadingLevel: levelField('Subheading level'),
   subheadingSize: sizeField('Subheading size'),
   subheadingSizePx: sizePxField('Custom subheading size (px)'),
+  // R19A (T227): the subheading's weight, line height and measure, as the title's. R23 (T435): one weight.
+  subheadingWeight: textWeightField('Subheading weight'),
+  subheadingLineHeight: lineHeightField('Subheading line height'),
+  subheadingMaxWidth: textMaxWidthField('Subheading max width'),
+  subheadingMaxWidthPx: textMaxWidthPxField('Custom subheading max width (px)'),
   statement: createInlineRichTextField({ label: 'Statement' }),
   statementLevel: levelField('Statement level'),
   statementSize: sizeField('Statement size'),
   statementSizePx: sizePxField('Custom statement size (px)'),
+  statementWeight: textWeightField('Statement weight'),
+  statementLineHeight: lineHeightField('Statement line height'),
+  statementMaxWidth: textMaxWidthField('Statement max width'),
+  statementMaxWidthPx: textMaxWidthPxField('Custom statement max width (px)'),
   body: createRichTextDocField({ label: 'Text' }),
+  // R19A (T227): the body's size (Default: today's 16 px), weight, line height and measure.
+  bodySize: sizeFieldWithDefault('Text size'),
+  bodySizePx: sizePxField('Custom text size (px)'),
+  bodyWeight: textWeightField('Text weight'),
+  bodyLineHeight: lineHeightField('Text line height'),
+  bodyMaxWidth: textMaxWidthField('Text max width'),
+  bodyMaxWidthPx: textMaxWidthPxField('Custom text max width (px)'),
   buttons: {
     type: 'array' as const,
     label: 'Buttons',
@@ -1055,6 +1259,24 @@ const HERO_FIELDS = {
       image: IMAGE_OBJECT_FIELD,
       caption: { type: 'text' as const, label: 'Caption' },
     },
+  },
+  // R20E (T300): the social-proof caption's placement and measure; unset is today's.
+  proofCaptionPlacement: {
+    type: 'select' as const,
+    label: 'Social proof caption placement',
+    metadata: PB_RESPONSIVE_METADATA,
+    options: [
+      { label: 'Beside the image', value: 'beside' },
+      { label: 'Below the image', value: 'below' },
+    ],
+  },
+  // A caption's measure beside a small image: its own range (narrower than any text column).
+  proofCaptionMaxWidthPx: {
+    type: 'number' as const,
+    label: 'Custom social proof caption max width (px)',
+    min: 40,
+    max: 1200,
+    metadata: PB_RESPONSIVE_METADATA,
   },
   // T133: the order of the elements; T193: with the space after each (the former `spaceAfter` list).
   order: {
@@ -1099,20 +1321,22 @@ const HERO_FIELDS = {
     step: 8,
     metadata: PB_RESPONSIVE_METADATA,
   },
+  // R19A (T228): with Custom (px), as the space after an element has.
   gaps: {
     type: 'select' as const,
     label: 'Space between items',
     metadata: PB_RESPONSIVE_METADATA,
-    options: [
-      { label: 'None', value: 'none' },
-      { label: 'XS', value: 'xs' },
-      { label: 'S', value: 's' },
-      { label: 'M', value: 'm' },
-      { label: 'L', value: 'l' },
-      { label: 'XL', value: 'xl' },
-      { label: 'XXL', value: 'xxl' },
-    ],
+    options: GAP_OPTIONS,
   },
+  gapsPx: { type: 'number' as const, label: 'Custom space between items (px)', min: 0, max: 400, step: 1, metadata: PB_RESPONSIVE_METADATA },
+  // R19A (T229): with image or video media above the content, the space between them; unset is none (today's).
+  mediaSpace: {
+    type: 'select' as const,
+    label: 'Space below the media',
+    metadata: PB_RESPONSIVE_METADATA,
+    options: GAP_OPTIONS,
+  },
+  mediaSpacePx: { type: 'number' as const, label: 'Custom space below the media (px)', min: 0, max: 400, step: 1, metadata: PB_RESPONSIVE_METADATA },
   reveal: revealField(),
   cornerRadius: CORNER_RADIUS_FIELD,
   shadow: SHADOW_FIELD,
@@ -1133,9 +1357,27 @@ const CUSTOM_PX_FIELDS: Record<string, keyof HeroProps> = {
   titleSizePx: 'titleSize',
   titleMaxWidthPx: 'titleMaxWidth',
   subheadingSizePx: 'subheadingSize',
+  subheadingMaxWidthPx: 'subheadingMaxWidth',
   statementSizePx: 'statementSize',
+  statementMaxWidthPx: 'statementMaxWidth',
+  bodySizePx: 'bodySize',
+  bodyMaxWidthPx: 'bodyMaxWidth',
+  eyebrowSizePx: 'eyebrowSize',
+  // R23 (T435): a line height only with a Custom size — a token brings its own.
+  titleLineHeight: 'titleSize',
+  subheadingLineHeight: 'subheadingSize',
+  statementLineHeight: 'statementSize',
+  bodyLineHeight: 'bodySize',
+  eyebrowLineHeight: 'eyebrowSize',
   minHeightPx: 'minHeight',
+  gapsPx: 'gaps',
+  mediaSpacePx: 'mediaSpace',
 };
+
+/** R20E (T299): the eyebrow's look, offered with an eyebrow. */
+const EYEBROW_LOOK_KEYS = new Set(['eyebrowSize', 'eyebrowSizePx', 'eyebrowLineHeight', 'eyebrowUppercase', 'eyebrowColor']);
+/** R20E (T300): the social-proof caption's placement and measure, offered with a caption. */
+const PROOF_CAPTION_KEYS = new Set(['proofCaptionPlacement', 'proofCaptionMaxWidthPx']);
 
 /** The overlay sub-fields each type uses (T192): the type alone for none, the strength, a gradient's direction. */
 const OVERLAY_KEYS: Record<'none' | 'solid' | 'gradient', readonly string[]> = {
@@ -1210,6 +1452,11 @@ const heroConfig: ComponentConfig<{ props: HeroProps }> = {
     for (const [key, field] of Object.entries((params?.fields as Record<string, unknown> | undefined) ?? HERO_FIELDS)) {
       const select = CUSTOM_PX_FIELDS[key];
       if (select !== undefined && !usesCustom(props[select])) continue;
+      // R19A (T229): the space below the media only for image or video media above the content.
+      if ((key === 'mediaSpace' || key === 'mediaSpacePx') && !(props.mediaPlacement === 'above' && hasVisualMedia(props.media))) continue;
+      // R20E (T299, T300): the eyebrow's look with an eyebrow, the proof caption's with a caption.
+      if (EYEBROW_LOOK_KEYS.has(key) && !props.eyebrow?.trim()) continue;
+      if (PROOF_CAPTION_KEYS.has(key) && !props.socialProof?.caption?.trim()) continue;
       fields[key] = key === 'overlay' ? overlayFieldFor(field, props.overlay?.kind) : field;
     }
     return fields as unknown as Fields<HeroProps>;
@@ -1223,6 +1470,10 @@ const heroConfig: ComponentConfig<{ props: HeroProps }> = {
     // (`undefined`, which the saved JSON drops) rather than only left out.
     const carried = carrySpaceAfterIntoOrder(props);
     if (carried) props = { ...carried, spaceAfter: undefined } as unknown as HeroProps;
+    // R23 (T436): an eyebrow Custom px stored by R20E without a size is shown as the Custom size it renders as.
+    if ((props.eyebrowSize === undefined || props.eyebrowSize === null) && eyebrowSizeOf(props) === 'custom') {
+      props = { ...props, eyebrowSize: 'custom' };
+    }
     // The first image or video chosen gets a 40 % solid overlay proposed (contracts/blocks.md); a chosen overlay is kept.
     if (params?.changed?.media === true && hasVisualMedia(props.media) && props.overlay === undefined) {
       props = { ...props, overlay: { kind: 'solid', strength: 40 } };

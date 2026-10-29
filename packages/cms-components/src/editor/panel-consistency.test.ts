@@ -74,6 +74,8 @@ const responsive = (field: AnyField | undefined): boolean => field?.metadata?.pa
 const optionLabels = (field: AnyField | undefined): Record<string, string> =>
   Object.fromEntries((field?.options ?? []).map((option) => [String(option.value), option.label]));
 const names = components.map(([name]) => name);
+/** R20E (T293, T300): a caption’s measure (cms.Image, cms.Hero’s social-proof caption). */
+const CAPTION_MEASURE = /caption(min|max)widthpx$/i;
 
 // ── Cross-cutting ───────────────────────────────────────────────────
 
@@ -163,9 +165,20 @@ describe('units and ranges (T209)', () => {
 
   it.each(names)('%s: a custom maximum width has the one range, 160–2000 px', async (name) => {
     const wrong = (await allFieldsOf(name))
-      .filter(([path, field]) => /maxwidthpx$/i.test(path) && field?.type === 'number' && path !== 'maxWidthPx')
+      // R20E (T293, T300), deliberately changed (standing rule 13): a caption's measure beside a small image
+      // (a social-proof line, an avatar group) is narrower than any text column (well under 160 px), so
+      // caption measures have their own range, held by the case below.
+      .filter(([path, field]) => /maxwidthpx$/i.test(path) && !CAPTION_MEASURE.test(path) && field?.type === 'number' && path !== 'maxWidthPx')
       .filter(([, field]) => field.min !== 160 || field.max !== 2000 || field.step !== 10)
       .map(([path, field]) => `${path}: ${String(field.min)}–${String(field.max)} step ${String(field.step)}`);
+    expect([...new Set(wrong)]).toEqual([]);
+  });
+
+  it.each(names)('%s: a caption’s custom minimum or maximum width has the caption range, 0 or 40–1200 px', async (name) => {
+    const wrong = (await allFieldsOf(name))
+      .filter(([path, field]) => CAPTION_MEASURE.test(path) && field?.type === 'number')
+      .filter(([path, field]) => field.min !== (/min/i.test(path.split('.').pop() ?? '') ? 0 : 40) || field.max !== 1200)
+      .map(([path, field]) => `${path}: ${String(field.min)}–${String(field.max)}`);
     expect([...new Set(wrong)]).toEqual([]);
   });
 });
@@ -207,17 +220,48 @@ const WEIGHT_PAIRS: ReadonlyArray<readonly [string, string, string]> = [
   ['cms.LinkTile', 'labelSize', 'labelWeight'],
 ];
 
+/**
+ * R19A–R22I's texts (T224, T227, T231, T235, T236, T311, T312): R23 (T435)
+ * made their weight one value for every breakpoint — beside the size, but not
+ * on the Responsive tab.
+ */
+const SINGLE_WEIGHT_PAIRS: ReadonlyArray<readonly [string, string, string]> = [
+  ['cms.FeatureList', 'bodySize', 'bodyWeight'],
+  ['cms.Hero', 'subheadingSize', 'subheadingWeight'],
+  ['cms.Hero', 'statementSize', 'statementWeight'],
+  ['cms.Hero', 'bodySize', 'bodyWeight'],
+  ['cms.Statement', 'bodySize', 'bodyWeight'],
+  ['cms.Stats', 'labelSize', 'labelWeight'],
+  ['cms.LinkList', 'titleSize', 'titleWeight'],
+  ['cms.CarouselSplit', 'titleSize', 'titleWeight'],
+  ['cms.CarouselSplit', 'bodySize', 'bodyWeight'],
+];
+
+/** Where a size's weight sits: right after the size, or after its Custom px when that shows. */
+function weightFollowsSize(name: string, fields: Record<string, AnyField>, size: string, weight: string): void {
+  const keys = Object.keys(fields);
+  // The heading's Custom px is `fontSize`; every other size's is `<size>Px`.
+  const px = name === 'cms.Heading' ? 'fontSize' : `${size}Px`;
+  const after = keys.indexOf(px) >= 0 ? keys.indexOf(px) : keys.indexOf(size);
+  expect(keys.indexOf(weight), `${weight} after ${size}`).toBe(after + 1);
+}
+
 describe('a text\'s weight sits next to its size (T211)', () => {
   it.each(WEIGHT_PAIRS)('%s: %s then %s, both per breakpoint', async (name, size, weight) => {
     const fields = await shown(name, { [size]: 'custom', caption: 'Caption' });
     expect(responsive(fields[size]), size).toBe(true);
     expect(responsive(fields[weight]), weight).toBe(true);
     expect((block(name) as { responsiveFields?: string[] }).responsiveFields).toContain(weight);
-    const keys = Object.keys(fields);
-    // The heading's Custom px is `fontSize`; every other size's is `<size>Px`.
-    const px = name === 'cms.Heading' ? 'fontSize' : `${size}Px`;
-    const after = keys.indexOf(px) >= 0 ? keys.indexOf(px) : keys.indexOf(size);
-    expect(keys.indexOf(weight), `${weight} after ${size}`).toBe(after + 1);
+    weightFollowsSize(name, fields, size, weight);
+  });
+
+  // One value is not on the Responsive tab: the weight shows with the block's other text options.
+  it.each(SINGLE_WEIGHT_PAIRS)('%s: %s per breakpoint, %s one value (R23 T435)', async (name, size, weight) => {
+    const fields = await shown(name, { [size]: 'custom', caption: 'Caption' });
+    expect(responsive(fields[size]), size).toBe(true);
+    expect(fields, weight).toHaveProperty(weight);
+    expect(responsive(fields[weight]), weight).toBe(false);
+    expect((block(name) as { responsiveFields?: string[] }).responsiveFields).not.toContain(weight);
   });
 });
 
@@ -282,7 +326,8 @@ describe('a slider shows the settings that apply (T213)', () => {
     const noArrows = await shown(name, { ...base, controls: { arrows: false, dots: true } });
     const controls = Object.keys(noArrows['controls']?.objectFields ?? {});
     for (const key of [...ARROW_LOOK, 'disabledArrowLook', 'disabledArrowColor']) expect(controls).not.toContain(key);
-    expect(controls).toEqual(['arrows', 'dots']);
+    // R19B (T242, deliberately widened): the dots' breakpoints show with the dots (R23 T448: no dot colours).
+    expect(controls).toEqual(['arrows', 'dots', 'hideDotsOn']);
     expect(Object.keys(noArrows)).toContain('controlsPlacement');
 
     const none = await shown(name, { ...base, controls: { arrows: false, dots: false } });

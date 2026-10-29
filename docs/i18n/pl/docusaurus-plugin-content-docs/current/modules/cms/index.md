@@ -80,7 +80,7 @@ przebudowała i usunęła część bloków; ostatnia kolumna mówi, co się zmie
 | `cms.Icons`, `cms.Social`, `cms.Spacer` | Ikony, Social media, Odstęp / Separator | Bez zmian. |
 | `cms.Hero` | Hero / Baner CTA | **Przebudowany.** Media (jednolity kolor, gradient, obraz z wersją mobilną albo wideo z własnego serwera z kadrem zastępczym i **Proporcjami wideo** dla każdego progu, gdy wideo jest nad tekstem, domyślnie 16:9) za tekstem lub nad nim; nadtytuł, tytuł, podtytuł i hasło, każde z własnym poziomem i rozmiarem; tekst sformatowany; do sześciu przycisków; dowód społeczny (obraz i podpis); **Przyciemnienie (nakładka na media w tle)**, minimalna wysokość, wyrównanie i opcjonalna animacja wejścia; **Typ** przyciemnienia to brak, jednolite albo gradientowe, a widoczne są tylko ustawienia, których ten typ używa (siła dla jednolitego i gradientowego, kierunek dla gradientowego). **Elementy: kolejność i odstępy** ustawia nadtytuł, tytuł, podtytuł, hasło, tekst, przyciski i dowód społeczny w dowolnej kolejności (niewymienione idą dalej w kolejności domyślnej), a każdy wymieniony element może mieć **Odstęp po elemencie** (rozmiar odstępu albo **Własny** w px); przy wartości **Domyślny** element zachowuje **Odstęp między elementami**, a gdy nie jest ustawiony — domyślne odstępy. **Szerokość mediów: Pełna szerokość okna** pozwala obrazowi lub wideo sięgać krawędzi okna, a tekst zostaje w banerze. Wersją mobilną wideo jest wideo z biblioteki albo, przy źródle URL, **Adres URL wideo na urządzenia mobilne**. **Źródło obrazu zastępczego** ustala, skąd pochodzą oba kadry: z **Biblioteki zasobów** (**Obraz zastępczy (plakat)**, **Obraz zastępczy na telefon (plakat)**) albo z **Adresu URL** (**Adres URL obrazu zastępczego**, **Adres URL obrazu zastępczego na telefon**); kadr na telefon jest widoczny, zanim wideo na telefon ruszy, więc wideo o innych proporcjach nie jest pokazywane przycięte. Tytuł ma **Grubość tytułu** i **Maksymalną szerokość tytułu** dla każdego progu: zob. [Nagłówki: grubość i szerokość](#nagłówki-grubość-i-szerokość). |
 | `cms.MediaText` | Media i tekst | **Nowy.** Obraz albo wideo (z Biblioteki zasobów albo, przy **Źródle wideo: Adres URL**, spod adresu, każde z opcjonalnym wideo na urządzenia mobilne pokazywanym poniżej szerokości tabletu, oraz z **Proporcjami wideo** dla każdego progu, domyślnie 16:9) obok tekstu: strona, kolejność na telefonie, podział kolumn, wyrównanie pionowe, elementy z ikonami, przyciski, przypis oraz powtarzane wiersze, które mogą zmieniać stronę na przemian. Wideo przyjmuje opcjonalny **Obraz zastępczy na telefon (plakat)** albo **Adres URL obrazu zastępczego na telefon** dla wideo na telefon. **Rozmiar tytułu elementu** (rozmiar ze skali typografii albo **Własny (px)**, dla każdego progu) i **Grubość tytułu elementu** (300–800) zmieniają tytuł każdego elementu; pozostawione na **Domyślny**, tytuły mają jak dotąd 16 px i są półgrube. |
-| `cms.BackgroundPanel` | Panel z obrazem w tle | **Nowy.** Obraz z panelem tekstu po jednej stronie. Aby sięgał od krawędzi do krawędzi, umieść go w sekcji o szerokości **Bleed** albo **Full**. |
+| `cms.BackgroundPanel` | Panel z obrazem w tle | **Nowy.** Obraz z panelem tekstu po jednej stronie. Aby sięgał od krawędzi do krawędzi, umieść go w sekcji o szerokości **Bleed** albo **Full**. **Przezroczyste pole tekstu** (domyślnie wyłączone) zostawia panel tekstu bez tła schematu, więc za tekstem widać obraz; dobierz schemat tak, by tekst był czytelny na obrazie. |
 | `cms.CtaCard` | Karta wezwania do działania | **Nowy.** Wezwanie do działania w ramce z własnym schematem kolorów, z listą, przyciskami, opcjonalnym obrazem i dekoracyjnym tłem marki. |
 | `cms.Statement` | Hasło | **Nowy.** Duże hasło lub cytat, opcjonalnie na obrazie wypełniającym blok, z opcjonalnym pojawianiem się słowo po słowie i maksymalną szerokością tekstu dla każdego progu. Sekcja o szerokości **Bleed** rozciąga je od krawędzi do krawędzi. |
 | `cms.LinkList` | Lista odnośników | **Nowy.** Wiersze z tytułem, opisem i przyciskiem, z opcjonalną linią oddzielającą. |
@@ -136,9 +136,9 @@ treść nie jest migrowana w bazie danych i nie musi być:
 
 Blok **Sekcja** (`cms.Section`) ma ustawienia sekcji — kotwicę, schemat
 kolorów, tło, odstępy, szerokość, położenie treści i animację wejścia — oraz
-miejsce na dowolne inne bloki. Każde ustawienie jest osobnym polem. Odstęp
-nad, Odstęp pod, Położenie treści i Nachodzenie na poprzednią sekcję ustawia
-się dla każdego progu na karcie
+miejsce na dowolne inne bloki. Każde ustawienie jest osobnym polem. Szerokość,
+Odstęp nad, Odstęp pod, Położenie treści i Nachodzenie na poprzednią sekcję
+ustawia się dla każdego progu na karcie
 **Responsive** edytora: w **Scope settings** wybierz Base (telefon), Tablet
 albo Desktop i ustaw wartość dla tego progu, tak jak w wierszu (Row). Pozostałe
 ustawienia są na karcie **General**, a kotwica i animacja wejścia na końcu.
@@ -157,9 +157,9 @@ Contained i z odstępem `l`.
 | --- | --- |
 | Kotwica (**Anchor**) | Nazwa fragmentu, np. `contact`, dzięki której `/strona#contact` przewija do sekcji. Zob. [Kotwice](#kotwice). |
 | Schemat kolorów (**Color scheme**) | Inherit, Light, Muted, Dark. Schemat ustala kolory tekstu, nagłówków, linków, obramowań i przycisków każdego bloku w sekcji. |
-| Tło (**Background**) | Brak, jednolity kolor, gradient, obraz albo wideo. Obraz przyjmuje opcjonalny obraz mobilny, punkt ogniskowy, **rozmiar** (Wypełnij, domyślnie; Zmieść, cały obraz; Rozmiar naturalny; albo szerokość w px lub %) i **powtarzanie** (bez powtarzania, domyślnie; kafelki; w poziomie; w pionie); wideo — kadr zastępczy i opcjonalne wideo mobilne. Nad mediami może leżeć nakładka (jednolita lub gradientowa, z kierunkiem i siłą). W schemacie ciemnym **Decorative backdrop** maluje dekoracyjny obraz marki; gdy jest włączone, **Rozmiar tła dekoracyjnego**, **Powtarzanie tła dekoracyjnego** i **Położenie tła dekoracyjnego** ustalają, jak jest rysowane (dopóki się ich nie zmieni: wypełnia sekcję od góry, wyśrodkowane, bez powtarzania). Rozmiar w px zachowuje obraz lub tło dekoracyjne w tym rozmiarze na każdej szerokości ekranu. |
+| Tło (**Background**) | Brak, jednolity kolor, gradient, obraz albo wideo. Obraz przyjmuje opcjonalny obraz mobilny, punkt ogniskowy, **rozmiar** (Wypełnij, domyślnie; Zmieść, cały obraz; Rozmiar naturalny; albo szerokość w px lub %) i **powtarzanie** (bez powtarzania, domyślnie; kafelki; w poziomie; w pionie); wideo — kadr zastępczy i opcjonalne wideo mobilne. Nad mediami może leżeć nakładka (jednolita lub gradientowa, z kierunkiem i siłą). W schemacie ciemnym **Decorative backdrop** maluje dekoracyjny obraz marki; gdy jest włączone, **Rozmiar tła dekoracyjnego**, **Powtarzanie tła dekoracyjnego** i **Położenie tła dekoracyjnego** ustalają, jak jest rysowane (dopóki się ich nie zmieni: wypełnia sekcję od góry, wyśrodkowane, bez powtarzania). Rozmiar w px zachowuje obraz lub tło dekoracyjne w tym rozmiarze na każdej szerokości ekranu. Przy obrazie lub wideo mobilnym **Gdzie wyświetlać obraz lub wideo na telefony** ustala, gdzie ustępuje ono wersji na komputer: **Telefony (poniżej 768 px)**, domyślnie, albo **Telefony i tablety (poniżej 1024 px)**. |
 | Odstęp nad / pod (**Space above** / **Space below**) | Karta Responsive. Stopień skali odstępów marki (`none`, `xs`, `s`, `m`, `l`, `xl`, `xxl`) albo wartość w pikselach, dla każdego progu; próg pozostawiony na **Dziedzicz** przyjmuje wartość progu niższego. Odstęp to wypełnienie (padding), więc dwie sąsiednie ciemne sekcje stykają się i tworzą jeden ciemny obszar. |
-| Szerokość (**Width**) | Contained, Wide, Full, Viewport (cała szerokość okna i co najmniej cała jego wysokość), Bleed (treść do krawędzi) albo Custom, które pokazuje **Maksymalna szerokość (px)**: jedną maksymalną szerokość w pikselach. |
+| Szerokość (**Width**) | Karta Responsive. Contained, Wide, Full, Viewport (cała szerokość okna i co najmniej cała jego wysokość), Bleed (treść do krawędzi) albo Custom, które pokazuje **Własna maksymalna szerokość (px)**: jedną maksymalną szerokość w pikselach. Ustaw ją dla każdego progu, np. dla sekcji, która na telefonie jest **Bleed** (ramka od krawędzi do krawędzi), a od komputera **Contained**; szerokość wybrana raz obowiązuje na każdym progu, jak dotąd. Szerokość Custom większa niż kontener strony poszerza sekcję poza kontener, wyśrodkowaną, najwyżej do szerokości okna bez bocznego marginesu strony; mniejsza od kontenera zostaje w nim. |
 | Szerokość treści (**Content width**) | Widoczna przy Full, Viewport albo Bleed: tło zachowuje ten zasięg, a treść stoi w kontenerze strony, w szerokiej ramce, przy krawędziach albo we własnej maksymalnej szerokości. Ciemny pas przez cały ekran z treścią w kontenerze to **Bleed** z szerokością treści **Kontener strony**; tylko **Viewport** daje dodatkowo sekcję wysoką na cały ekran. Bez wyboru obowiązuje ramka treści samej szerokości. |
 | Położenie treści (**Content position**) | Karta Responsive. Góra, środek albo dół, dla każdego progu: gdzie stoi treść, gdy sekcja jest od niej wyższa, jak sekcja Viewport. |
 | Nachodzenie na poprzednią sekcję (**Overlap with the previous section**) | Karta Responsive. Stopień skali odstępów marki albo wartość w pikselach, dla każdego progu; do czasu wyboru **Brak**. Treść sekcji przesuwa się o tyle w górę, na dolną część poprzedniej sekcji, i jest rysowana nad jej tłem, a własne tło tej sekcji zostaje na miejscu — np. obraz, który wchodzi w ciemny pas z cechami. Nie przekraczaj odstępu pod poprzedniej sekcji, bo inaczej jej treść zostanie zasłonięta. Pierwszy blok strony na nic nie nachodzi. W edytorze treść się nie przesuwa, żeby poprzednią sekcję dało się łatwo zaznaczyć; zakreskowany pas u góry sekcji pokazuje, jak daleko będzie nachodzić na oglądanym progu. |
@@ -280,21 +280,72 @@ tłumaczeń `cms` pod `presets.*`.
 Karta **Ścieżka nawigacji** w edytorze strony ustawia:
 
 - **Strona nadrzędna** — strona pokazywana przed tą w ścieżce nawigacji
-  (breadcrumbs). Nie zmienia adresu strony. Strona nie może być własnym
+  (breadcrumbs). Zmienia adres strony tylko z opcją opisaną niżej. Strona nie może być własnym
   rodzicem ani trafić pod jedną ze swoich podstron, a drzewo ma najwyżej osiem
   poziomów; odrzucony wybór kończy się `422 CMS_PAGE_PARENT_CYCLE`. Usunięcie
   rodzica czyści to pole w stronach podrzędnych.
+- **Dołącz ścieżkę strony nadrzędnej do adresu** — domyślnie wyłączone, więc
+  strona zachowuje płaski adres `/<slug>`. Po włączeniu strona jest dostępna
+  pod adresem rodzica: `/<ścieżka rodzica>/<slug>`. Adres rodzica podlega tej
+  samej regule, więc drzewo, w którym wszystkie niższe strony mają tę opcję,
+  daje adresy takie jak `/uslugi/doradztwo/warsztaty`.
+  Zobacz *Zagnieżdżone adresy stron* niżej.
 - **Pokazuj ścieżkę nawigacji** — domyślnie włączone.
 - **Schemat kolorów ścieżki nawigacji** — jasny (domyślny, niczego nie maluje),
-  stonowany albo ciemny.
+  stonowany albo ciemny. Na stonowanym i ciemnym linki mają przygaszony kolor
+  tekstu schematu (po najechaniu jego kolor tekstu), a bieżąca strona kolor
+  tekstu.
+- **Pokazuj ścieżkę nawigacji na pierwszej sekcji** — domyślnie wyłączone.
+  Włączone kładzie ścieżkę na górze pierwszej sekcji strony (np. hero) zamiast
+  w pasie nad nią i nic na stronie nie przesuwa się w dół: żaden pas nie jest
+  malowany, a ścieżka zostaje w kontenerze strony i bocznym marginesie marki.
+  Wybierz schemat **ciemny**, aby ścieżka była jasna na ciemnym obrazie.
+  Pierwsza sekcja nie dostaje automatycznie miejsca na ścieżkę — ustaw jej
+  wystarczający górny odstęp (**Odstęp nad** albo własny odstęp hero), aby
+  ścieżka nie zasłaniała treści.
 
-Storefront wyświetla *Strona główna › przodkowie › strona*. Przodek
+Storefront wyświetla *Strona główna › przodkowie › strona*. Każdy element
+ścieżki ma etykietę z **nazwy** strony — tak samo bieżąca strona, jak każdy
+przodek (do 2026-10-27 przodek pokazywał zamiast niej swój meta tytuł). Przodek
 nieopublikowany w kanale sprzedaży żądania jest pokazywany jako zwykły tekst,
-nie jako link, a jego slug nigdy nie przechodzi między kanałami. Dane
-strukturalne `BreadcrumbList` ścieżki używają adresów bezwzględnych. Cztery pola
+nie jako link, a jego slug nigdy nie przechodzi między kanałami. Ścieżka stoi
+w kontenerze strony i bocznym marginesie marki, więc jest wyrównana z treścią
+strony. W schemacie stonowanym lub ciemnym malowany pas sam trzyma odstęp pod
+ścieżką, więc ciemna pierwsza sekcja następuje po nim bez jasnego paska
+pomiędzy. Dane
+strukturalne `BreadcrumbList` ścieżki używają adresów bezwzględnych. Te pola
 są zapisane w `cms_pages` (`parent_page_id`, `breadcrumbs_visible`,
-`breadcrumbs_scheme`, `share_image_asset_id`) i wchodzą do wpisu audytu
-`cms_page.update`.
+`breadcrumbs_scheme`, `breadcrumbs_overlay`, `share_image_asset_id`) i wchodzą
+do wpisu audytu `cms_page.update`.
+
+### Zagnieżdżone adresy stron
+
+**Ścieżka publiczna** strony to jej własny slug albo — gdy włączona jest opcja
+**Dołącz ścieżkę strony nadrzędnej do adresu** (`parentPathInUrl`, zapisana
+jako `cms_pages.parent_path_in_url`) — ścieżka publiczna rodzica, `/` i slug
+strony. Ścieżka jest wyliczana przy odczycie strony, osobno dla każdego kanału
+sprzedaży, ze slugów, pod którymi kanał udostępnia strony; nigdy nie jest
+zapisywana. Dlatego:
+
+- **Zmiana sluga albo przeniesienie rodzica przenosi każdą zagnieżdżoną stronę
+  pod nim.** Stary adres przestaje odpowiadać; nie ma z niego automatycznego
+  przekierowania.
+- **Własny slug strony nadal odpowiada** — trwałym przekierowaniem (308) na jej
+  ścieżkę, więc linki sprzed włączenia opcji działają dalej.
+- **Rodzic, którego kanał nie udostępnia**, zostawia stronę w tym kanale pod
+  jej własnym slugiem.
+- **Dwie strony nie mogą mieć jednego adresu w jednym kanale.** Zapis, który
+  dałby stronie — albo zagnieżdżonej stronie pod nią — adres innej strony,
+  jest odrzucany z `409 CMS_SLUG_CONFLICT` i niczego nie zapisuje.
+- Pierwszy segment zagnieżdżonego adresu to slug strony najwyższej, który
+  sprawdza już reguła zastrzeżonych segmentów, więc zagnieżdżona strona nie
+  przesłoni trasy storefrontu, takiej jak `/p/…`, `/c/…`, `/cart` czy
+  `/account`.
+
+Edytor strony pokazuje wynikowy adres w polu **Adres publiczny**. Linki ścieżki
+nawigacji w storefroncie, link kanoniczny, `og:url` i mapa witryny używają
+ścieżki, a link Page Buildera do strony prowadzi pod jej ścieżkę w kanale
+żądania.
 
 ### Obraz do udostępniania i metadane dla wyszukiwarek
 
@@ -379,6 +430,103 @@ pozostałych bloków z tekstem sformatowanym — idą za **skalą typografii**
 Dopóki skala typografii nie jest ustawiona dla danego poziomu, nagłówki tego
 poziomu wyglądają jak dotąd.
 
+### Rozmiary tekstu, wysokość linii i odstępy w blokach
+
+Mniejsze teksty bloków treści mają własny wygląd; każda opcja jest pusta albo
+ustawiona na **Domyślny**, dopóki jej nie zmienisz, więc blok już umieszczony na
+stronie wygląda jak dotąd. W każdym bloku obowiązują trzy zasady:
+
+- **Rozmiar to stopień skali typografii albo Własny (px).** Stopień (**Tekst
+  podstawowy**, **Wprowadzenie**, **Nagłówek 4** …) przynosi ze sobą wysokość
+  linii, grubość i odstęp między literami tego stopnia z marki, na każdym progu
+  — więc tekst ustawiony na **Tekst podstawowy** wszędzie wygląda jak tekst
+  podstawowy. Rozmiary ustawia się dla każdego progu na karcie **Responsive**.
+- **Wysokość linii jest dostępna tylko przy rozmiarze Własny (px).** Stopień ma
+  już swoją; wysokość linii (wielokrotność rozmiaru, np. 1,5) działa tylko na
+  progu, którego rozmiar jest Własny (px).
+- **Grubość to jedna wartość dla każdego progu.** Wygrywa z grubością stopnia.
+  Grubość zapisana dla każdego progu przez wcześniejszą wersję tych opcji jest
+  odczytywana jako jej wartość z komputera, a w braku tej — wartość bazowa.
+
+Odstępy wewnątrz bloku to jeden stopień skali odstępów marki (**Brak**, **XS**
+… **XXL**), a nie wartość w pikselach dla każdego elementu; stopień ma własny
+rozmiar na telefon i na komputer, więc podąża za progami i za marką.
+
+- **Lista funkcji**: **Rozmiar tekstu**, **Grubość tekstu** i **Wysokość linii
+  tekstu** dla tekstu każdego elementu (domyślnie mała, przygaszona linia);
+  **Wysokość linii tytułu** przy własnym rozmiarze tytułu; **Odstęp wewnątrz
+  elementu** — odstęp za ikoną, pod tytułem i między akapitami. **Położenie
+  ikony: Obok tytułu** stawia ikonę na początku tytułu, a tytuł i tekst wiszą
+  obok niej: zawinięta linia zaczyna się pod tekstem, nie pod ikoną.
+- **Hero**: podtytuł i hasło mają **grubość**, **wysokość linii** (przy
+  rozmiarze własnym) i **maksymalną szerokość**, jak tytuł; tekst ma **Rozmiar
+  tekstu** (domyślnie 16 px), **grubość**, **wysokość linii** i **maksymalną
+  szerokość**. Hero ma jeden **Kolor tekstu** dla wszystkich swoich tekstów;
+  nadtytuł może mieć własny **Kolor nadtytułu** jako akcent. **Odstęp między
+  elementami** ma opcję **Własny (px)**. Przy mediach **Nad treścią** **Odstęp
+  pod mediami** ustawia odstęp między obrazem lub wideo a tekstami (domyślnie
+  brak). Obraz dowodu społecznego zachowuje wysokość 40 px.
+- **Hasło**: **Wysokość linii nagłówka** (przy własnym rozmiarze nagłówka) oraz
+  **rozmiar**, **grubość** i **wysokość linii** tekstu uzupełniającego. Na
+  obrazie w tle **Minimalna wysokość** (**Domyślna** to 60 % wysokości ekranu;
+  także połowa, trzy czwarte, cały ekran, **Automatyczna** albo **Własna
+  (px)**).
+- **Statystyki**: **rozmiar** i **grubość** etykiet (ich kolor to przygaszony
+  tekst schematu; **Kolor wartości** pozostaje akcentem liczb). Obok obrazu, od
+  tabletu w górę, **Układ (obraz – liczby)** rozkłada obraz i liczby na 12
+  kolumnach (zob. *Układy na 12 kolumnach* niżej), a **Położenie liczb w
+  pionie**: **Środek** (domyślnie), **Góra**, **Dół** albo **Rozłożone na
+  wysokość obrazu**.
+- **Lista odnośników**: **Rozmiar tytułu wiersza** i **Grubość tytułu
+  wiersza**.
+- **Karta wezwania do działania**: **Zaokrąglone narożniki** (**Domyślne**
+  zachowują dotychczasowe) i **Odsunięcie obrazu**: domyślnie wewnętrzny odstęp
+  karty, **Brak** (obraz sięga krawędzi karty) albo **Własne (px)**, jedna
+  wartość dla każdego progu.
+- **Media i tekst**: **Obok siebie od** tabletu (768 px, domyślnie) albo
+  komputera (1024 px); poniżej media i tekst układają się jedno pod drugim, w
+  **Kolejności na telefonie**.
+- **Treść sformatowana**: **Rozmiar tekstu** i **Grubość tekstu** całego
+  tekstu; listy za nimi podążają.
+- **Wiersz**: **Odstęp między wierszami (px)** ustawia się dla każdego progu;
+  jedna wartość zapisana wcześniej obowiązuje na każdej szerokości.
+
+W każdym tekście sformatowanym **Rozmiar tekstu** na pasku narzędzi zmienia
+rozmiar zaznaczonych słów na stopień skali typografii, a **Znacznik listy**
+wybiera znaczniki listy punktowanej: **Kropka** (domyślnie), **Znaczek
+wyboru**, **Szewron** albo **Brak**. Strona i edytor pokazują je tak samo.
+Słowa, którym wcześniejsza wersja paska nadała rozmiar w pikselach, zachowują
+go, dopóki nie wybierzesz dla nich stopnia. Znaczek wyboru jest rysowany w
+głównym kolorze marki, a szewron w kolorze tekstu; **Kolor znaczników listy**
+bloku (Treść sformatowana, Media i tekst) nadaje obu znacznikom własny kolor,
+np. białe znaczki na ciemnej sekcji.
+
+Blok **Tekst** przyjmuje pogrubienie, kursywę, linki i wyróżnienia: jego tekst
+edytuje się jak nagłówek. Tekst zapisany wcześniej pozostaje zwykłym tekstem,
+dopóki nie zostanie edytowany.
+
+Nagłówek zaczynający się od ikony może zawiesić tekst obok niej: **Wcięcie
+wiszące za ikoną na początku** utrzymuje zawiniętą linię pod tekstem, który
+zaczyna się 0,35 em za ikoną.
+
+#### Układy na 12 kolumnach
+
+Media i ich tekst obok siebie — **Slajd z mediami i tekstem**, **Statystyki**
+obok obrazu i **Karta wezwania do działania** z obrazem — mają **Układ** od
+szerokości „obok siebie” w górę: **Domyślny** (dwie równe połowy, jak dotąd)
+albo gotowy układ kolumn z 12, nazwany od mediów — **6 – 6**, **7 – 5**,
+**5 – 7**, **8 – 4**, **4 – 8** oraz **5 – 1 – 6** albo **6 – 1 – 5** z
+kolumną odstępu (nie w karcie). Przy mediach po prawej układ jest odbity
+lustrzanie. **Układ zaawansowany (kolumny z 12)** pokazuje zamiast tego
+szerokości w kolumnach, kolumny między nimi i **Wyrównanie kolumn do**, a te
+wygrywają z gotowym układem, dopóki przełącznik jest włączony; szerokości
+zapisane, zanim pojawił się przełącznik, otwierają się z nim włączonym.
+**Media i tekst** zachowuje **Podział (media – tekst)** jako układ i ma ten sam
+przełącznik dla swoich szerokości w kolumnach z 12.
+
+**Wyróżnienie gradientem**, które zawija się na kilka linii, jest jednym
+gradientem na całą frazę: każda linia go kontynuuje, zamiast zaczynać od nowa.
+
 ### Karuzele: sterowanie, siatka i filtr
 
 Poniższe opcje są w karuzeli; położenie, styl i wyrównanie strzałek oraz
@@ -462,6 +610,129 @@ progu w górę, dopóki szerszy próg nie ma własnej; próg poniżej pierwszego
 z grubością albo pozostawiony na **Domyślnej** zachowuje zwykłą grubość.
 Grubość ustawiona, zanim pojawiła się ta opcja, jest grubością każdego progu,
 jak dotąd.
+
+### Sterowanie karuzeli, przyciski, kafelki do pobrania i karty obrazów: opcje wyglądu
+
+Każda z poniższych opcji jest domyślnie nieustawiona, a strona zapisana przed
+ich wprowadzeniem wygląda tak jak wcześniej.
+
+**Sterowanie karuzeli** (karuzela, slider produktów i karuzela najnowszych
+wpisów, w grupie **Sterowanie**):
+
+| Opcja | Działanie |
+| --- | --- |
+| **Kolor ikony strzałki (styl wypełniony)** | Znak strzałki w stylu **Wypełniony** (także wypełnionej strzałki „dalej”), domyślnie biały — dzięki temu biała wypełniona strzałka może mieć czarną ikonę. Pokazywane, gdy któryś styl strzałek jest wypełniony. |
+| **Ukryj strzałki na**, **Ukryj kropki na** | Punkty przerwania (telefon, tablet, desktop), na których strzałki albo kropki nie są pokazywane, np. strzałki dopiero od desktopu, a na telefonach i tabletach przesuwanie palcem. Rząd sterowania, w którym nic nie zostaje, jest wtedy usuwany i nie zostawia pustego miejsca. |
+
+Kropki dopasowują się do schematu kolorów: w ciemnej sekcji bieżąca kropka ma
+jasny kolor tekstu schematu na tle bladych kropek, więc nadal widać, która jest
+bieżąca.
+
+Strzałki umieszczone **W nagłówku sekcji** są widoczne także wtedy, gdy
+karuzela nie ma nagłówka: nagłówek zawiera wtedy same strzałki, na swoim końcu,
+tak jak obok nagłówka. **Położenie strzałek** karuzeli ma też opcję **W każdym
+slajdzie z mediami i tekstem (pod tekstem)**: każdy **Slajd z mediami i tekstem** pokazuje
+strzałki i kropki na końcu kolumny tekstu, a działające sterowanie ma tylko
+slajd widoczny na ekranie (pozostałe są ukryte przed klawiaturą i czytnikami
+ekranu). Jak inne położenia wybiera się je osobno dla każdego punktu
+przerwania, np. pod slajdami na telefonie i pod tekstem od tabletu w górę.
+Karuzela, której elementy nie są slajdami z mediami i tekstem, zachowuje wtedy
+sterowanie pod slajdami. Slajdy z dowolną treścią (**Slajd**) nie mogą zawierać
+sterowania.
+
+**Przycisk pod produktami** slidera i siatki produktów ma **Wyrównanie
+przycisku**: **Do lewej** (domyślnie), **Do środka** albo **Do prawej**.
+
+**Przycisk** (`cms.Button`):
+
+- Jego wypełnienie **Kontur** ma tło sekcji, tak jak zastąpiony nim przycisk
+  `secondary`. **Przezroczyste wypełnienie konturu** pozwala zamiast tego
+  prześwitywać tłu (dostępne przy wypełnieniu konturem).
+- **Kolor obramowania** zastępuje kolor obramowania wypełnienia, np. szary
+  pierścień wokół konturowego przycisku z samą ikoną. Przycisk **Tylko ikona
+  (okrągły)** ma rozmiar swojej opcji **Rozmiar** (mały, średni albo duży, z
+  wysokości przycisków marki).
+
+**Kafelek do pobrania**: **Schemat kolorów karty** (jak sekcja, jasny,
+stonowany albo ciemny), **Tło karty**, **Obramowanie karty** (domyślnie
+włączone), **Zaokrąglone narożniki**, **Odstęp wewnętrzny karty** (stopień
+skali odstępów), **Rozmiar tytułu** (stopień skali typografii albo **Własny
+(px)**, dla każdego punktu przerwania) oraz **Pokaż typ pliku** (domyślnie
+włączone). **Obraz po najechaniu** to domyślny **Delikatny odcień** albo **Cały
+obraz z ciemnym gradientem**, na którym tekst staje się biały. **Wygląd
+odnośnika** to domyślna **Etykieta tekstowa** albo 48-pikselowy **Okrągły
+przycisk z ikoną** w prawym dolnym rogu, obramowany kolorem tekstu; etykietę
+nadal odczytują czytniki ekranu. Cały kafelek pozostaje jednym odnośnikiem do
+pobrania, a kafelki w jednym rzędzie karuzeli mają równą wysokość.
+
+**Obraz karuzeli**: **Etykieta „Więcej”** (np. „Czytaj więcej”) pokazywana na
+obrazie we własnym narożniku — **Położenie etykiety „Więcej”**, domyślnie na
+dole po prawej — niezależnie od podpisu, z opcjonalną **Ikoną etykiety
+„Więcej”**. Ma 14 px, jest półgruba, stoi 12 px od swojego narożnika, przyjmuje
+kolor tekstu podpisu, gdy jest ustawiony, i należy do odnośnika elementu.
+
+Podpis **Obrazu**: **Położenie podpisu** wybiera się dla każdego punktu
+przerwania (np. pod obrazem na telefonach i obok niego od tabletu w górę), a
+podpis ma **Rozmiar podpisu** (stopień skali typografii albo **Własny (px)**)
+i **Wyrównanie podpisu** dla każdego punktu przerwania; zachowuje przygaszony
+kolor tekstu schematu.
+
+### Przyciski w blokach, teksty bloku Hero, kafelki do pobrania i podpisy obrazów: więcej opcji
+
+Każda z poniższych opcji jest domyślnie nieustawiona, a strona zapisana przed
+ich wprowadzeniem wygląda tak jak wcześniej.
+
+**Przyciski wewnątrz bloków** — przyciski bloku Hero, karty czy panelu,
+przycisk nagłówka sekcji lub listy, przyciski bloku Media i tekst — mają te
+same opcje wyglądu co blok **Przycisk**: **Przezroczyste wypełnienie
+konturu** i **Kolor obramowania**. Przycisk z samą ikoną może też być
+**Pigułką** zamiast **Koła** (**Kształt przycisku z samą ikoną**), szeroką na
+1,15 jego wysokości — np. przycisk „przewiń w dół” nieco szerszy niż wysoki.
+Blok Przycisk też oferuje pigułkę; pozostałe opcje wyglądu zostają tam, gdzie
+były.
+
+**Hero**:
+
+- **Wysokość linii tytułu** dla każdego punktu przerwania, przy własnym
+  rozmiarze tytułu. **Kolor tekstu** bloku barwi wszystkie jego teksty;
+  **Kolor nadtytułu** daje nadtytułowi własny akcent.
+- Nadtytuł może służyć jako etykieta nad tekstem: **Rozmiar nadtytułu**
+  (stopień skali typografii albo **Własny (px)**, dla każdego punktu
+  przerwania, z **Wysokością linii nadtytułu** przy rozmiarze własnym) oraz
+  **Nadtytuł wielkimi literami** (domyślnie włączone), wyłączone dla etykiety
+  pisanej zwykłymi literami. Ustaw jego miejsce i odstęp po nim w **Elementy:
+  kolejność i odstępy**, jak dla każdego elementu.
+- Podpis **Dowodu społecznego**: **Położenie podpisu dowodu społecznego** obok
+  obrazu (domyślnie) albo pod nim, dla każdego punktu przerwania — np. pod
+  obrazem na telefonach i obok od tabletu w górę — oraz **Własna maksymalna
+  szerokość podpisu dowodu społecznego (px)** dla każdego punktu przerwania.
+  Zachowuje mały, przygaszony tekst.
+
+**Kafelek do pobrania**:
+
+- **Prowadzi do** pliku (domyślnie) albo **Strony lub adresu URL**: kafelek ma
+  wtedy **Odnośnik** (stronę, produkt, kategorię, plik albo adres URL) zamiast
+  pliku, nie pokazuje typu pliku, a jego okrągły przycisk z ikoną wskazuje
+  dalej. Kafelek, którego odnośnik nigdzie nie prowadzi, nie jest pokazywany
+  klientom; edytor pokazuje w jego miejscu ostrzeżenie.
+- **Własna minimalna wysokość (px)**, jedna wartość dla każdego punktu
+  przerwania (domyślnie 180 px).
+- Własny rozmiar tytułu działa teraz także od tabletu w górę (wcześniej był
+  odczytywany tylko na telefonach).
+
+**Obraz karuzeli**: podpis przy tej samej krawędzi co etykieta „Więcej” — oba
+na dole albo oba na górze — stoi teraz nad linią etykiety zamiast ją dzielić,
+więc na wąskiej karcie nigdy się nie nakładają.
+
+Podpis **Obrazu**: **Własna maksymalna szerokość podpisu (px)** dla każdego
+punktu przerwania. Podpis
+umieszczony pod obrazem na telefonach i obok niego od szerszego punktu
+przerwania dostaje tam własną kolumnę obok obrazu o ustawionej szerokości,
+zamiast być ściśnięty do szerokości obrazu.
+
+Pusty nagłówek w tekście — blok Nagłówek, nagłówek bloku Media i tekst, tytuł
+bloku Hero — nie zapisuje na stronie pustego elementu nagłówka; blok Nagłówek
+zachowuje swoje odstępy.
 
 ### Zakładki: panel w kolumnach
 
@@ -585,6 +856,252 @@ w kolejności, w jakiej są ułożone w edytorze, więc ułóż je w kolejności
 też dobrze się czyta. Płótno edytora zachowuje ułożoną kolejność i szerokości,
 bez miejsca w siatce, więc przeciąganie kolumn działa na tym, co pokazuje
 konspekt; opublikowana strona pokazuje miejsce w siatce dla każdego progu.
+
+### Kolumny: tło szersze niż kolumna
+
+**Wysunięcie tła poza treść (px)** kolumny, na karcie **Responsive**, sprawia, że
+jej ramka — tło, obramowanie i cień — sięga o tyle pikseli poza kolumnę
+z każdej strony, a treść kolumny zostaje na miejscu: np. szara ramka nieco
+szersza niż kolumna tekstu obok. Ustaw je dla każdego progu, np. **0** na
+telefonie, gdzie kolumna i tak zajmuje cały ekran, i **24** od komputera.
+Przy 0 (domyślnie) ramka jest tak szeroka jak kolumna. Wysunięcie sięga
+w odstęp między kolumnami i poza krawędź wiersza, więc nie przekraczaj miejsca
+wokół kolumny. Boczny **Odstęp zewnętrzny** ramki kolumny nadal działa,
+dodawany do wysunięcia, na każdym progu — próg z wysunięciem 0 pokazuje ramkę
+z jej własnymi marginesami.
+
+### Obrazy mobilne: tylko telefony albo telefony i tablety
+
+Obraz z **obrazem mobilnym** — blok **Obraz**, Hero, Media i tekst, każdy blok,
+którego pole obrazu go oferuje — pokazuje obraz mobilny na telefonach, a obraz
+główny od szerokości tabletu (768 px). **Gdzie wyświetlać obraz na telefony**
+(widoczne po ustawieniu obrazu mobilnego) przesuwa tę granicę do szerokości
+komputera: **Telefony i tablety (poniżej 1024 px)** zostawia obraz mobilny
+także na tabletach, np. dla wysokiego kadru, który pasuje do tabletu lepiej
+niż szeroki kadr na komputer. Tło sekcji i grupy sekcji ma to samo
+ustawienie, **Gdzie wyświetlać obraz lub wideo na telefony**, dla obrazu lub
+wideo mobilnego. Przy **Telefony (poniżej 768 px)** nic nie jest zapisywane,
+a obraz przełącza się jak dotąd.
+
+### Slajdy z mediami i tekstem, sterowanie karuzeli i odstępy w blokach
+
+Każda z poniższych opcji jest domyślnie pusta lub wyłączona, a strona zapisana
+wcześniej wygląda jak dotąd. Opcje oznaczone *dla każdego progu* ustawia się
+na karcie **Responsive**; próg bez własnej wartości przyjmuje wartość progu
+niższego, a próg, do którego nie sięga żadna wartość, zachowuje wygląd bloku.
+
+**Slajd z mediami i tekstem**:
+
+- **Obok siebie od** tabletu (768 px, domyślnie) albo komputera (1024 px);
+  poniżej media i tekst są jeden pod drugim, media pierwsze.
+- **Układ (media – tekst)** na 12 kolumnach od szerokości „obok siebie” w
+  górę (zob. *Układy na 12 kolumnach*); **Domyślny** zostawia dwie równe
+  połowy.
+- **Zaokrąglone narożniki** mediów (domyślnie 8 px; **Brak** dla prostych).
+- **Rozmiar tytułu** i **Rozmiar tekstu**, *dla każdego progu*, każdy z
+  wysokością linii przy rozmiarze własnym, oraz **Grubość tytułu** i
+  **Grubość tekstu**.
+- **Wcięcie wiszące za ikoną na początku**: tytuł zaczynający się od ikony
+  (np. znaku zaznaczenia) wisi obok niej, więc zawinięty wiersz zaczyna się pod
+  tekstem.
+
+**Sterowanie karuzeli** (Karuzela, karuzela produktów i karuzela najnowszych
+wpisów):
+
+- **Wyrównanie przycisków** oferuje też **Kropki na początku, strzałki na
+  końcu**. Wybrane wyrównanie dotyczy także sterowania wewnątrz slajdu z
+  mediami i tekstem (bez wyboru zaczyna się ono przy lewej krawędzi tekstu).
+- **Zostaw strzałki, gdy mieszczą się wszystkie slajdy** (w **Sterowaniu**):
+  gdy wszystkie slajdy są już na ekranie, strzałki zostają, obie nieaktywne, a
+  kropki są ukryte; wyłączone — sterowanie znika jak dotąd. Nieaktywna
+  strzałka przyjmuje **Wygląd nieaktywnej strzałki**, dostępny w tym przypadku
+  również w zapętlonej karuzeli.
+
+**Media i tekst**: **Rozmiar tekstu** dla tekstu każdego wiersza, *dla
+każdego progu*, z **Wysokością linii tekstu** przy rozmiarze własnym; **Odstęp
+między nagłówkiem a akapitami** i **Odstęp między mediami a tekstem jeden pod
+drugim**, każdy jako stopień skali odstępów. Każdy z **Kolejnych wierszy** ma własne
+**Wyrównanie w pionie**; **Jak w całym bloku** (albo puste) przyjmuje
+wyrównanie bloku.
+
+**Panel z obrazem w tle**: **Układ na urządzeniach mobilnych** — **Obraz i
+tekst jeden pod drugim** (domyślnie) albo **Tekst na obrazie**, który
+zachowuje własną wysokość obrazu mobilnego (wysoki kadr zachowuje kształt), a
+tekst kładzie u jego góry lub dołu, według **Tekstu na urządzeniach
+mobilnych**.
+
+**Lista funkcji**: **Odstęp między wierszami (px)**, *dla każdego progu*,
+niezależnie od odstępu, który wtedy rozdziela tylko kolumny; **Wysokość linii
+list w tekście**, *dla każdego progu*, przy własnym rozmiarze tekstu.
+
+**Karta wezwania do działania**: **Odstęp wewnętrzny karty**, stopień skali
+odstępów (od niego mierzone jest odsunięcie obrazu), a z obrazem **Układ
+(obraz – tekst)** od tabletu w górę (domyślnie połowa karty; zob. *Układy na 12
+kolumnach*).
+
+**Statystyki**: **Wysokość linii etykiety**, *dla każdego progu*, przy własnym
+rozmiarze etykiety.
+
+**Lista odnośników**: **Linia pod ostatnim wierszem**, dostępna, gdy
+**Linia między wierszami** jest włączona.
+
+### Progi układu obok siebie, układy kolumn i więcej opcji tekstu
+
+Jak wyżej: każda z poniższych opcji jest domyślnie pusta, strona zapisana
+wcześniej wygląda jak dotąd, a opcje oznaczone *dla każdego progu* ustawia się
+na karcie **Responsive**.
+
+**Hero**: podpis dowodu społecznego umieszczony **Pod obrazem** zawsze
+zaczyna się w nowym wierszu, także z **Własną maksymalną szerokością podpisu
+dowodu społecznego (px)** na tyle wąską, że zmieściłby się obok obrazu.
+
+**Media i tekst**:
+
+- Z **Układem zaawansowanym (kolumny z 12)** — **Szerokość mediów** i
+  **Szerokość tekstu** w kolumnach z 12 oraz **Kolumny między mediami a
+  tekstem**, od szerokości „obok siebie” w górę — jak w slajdzie z mediami i
+  tekstem. Ustawienie którejkolwiek układa każdy wiersz na siatce 12 kolumn
+  (media 6 kolumn i brak odstępu, o ile nie ustawiono, tekst resztę), w
+  lustrzanym odbiciu w wierszu z mediami po prawej, zamiast **Podziału (media –
+  tekst)**; np. po 5 kolumn w odstępie jednej kolumny.
+- **Wysokość linii nagłówka** (przy własnym rozmiarze nagłówka, *dla każdego
+  progu*), **Grubość tekstu** oraz **Kolor znaczników listy** list ze znakiem
+  zaznaczenia i strzałką w tekście każdego wiersza.
+
+**Karta wezwania do działania** (z obrazem):
+
+- **Położenie obrazu, gdy jeden pod drugim**: **Nad tekstem** (domyślnie) albo
+  **Pod tekstem**; odsunięcie obrazu biegnie wtedy wzdłuż boków i dołu.
+- **Obok siebie od** tabletu (768 px, domyślnie) albo komputera (1024 px);
+  poniżej karta układa się jak na telefonie.
+- **Własne odsunięcie obrazu (px)** to jedna wartość dla każdego progu.
+- **Rozmiar tekstu**, *dla każdego progu*, z rozmiarem własnym (px); lista za
+  nim podąża.
+
+**Statystyki** (z obrazem): **Obok siebie od** tabletu (domyślnie) albo
+komputera; poniżej obraz stoi nad liczbami.
+
+**Slajd z mediami i tekstem**:
+
+- **Wcięcie tekstu**, dostępne przy włączonym wcięciu wiszącym: **Wyrównane do
+  tekstu tytułu** zaczyna tekst poniżej tam, gdzie zaczyna się tekst tytułu, za
+  ikoną na początku i jej odstępem. Wcięty jest tylko tekst pod tytułem
+  zaczynającym się od ikony.
+- **Odstęp między mediami a tekstem jeden pod drugim** oraz **Odstęp między
+  tytułem, tekstem a sterowaniem** (sterowaniem, które karuzela umieszcza w
+  slajdach), każdy jako stopień skali odstępów.
+
+**Obraz**: z obrazem mobilnym — **Gdzie wyświetlać obraz na telefony**: tylko
+telefony (poniżej 768 px, domyślnie) albo telefony i tablety (poniżej
+1024 px), jak w polach obrazu.
+
+**Nagłówek**: **Maksymalna szerokość tekstu**, *dla każdego progu* — nazwana
+miara albo szerokość własna (px); nagłówek wyśrodkowany lub wyrównany do
+prawej zachowuje wyrównanie.
+
+**Treść sformatowana**: **Wysokość linii list**, *dla każdego progu*, przy
+własnym rozmiarze tekstu.
+
+**Akordeon**: **Wysokość linii tytułu**, *dla każdego progu*, przy własnym
+rozmiarze tytułu.
+
+**Siatka produktów** i **Slider produktów**: **Rozmiar wprowadzenia** nagłówka
+(token typografii albo własny w px, *dla każdego progu*), **Grubość
+wprowadzenia** i **Kolor wprowadzenia**.
+
+**Kafelek do pobrania**: **Grubość tytułu**.
+
+### Rozmiary tekstu dla każdego progu
+
+Tekst, którego rozmiar jest innym tokenem typografii w każdym progu — np.
+nagłówek karuzeli w Nagłówku 3 na telefonie i w Nagłówku 2 na komputerze, tytuł
+hero, nagłówek sekcji albo blok Nagłówek — bierze teraz w każdym progu także
+wysokość linii, grubość i odstęp między literami z tokenu tego progu (do
+2026-10-28 zostawały te z pierwszego progu). Grubość ustawiona w samym bloku
+nadal wygrywa; wysokość linii działa tylko na progu z rozmiarem Własny (px).
+
+### Odstępy kolumn, wyrównanie par kolumn, wyrównanie w wierszu i więcej opcji
+
+Jak wyżej: każda opcja poniżej jest domyślnie pusta, strona zapisana przed nimi
+wygląda jak dotąd, a opcje oznaczone *dla każdego progu* ustawia się na karcie
+**Responsive**.
+
+**Kolumny z 12** — w blokach **Media i tekst**, **Slajd z mediami i tekstem**
+oraz **Statystyki** (z obrazem), gdy wybrany jest układ na 12 kolumnach:
+
+- **Odstęp między kolumnami (px)**, *dla każdego progu*. Puste pole zostawia,
+  jak dotąd, boczny margines strony; ustaw wartość (np. 16 px), aby kolumny
+  zostały tam, gdzie je umieszczasz, niezależnie od marginesu.
+- **Wyrównanie kolumn do** (**Media i tekst** i slajd z mediami i tekstem, z
+  **Układem zaawansowanym (kolumny z 12)**): **Strona mediów** (domyślnie)
+  kończy wiersz z mediami po prawej na kolumnie
+  12 — np. tekst w kolumnach 2–6, a media w 8–12. **Początek (kolumna 1)**
+  zaczyna parę od kolumny 1 po obu stronach — tekst 1–5, media 7–11 — a
+  **Koniec (kolumna 12)** kończy ją na kolumnie 12.
+
+**Wiersz**: **Wyrównanie kolumn** (do góry, do środka, do dołu) ustawia teraz
+kolumny na opublikowanej stronie tak jak w edytorze; do 2026-10-28 każda kolumna
+rozciągała się na wysokość wiersza niezależnie od wyboru. Wiersz z ustawieniem
+**Rozciągnij** (domyślnym) wygląda jak dotąd. Wiersz zapisany z wartością
+`center` — słowem, którego **Media i tekst** używa dla tego samego wyboru — jest
+czytany jako wyrównanie do środka.
+
+**Karta wezwania do działania**:
+
+- **Obok siebie od: Komputera (1024 px)** zostawia teraz listę dwukolumnową
+  w jednej kolumnie także na tablecie, dopóki karta jest ułożona w pionie; karta
+  obok siebie od tabletu ma dwie kolumny od 768 px.
+- **Odstęp pod nagłówkiem**, stopień skali odstępów (domyślnie 16 px).
+- **Grubość tekstu** oraz **Maksymalna szerokość tekstu** (nazwana miara albo
+  Własna (px), *dla każdego progu*) dla tekstu karty.
+
+**Statystyki**: **Wysokość linii wartości**, *dla każdego progu*, przy własnym
+rozmiarze wartości. Próg poniżej pierwszego progu z rozmiarem własnym zachowuje
+wysokość linii rozmiaru wartości.
+
+**Media i tekst**: **Rozmiar tekstu elementu** (token typografii albo Własny
+(px), *dla każdego progu*) i **Grubość tekstu elementu** dla tekstu każdego
+elementu (domyślnie 15 px i przygaszony).
+
+**Treść sformatowana**: **Grubość tekstu**; listy za nią podążają.
+
+**Lista funkcji**:
+
+- **Położenie ikony** ustawia się *dla każdego progu* — np. obok tytułu na
+  tablecie i nad nim od 1024 px. Jedno położenie zapisane wcześniej obowiązuje
+  w każdym progu.
+- **Szerokość na komputerach (kolumny z 12)** elementu: od 1024 px lista jest
+  układana na 12 kolumnach, ten element zajmuje swoją szerokość, a pozostałe
+  swój udział w **Kolumnach** (np. 6 z 12 przy dwóch kolumnach).
+- **Grubość tytułu** już wcześniej ustawiała się dla każdego progu.
+
+**Karuzela**, **Slider produktów**, **Siatka produktów** i **Najnowsze wpisy**:
+**Wysokość linii nagłówka** w nagłówku bloku, *dla każdego progu*, przy
+własnym rozmiarze nagłówka; próg poniżej pierwszego progu z rozmiarem własnym
+zachowuje wysokość linii rozmiaru nagłówka. **Najnowsze wpisy** mają też
+**Grubość wprowadzenia**.
+
+**Lista odnośników**: **Wysokość linii tytułu wiersza**, *dla każdego progu*,
+przy własnym rozmiarze tytułu wiersza.
+
+**Zapis do newslettera**: **Ikona przycisku** z katalogu ikon za tekstem
+przycisku (domyślnie brak).
+
+**Opinia**: **Rozmiar cytatu** — token typografii albo Własny (px), *dla
+każdego progu* (domyślnie 1,15 rem).
+
+**Kafelek do pobrania** (z okrągłym przyciskiem z ikoną): **Ikona przycisku
+z ikoną**, znak z katalogu ikon — np. dodane do katalogu pobieranie z chmury;
+puste pole zostawia strzałkę pobierania dla pliku i strzałkę dalej dla
+odnośnika.
+
+### Marginesy i wypełnienie ramki dla każdego progu
+
+**Odstęp zewnętrzny** (margines) i **Odstęp wewnętrzny** (wypełnienie) każdego
+bloku, który je ma, ustawia się dla każdego progu na karcie **Responsive**:
+w **Scope settings** wybierz Base (telefon), Tablet albo Desktop i wpisz
+wartości dla tego progu, np. 16 px pod nagłówkiem na telefonie i 32 px na
+komputerze. Próg bez własnej wartości przyjmuje wartość progu niższego.
 
 ### Przyciski na pełną szerokość i „czytaj więcej” jako strzałka
 
@@ -864,7 +1381,7 @@ albo nieudane pobranie nic nie wyświetla — hooki nie mogą zepsuć wyświetla
 | GET     | `/pages`                                            | Stronicowana lista stron z filtrami.               |
 | POST    | `/pages`                                            | Utworzenie strony (zawsze zaczyna jako `draft`). |
 | GET     | `/pages/:id`                                        | Szczegóły z pełną treścią i wersją.  |
-| PATCH   | `/pages/:id`                                        | Edycja metadanych, w tym `parentPageId`, `breadcrumbsVisible`, `breadcrumbsScheme` i `shareImageAssetId`; uwzględnia `If-Match` przez `version`. Rodzic tworzący cykl albo zbyt głęboki daje `422 CMS_PAGE_PARENT_CYCLE`. |
+| PATCH   | `/pages/:id`                                        | Edycja metadanych, w tym `parentPageId`, `parentPathInUrl`, `breadcrumbsVisible`, `breadcrumbsScheme`, `breadcrumbsOverlay` i `shareImageAssetId`; uwzględnia `If-Match` przez `version`. Rodzic tworzący cykl albo zbyt głęboki daje `422 CMS_PAGE_PARENT_CYCLE`; adres, który ma już inna strona, daje `409 CMS_SLUG_CONFLICT`. |
 | PUT     | `/pages/:id/content/:language`                      | Zapis drzewa Page Buildera dla danego języka. Powtórzona albo zastrzeżona kotwica daje `422 CMS_DUPLICATE_ANCHOR` / `CMS_RESERVED_ANCHOR`. |
 | POST    | `/pages/:id/{publish,archive,unarchive}`            | Przejścia w cyklu życia.                          |
 | DELETE  | `/pages/:id`                                        | Trwałe usunięcie (przypisania do kanałów są usuwane kaskadowo).        |
@@ -885,12 +1402,14 @@ albo nieudane pobranie nic nie wyświetla — hooki nie mogą zepsuć wyświetla
 
 | Metoda | Ścieżka                              | Zwraca                                                        |
 | ------ | --------------------------------- | -------------------------------------------------------------- |
-| GET    | `/pages/by-slug?slug=…&language=…`| Stronę z `embeds.blocks`, `embeds.templates` i plikami. |
+| GET    | `/pages/by-slug?slug=…&language=…`| Stronę z `embeds.blocks`, `embeds.templates` i plikami. `slug` przyjmuje całą ścieżkę publiczną strony; własny slug zagnieżdżonej strony też działa. |
 | GET    | `/blocks/by-code?code=…&language=…`| Blok (jeden, z filtrowaniem według kanału, tylko aktywny).|
 | GET    | `/hooks/by-code?code=…&language=…`| Uporządkowaną listę aktywnych bloków dla wskazanego hooka.     |
 
-Odczytana strona zawiera też `breadcrumbs` (`visible`, `scheme` i `trail` —
-listę przodków, każdy jako `{name, slug}`, ze `slug: null` dla przodka
+Odczytana strona zawiera też `path` (swoją ścieżkę publiczną w kanale),
+`breadcrumbs` (`visible`, `scheme`, `overlay: true` tylko wtedy, gdy ścieżka
+leży na pierwszej sekcji, i `trail` — listę przodków, każdy jako
+`{name, slug, path}`, ze `slug` i `path` równymi null dla przodka
 nieopublikowanego w kanale), `share.imageUrl` i `languages`.
 
 Tokeny marki mają własny publiczny odczyt,
@@ -945,10 +1464,15 @@ odpowiednie tagi do `/api/revalidate` storefrontu:
 Ręczne czyszczenie pamięci podręcznej na ekranie pamięci podręcznej modułu
 Settings odświeża ten sam tag przez przestrzeń `cms-brand`.
 
-Zapisana strona jest więc widoczna przy następnym żądaniu. Odświeżanie wymaga zmiennych
-`STOREFRONT_BASE_URL` i `REVALIDATE_SECRET` po stronie backendu oraz tego samego sekretu po stronie
-storefrontu; bez nich jest pomijane, a zabezpieczeniem pozostaje okno 60 sekund. Działa w trybie
-best-effort — niedostępny storefront jest odnotowywany w logu i nigdy nie powoduje błędu zapisu.
+Zapisana lub opublikowana strona jest więc widoczna przy następnym żądaniu: zapis wysyła zmianę
+w zakresie EventBus i odpowiada dopiero wtedy, gdy storefront usunie tagi, więc nawet żądanie wysłane
+w chwili zakończenia zapisu dostaje nową treść. Odświeżanie wymaga zmiennych `STOREFRONT_BASE_URL`
+i `REVALIDATE_SECRET` po stronie backendu oraz **tego samego** sekretu po stronie storefrontu; bez
+nich jest pomijane, a zabezpieczeniem pozostaje okno 60 sekund (pierwsze żądanie po upływie okna
+dostaje wtedy jeszcze raz poprzednią wersję, a storefront pobiera nową w tle). Działa w trybie
+best-effort: storefront niedostępny, nieodpowiadający w ciągu 3 sekund albo odrzucający wywołanie
+jest odnotowywany w logu i nigdy nie powoduje błędu zapisu. Odrzucenie ze statusem 401 oznacza, że
+sekrety po obu stronach się różnią.
 
 Inny moduł, który przechowuje treść CMS wewnątrz własnej odpowiedzi, subskrybuje to samo zdarzenie
 przez `ctx.subscribe`; robi tak `megamenu` dla bloków osadzanych w menu. Ładunek zdarzenia to

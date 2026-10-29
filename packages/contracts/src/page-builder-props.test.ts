@@ -95,6 +95,31 @@ describe('buttonSpecSchema', () => {
     expect(buttonSpecSchema.safeParse({ label: 'Go', link, textColor: 'red' }).success).toBe(false);
   });
 
+  it('R20E (T296): keeps the button look options a block-embedded button shares with cms.Button', () => {
+    const parsed = buttonSpecSchema.parse({
+      label: 'Scroll down',
+      link: { kind: 'anchor', anchor: 'products' },
+      fill: 'outline',
+      icon: 'chevronDown',
+      iconPosition: 'only',
+      transparentOutline: true,
+      borderColor: 'token:primary',
+      iconOnlyShape: 'pill',
+    });
+    expect(parsed.transparentOutline).toBe(true);
+    expect(parsed.borderColor).toBe('token:primary');
+    expect(parsed.iconOnlyShape).toBe('pill');
+    // Unset stays unset: a button stored before parses to the same value.
+    const plain = buttonSpecSchema.parse({ label: 'Go', link });
+    expect(Object.keys(plain).sort()).toEqual(['fill', 'label', 'link', 'size', 'style']);
+    expect(buttonSpecSchema.safeParse({ label: 'Go', link, iconOnlyShape: 'square' }).success).toBe(false);
+    // R23 (T447): the px size and pill width (R20E) were removed — a stored one is stripped, never refused.
+    const stale = buttonSpecSchema.parse({ label: 'Go', link, iconSizePx: { base: 44 }, iconOnlyWidthPx: 64 });
+    expect(stale).not.toHaveProperty('iconSizePx');
+    expect(stale).not.toHaveProperty('iconOnlyWidthPx');
+    expect(buttonSpecSchema.safeParse({ label: 'Go', link, borderColor: 'red' }).success).toBe(false);
+  });
+
   it('requires a label when the icon is the only content', () => {
     expect(
       buttonSpecSchema.safeParse({ label: '', link, icon: 'arrowRight', iconPosition: 'only' }).success,
@@ -454,5 +479,41 @@ describe('normalizeAnchor', () => {
 
   it('answers an empty string for input with nothing usable', () => {
     expect(normalizeAnchor('!!!')).toBe('');
+  });
+});
+
+// R19C (T260, T263): a width per breakpoint and where the mobile art stops. R23 (T449): no background outset.
+describe('sectionSettingsSchema — width per breakpoint (feature 163, R19C)', () => {
+  it('takes the width per breakpoint; a stored single width still parses as it is', () => {
+    expect(sectionSettingsSchema.parse({ width: 'bleed' }).width).toBe('bleed');
+    expect(sectionSettingsSchema.parse({ width: { base: 'bleed', desktop: 'contained' } }).width).toEqual({
+      base: 'bleed',
+      desktop: 'contained',
+    });
+    expect(sectionSettingsSchema.safeParse({ width: { base: 'huge' } }).success).toBe(false);
+  });
+
+  it('R23 (T449): a stored background outset (R19C T261, removed) is stripped on parse, never refused', () => {
+    expect(sectionSettingsSchema.parse({ outsetPx: { base: 0, desktop: 40 } })).not.toHaveProperty('outsetPx');
+    expect(sectionSettingsSchema.safeParse({ outsetPx: 401 }).success).toBe(true);
+  });
+
+  it('takes the tier from which a background shows its desktop art', () => {
+    const background = { kind: 'image', imageSource: 'library', imageAssetId: ASSET, mobileImageAssetId: ASSET };
+    expect(sectionSettingsSchema.parse({ background }).background).not.toHaveProperty('desktopFrom');
+    expect(sectionSettingsSchema.parse({ background: { ...background, desktopFrom: 'desktop' } }).background?.desktopFrom).toBe(
+      'desktop',
+    );
+    expect(sectionSettingsSchema.safeParse({ background: { ...background, desktopFrom: 'wide' } }).success).toBe(false);
+  });
+});
+
+describe('responsiveImageSchema — where the mobile image stops (feature 163, R19C)', () => {
+  it('takes an optional `desktopFrom` of `tablet` or `desktop`', () => {
+    const image = { imageSource: 'library', assetId: ASSET, mobileAssetId: ASSET, alt: '' };
+    expect(responsiveImageSchema.parse(image)).not.toHaveProperty('desktopFrom');
+    expect(responsiveImageSchema.parse({ ...image, desktopFrom: 'desktop' }).desktopFrom).toBe('desktop');
+    expect(responsiveImageSchema.parse({ ...image, desktopFrom: 'tablet' }).desktopFrom).toBe('tablet');
+    expect(responsiveImageSchema.safeParse({ ...image, desktopFrom: 1024 }).success).toBe(false);
   });
 });

@@ -354,3 +354,110 @@ describe('brandTokensToCss — rich-text headings follow the type scale (T163)',
     );
   });
 });
+
+/**
+ * R20F (T322): a type and spacing scale per breakpoint — a tablet factor
+ * (768–1023 px, applied to the phone sizes) and a small-desktop factor
+ * (1024–1279 px, applied to the desktop sizes). Unset or 1: today's output,
+ * byte for byte.
+ */
+describe('brandTokensToCss: tier scale factors (T322)', () => {
+  const scaled = (tierScale: Record<string, number>): CmsBrandTokens => ({ ...DEFAULT_BRAND_TOKENS, tierScale }) as CmsBrandTokens;
+  const round = (value: number): number => Math.round(value * 100) / 100;
+
+  it('unset or a factor of 1 writes exactly today\'s CSS', () => {
+    const today = brandTokensToCss(DEFAULT_BRAND_TOKENS).css;
+    expect(today).not.toContain('1023.98px');
+    expect(brandTokensToCss(scaled({ tablet: 1, smallDesktop: 1 })).css).toBe(today);
+    expect(brandTokensToCss(scaled({})).css).toBe(today);
+  });
+
+  it('a tablet factor rebinds the phone type sizes and spacing steps between 768 and 1023 px', () => {
+    const css = brandTokensToCss(scaled({ tablet: 1.15 })).css;
+    const block = /@media \(min-width: 768px\) and \(max-width: 1023\.98px\)\{:root\{([^}]*)\}\}/.exec(css)?.[1] ?? '';
+    expect(block).toContain('--cmsb-t-body-size:18.4px;');
+    expect(block).toContain(`--cmsb-t-h4-size:${round(DEFAULT_BRAND_TOKENS.typeScale.h4.mobilePx * 1.15)}px;`);
+    expect(block).toContain(`--cmsb-space-m:${round(DEFAULT_BRAND_TOKENS.spacing.m.mobilePx * 1.15)}px;`);
+    expect(block).not.toContain('gutter');
+    // After the phone values and before the desktop block, so the desktop sizes still win from 1024 px.
+    expect(css.indexOf('max-width: 1023.98px')).toBeLessThan(css.indexOf('@media (min-width: 1024px){'));
+  });
+
+  it('a small-desktop factor rebinds the desktop sizes and spacing between 1024 and 1279 px', () => {
+    const css = brandTokensToCss(scaled({ smallDesktop: 0.9 })).css;
+    const block = /@media \(min-width: 1024px\) and \(max-width: 1279\.98px\)\{:root\{([^}]*)\}\}/.exec(css)?.[1] ?? '';
+    expect(block).toContain(`--cmsb-t-display-size:${round(DEFAULT_BRAND_TOKENS.typeScale.display.desktopPx * 0.9)}px;`);
+    expect(block).toContain(`--cmsb-space-xl:${round(DEFAULT_BRAND_TOKENS.spacing.xl.desktopPx * 0.9)}px;`);
+    expect(css.indexOf('@media (min-width: 1024px){')).toBeLessThan(css.indexOf('max-width: 1279.98px'));
+  });
+
+  it('a factor that is not a finite number in range is ignored', () => {
+    const today = brandTokensToCss(DEFAULT_BRAND_TOKENS).css;
+    expect(brandTokensToCss(scaled({ tablet: Number.NaN })).css).toBe(today);
+    expect(brandTokensToCss(scaled({ tablet: 9 })).css).toBe(today);
+  });
+});
+
+/**
+ * R21H (T351, T352): fluid desktop sizes and scaled buttons. Every option is
+ * optional; unset writes today's CSS byte for byte. R23 (T432) removed the
+ * movable small-desktop end and the frame per tier: stored keys write nothing.
+ *
+ * - `tierScale.fluidDesktop` (+ `fluidUntilPx`, else `layout.containerMaxPx`):
+ *   from the small-desktop end the sizes grow with the viewport from the
+ *   small-desktop factor to 1 (`clamp()` of a `vw` value);
+ * - `tierScale.buttons`: the brand's button heights follow the factors.
+ */
+describe('brandTokensToCss: fluid desktop and buttons (R21H)', () => {
+  const brand = (tierScale: Record<string, unknown> | undefined, layout: Record<string, number> = {}): CmsBrandTokens =>
+    ({
+      ...DEFAULT_BRAND_TOKENS,
+      ...(tierScale ? { tierScale } : {}),
+      layout: { ...DEFAULT_BRAND_TOKENS.layout, ...layout },
+    }) as CmsBrandTokens;
+  const today = brandTokensToCss(DEFAULT_BRAND_TOKENS).css;
+  const block = (css: string, query: string): string =>
+    new RegExp(`@media \\(${query.replace(/[().]/g, (c) => `\\${c}`)}\\)\\{:root\\{([^}]*)\\}\\}`).exec(css)?.[1] ?? '';
+
+  it('unset options write exactly today\'s CSS', () => {
+    expect(brandTokensToCss(brand({ fluidDesktop: false, buttons: false })).css).toBe(today);
+    expect(brandTokensToCss(brand(undefined, {})).css).toBe(today);
+    // Fluid and buttons with no factor have nothing to scale.
+    expect(brandTokensToCss(brand({ fluidDesktop: true, buttons: true })).css).toBe(today);
+  });
+
+  it('R23 (T432): a stored small-desktop end, frame per tier, block px or button-label flag writes nothing', () => {
+    const stale = brand(
+      { smallDesktop: 0.9, smallDesktopUntilPx: 1439, blockPx: true, buttonLabels: true },
+      { gutterTabletPx: 32, gutterSmallDesktopPx: 72, containerSmallDesktopPx: 1100, breadcrumbsPaddingYPx: 7 },
+    );
+    expect(brandTokensToCss(stale).css).toBe(brandTokensToCss(brand({ smallDesktop: 0.9 })).css);
+    expect(brandTokensToCss(stale).css).toContain('(min-width: 1024px) and (max-width: 1279.98px)');
+    expect(brandTokensToCss(stale).css).not.toMatch(/cmsb-px|cmsb-btn-px|cmsb-grid-gap|cmsc-pb-carousel/);
+  });
+
+  it('fluidDesktop scales from the small-desktop factor to 1 between the small-desktop end and the configured width', () => {
+    const css = brandTokensToCss(brand({ smallDesktop: 0.9, fluidDesktop: true, fluidUntilPx: 1440 })).css;
+    const fluid = block(css, 'min-width: 1280px) and (max-width: 1439.98px');
+    expect(fluid).toContain('--cmsb-t-h1-size:clamp(43.2px, 3.3333vw, 48px);');
+    expect(fluid).toContain('--cmsb-space-xl:clamp(86.4px, 6.6667vw, 96px);');
+    expect(fluid).not.toContain('gutter');
+    // After the desktop and the small-desktop blocks.
+    expect(css.indexOf('max-width: 1279.98px')).toBeLessThan(css.indexOf('max-width: 1439.98px'));
+    // Unset `fluidUntilPx`: the page container's width.
+    const byContainer = brandTokensToCss(brand({ smallDesktop: 0.9, fluidDesktop: true })).css;
+    expect(block(byContainer, 'min-width: 1280px) and (max-width: 1359.98px')).toContain('--cmsb-t-h1-size:clamp(43.2px, 3.5294vw, 48px);');
+    // A factor of 1 or more has nothing to grow from.
+    expect(brandTokensToCss(brand({ smallDesktop: 1.1, fluidDesktop: true, fluidUntilPx: 1440 })).css).not.toContain('vw');
+  });
+
+  it('buttons: the button heights follow the tablet, small-desktop and fluid factors', () => {
+    const css = brandTokensToCss(
+      brand({ tablet: 1.15, smallDesktop: 0.9, buttons: true, fluidDesktop: true, fluidUntilPx: 1440 }),
+    ).css;
+    expect(block(css, 'min-width: 768px) and (max-width: 1023.98px')).toContain('--cmsb-btn-h-m:46px;');
+    expect(block(css, 'min-width: 1024px) and (max-width: 1279.98px')).toContain('--cmsb-btn-h-l:43.2px;');
+    expect(block(css, 'min-width: 1280px) and (max-width: 1439.98px')).toContain('--cmsb-btn-h-s:clamp(28.8px, 2.2222vw, 32px);');
+    expect(brandTokensToCss(brand({ tablet: 1.15 })).css).not.toMatch(/1023\.98px\)\{:root\{[^}]*btn-h/);
+  });
+});

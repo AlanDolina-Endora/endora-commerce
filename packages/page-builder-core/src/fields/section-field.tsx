@@ -17,6 +17,7 @@ import {
   BACKGROUND_REPEATS,
   BACKGROUND_SIZE_PERCENT_MAX,
   BACKGROUND_SIZE_PX_MAX,
+  DESKTOP_FROM_TIERS,
   type BackgroundRepeat,
   type BackgroundSizeKeyword,
   type BackgroundSizeValue,
@@ -140,6 +141,11 @@ const REPEAT_KEYS: Keys = {
   repeat: 'section.repeat.repeat',
   'repeat-x': 'section.repeat.repeat-x',
   'repeat-y': 'section.repeat.repeat-y',
+};
+// R19C (T263): where the mobile image or video gives way to the desktop one.
+const DESKTOP_FROM_KEYS: Keys = {
+  tablet: 'section.desktopFrom.tablet',
+  desktop: 'section.desktopFrom.desktop',
 };
 const SIZE_OPTIONS = ['cover', 'contain', 'auto', 'px', 'percent'] as const;
 const FOCAL_OPTIONS = ['center', 'top', 'bottom', 'left', 'right'] as const;
@@ -576,6 +582,17 @@ function SectionBackgroundControl({
   };
   const library = (source: 'imageSource' | 'videoSource'): boolean => value[source] === 'library';
   const sources = labelsOf(SOURCE_KEYS, text);
+  // R19C (T263): with a mobile image or video, the tier the desktop one starts at; the default (tablet) is stored as nothing.
+  const desktopFromSelect = (
+    <Select
+      label={text('section.desktopFrom')}
+      value={value.desktopFrom === 'desktop' ? 'desktop' : 'tablet'}
+      options={DESKTOP_FROM_TIERS}
+      labels={labelsOf(DESKTOP_FROM_KEYS, text)}
+      onChange={(tier): void => set({ desktopFrom: tier === 'desktop' ? 'desktop' : undefined })}
+      readOnly={readOnly}
+    />
+  );
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -662,6 +679,7 @@ function SectionBackgroundControl({
               />
             </>
           )}
+          {value.mobileImageAssetId || value.mobileImageUrl ? desktopFromSelect : null}
           <Select
             label={text('section.imagePosition')}
             value={value.position ?? 'center'}
@@ -708,6 +726,7 @@ function SectionBackgroundControl({
             />
           )}
           {asset('video', text('section.mobileVideo'), 'mobileVideoAssetId')}
+          {value.mobileVideoAssetId ? desktopFromSelect : null}
           {asset('image', text('section.posterImage'), 'videoPosterAssetId')}
         </Dependent>
       ) : null}

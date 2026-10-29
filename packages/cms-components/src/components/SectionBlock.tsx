@@ -5,12 +5,15 @@ import type { ComponentType, ReactNode } from 'react';
 import {
   PB_RESPONSIVE_METADATA,
   SECTION_WIDTHS_WITH_CONTENT_WIDTH,
+  normalizeResponsive,
   createSectionAnchorField,
   createSectionBackgroundField,
   createSectionRevealField,
   createSectionSpaceField,
   withHideOn,
+  type ResponsiveProp,
   type SectionSettingsValue,
+  type SectionWidth,
 } from '@endora-commerce/page-builder-core';
 import { usePreviewBreakpointTier } from '@endora-commerce/page-builder-core/client';
 import type { SectionBlockProps } from '../schema/component-types.js';
@@ -54,8 +57,8 @@ export const SECTION_SLOT_DISALLOW = ['cms.Section', 'cms.SectionGroup', 'cms.Co
 
 /** The props `cms.Section`'s frame renders from: its settings, without the slot and the editor's own. */
 function settingsOf(props: SectionSettingsValue): SectionSettingsValue {
-  const { anchor, scheme, background, width, contentWidth, customMaxWidthPx, spaceTop, spaceBottom, contentPosition, reveal, overlap } =
-    props;
+  // R23 (T449): a stored `outsetPx` (R19C T261's background outset, removed) is not read.
+  const { anchor, scheme, background, width, contentWidth, customMaxWidthPx, spaceTop, spaceBottom, contentPosition, reveal, overlap } = props;
   const settings: SectionSettingsValue = {};
   if (anchor !== undefined) settings.anchor = anchor;
   if (scheme !== undefined) settings.scheme = scheme;
@@ -105,9 +108,11 @@ const SECTION_FIELDS = {
     ],
   },
   background: createSectionBackgroundField({ label: 'Background' }),
+  // R19C (T260): per breakpoint (Responsive tab); a stored single width is read as it is.
   width: {
     type: 'select',
     label: 'Width',
+    metadata: PB_RESPONSIVE_METADATA,
     options: [
       { label: 'Contained (page container)', value: 'contained' },
       { label: 'Wide', value: 'wide' },
@@ -129,6 +134,7 @@ const SECTION_FIELDS = {
     ],
   },
   // R17 (T208, T209): worded and ranged as every custom maximum width (stored values are not clamped).
+  // R19C (T262): a value wider than the page container widens the section, up to the viewport less the gutters.
   customMaxWidthPx: { type: 'number', label: 'Custom max width (px)', min: 160, max: 2000, step: 10 },
   anchor: createSectionAnchorField({ label: 'Anchor' }),
   reveal: createSectionRevealField({ label: 'Entrance reveal' }),
@@ -155,7 +161,7 @@ const SECTION_FIELDS = {
 } as unknown as Fields<SectionBlockProps>;
 
 /** The section's prop keys that support a value per breakpoint (`responsiveFields`, the manifest's too). */
-export const SECTION_RESPONSIVE_FIELDS = ['spaceTop', 'spaceBottom', 'contentPosition', 'overlap'] as const;
+export const SECTION_RESPONSIVE_FIELDS = ['width', 'spaceTop', 'spaceBottom', 'contentPosition', 'overlap'] as const;
 
 const sectionConfig: ComponentConfig<{ props: SectionBlockProps }> = {
   label: 'Section',
@@ -166,10 +172,11 @@ const sectionConfig: ComponentConfig<{ props: SectionBlockProps }> = {
   // The content width only with a background wider than the page container
   // (T124); the custom max width only with a custom width or content width, as
   // `cms.Row` offers its own.
+  // R19C (T260): with a width per breakpoint, a setting shows when any breakpoint's width takes it.
   resolveFields: (data, { fields }) => {
-    const width = data.props.width ?? 'contained';
-    const withContentWidth = SECTION_WIDTHS_WITH_CONTENT_WIDTH.includes(width);
-    const custom = width === 'custom' || (withContentWidth && data.props.contentWidth === 'custom');
+    const widths = sectionWidthsOf(data.props.width);
+    const withContentWidth = widths.some((width) => SECTION_WIDTHS_WITH_CONTENT_WIDTH.includes(width));
+    const custom = widths.includes('custom') || (withContentWidth && data.props.contentWidth === 'custom');
     // Filtered in place, so the fields keep their order.
     return Object.fromEntries(
       Object.entries(fields as Record<string, unknown>).filter(
@@ -180,6 +187,12 @@ const sectionConfig: ComponentConfig<{ props: SectionBlockProps }> = {
   render: (props) =>
     props.puck?.isEditing ? <SectionEditing props={props} /> : <SectionPublished props={props} />,
 };
+
+/** Every breakpoint's width (R19C): a stored single width is one; unset is `contained`. */
+function sectionWidthsOf(value: SectionBlockProps['width']): SectionWidth[] {
+  const responsive = normalizeResponsive<SectionWidth>(value as SectionWidth | ResponsiveProp<SectionWidth> | undefined, 'contained');
+  return [responsive.base, responsive.tablet, responsive.desktop].filter((width): width is SectionWidth => width !== undefined);
+}
 
 /** `cms.Section` — exported under the block name's local segment, as every block is. */
 export const Section = withHideOn(sectionConfig);

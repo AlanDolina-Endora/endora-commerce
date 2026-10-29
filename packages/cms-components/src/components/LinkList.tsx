@@ -1,12 +1,17 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { ComponentConfig, Fields, PuckComponent } from '@puckeditor/core';
 import { withHideOn, type BreakpointTier, createToggleField } from '@endora-commerce/page-builder-core';
 import { usePreviewBreakpointTier } from '@endora-commerce/page-builder-core/client';
 import type { LinkListItem, LinkListProps } from '../schema/component-types.js';
 import { createInlineRichTextField } from '../fields/inline-rich-text-field.js';
-import { DEFAULT_SECTION_BUTTON, levelField, sizeField, sizePxField } from '../fields/section-block-fields.js';
+import { DEFAULT_SECTION_BUTTON, levelField, sizeField, sizeFieldWithDefault, sizePxField } from '../fields/section-block-fields.js';
+import { lineHeightField, sizeUsesCustom, textStyleAttrs } from './text-style.js';
+import { textWeightField } from './typography.js';
+
+/** Today's row title (`.cmsc-pb-link-list__title`): the inherited size at weight 600 (R19A). */
+const TITLE_TODAY = { size: 'inherit', weight: '600', lineHeight: 'inherit' };
 import { BUTTON_SPEC_OBJECT_FIELDS, specAtTier } from './Button.js';
 import { ButtonView } from './ButtonView.js';
 import { BlockHeading, usesCustom, blockHeadingStyle, blockHeadingStyleFields, isUnusedHeadingMaxWidthPx } from './section-parts.js';
@@ -29,8 +34,28 @@ function LinkListBody({ props, tier }: { props: LinkListProps; tier: BreakpointT
   const items = (props.items ?? []).filter(
     (item): item is LinkListItem => !!item && typeof item === 'object' && typeof item.title === 'string' && item.title.trim() !== '',
   );
+  // R19A (T236): the row titles' size and weight, written only when chosen.
+  // R22I (T379): and their line height per breakpoint.
+  const title = textStyleAttrs(
+    { size: props.titleSize, sizePx: props.titleSizePx, weight: props.titleWeight, lineHeight: props.titleLineHeight },
+    tier,
+    TITLE_TODAY,
+  );
+  const titleAttrs = {
+    className: ['cmsc-pb-link-list__title', ...title.classes].join(' '),
+    ...(Object.keys(title.style).length > 0 ? { style: title.style as CSSProperties } : {}),
+  };
   return (
-    <div className={['cmsc-pb-link-list', props.divider === false ? '' : 'cmsc-pb-link-list--divided'].filter(Boolean).join(' ')}>
+    <div
+      className={[
+        'cmsc-pb-link-list',
+        props.divider === false ? '' : 'cmsc-pb-link-list--divided',
+        // R20F (T320): a rule under the last row too, only with the rules between rows on.
+        props.divider !== false && props.dividerAfterLast === true ? 'cmsc-pb-link-list--divided-end' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <BlockHeading
         value={props.heading}
         level={props.headingLevel}
@@ -48,7 +73,7 @@ function LinkListBody({ props, tier }: { props: LinkListProps; tier: BreakpointT
             return (
               <li key={index} className="cmsc-pb-link-list__item">
                 <div className="cmsc-pb-link-list__text">
-                  <p className="cmsc-pb-link-list__title">{item.title}</p>
+                  <p {...titleAttrs}>{item.title}</p>
                   {description ? <p className="cmsc-pb-link-list__description">{description}</p> : null}
                 </div>
                 {button ? (
@@ -95,7 +120,16 @@ const LINK_LIST_FIELDS = {
     defaultItemProps: { title: 'Row title', description: '', button: DEFAULT_ROW_BUTTON },
     getItemSummary: (item: { title?: string }) => item?.title || 'Row',
   },
+  // R19A (T236): the row titles' size per breakpoint and weight; Default keeps today's.
+  titleSize: sizeFieldWithDefault('Row title size'),
+  titleSizePx: sizePxField('Custom row title size (px)'),
+  // R23 (T435): one weight; the line height with a Custom px size only.
+  titleWeight: textWeightField('Row title weight'),
+  // R22I (T379): the row titles' line height per breakpoint; empty keeps today's.
+  titleLineHeight: lineHeightField('Row title line height'),
   divider: createToggleField({ label: 'Divider between rows', defaultValue: true }),
+  // R20F (T320): a rule under the last row too; off by default.
+  dividerAfterLast: createToggleField({ label: 'Divider after the last row' }),
 };
 
 const linkListConfig: ComponentConfig<{ props: LinkListProps }> = {
@@ -115,6 +149,9 @@ const linkListConfig: ComponentConfig<{ props: LinkListProps }> = {
     const fields: Record<string, unknown> = {};
     for (const [key, field] of Object.entries((params?.fields as Record<string, unknown> | undefined) ?? LINK_LIST_FIELDS)) {
       if (key === 'headingSizePx' && !usesCustom(props.headingSize)) continue;
+      if (key === 'titleSizePx' && !usesCustom(props.titleSize)) continue;
+      if (key === 'titleLineHeight' && !sizeUsesCustom(props.titleSize)) continue;
+      if (key === 'dividerAfterLast' && props.divider === false) continue;
       if (isUnusedHeadingMaxWidthPx(key, props)) continue;
       fields[key] = field;
     }

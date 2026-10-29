@@ -53,7 +53,8 @@ const SWAPS: Record<string, (fields: FieldMap) => FieldMap> = {
   'cms.CarouselImage': (fields) => swap(fields, { image: IMAGE_FIELD, link: OPTIONAL_LINK_FIELD }),
   'cms.CarouselSplit': (fields) => swap(fields, { media: MEDIA_FIELD, iconAssetId: ICON_ASSET_FIELD, buttons: SPLIT_BUTTONS_FIELD }),
   'cms.LinkTile': (fields) => swap(fields, { image: IMAGE_FIELD, link: LINK_FIELD }),
-  'cms.DownloadTile': (fields) => swap(fields, { fileAssetId: FILE_FIELD, hoverImage: HOVER_IMAGE_FIELD }),
+  // R20E (T303): the page link has the page, product, category and file pickers.
+  'cms.DownloadTile': (fields) => swap(fields, { fileAssetId: FILE_FIELD, link: LINK_FIELD, hoverImage: HOVER_IMAGE_FIELD }),
 };
 
 /** The Carousel blocks this module gives library pickers to. */

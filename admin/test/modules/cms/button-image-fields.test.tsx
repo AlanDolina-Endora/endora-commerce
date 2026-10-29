@@ -40,6 +40,11 @@ const CORE_PL = JSON.parse(
   readFileSync(resolve(process.cwd(), '../packages/modules/_i18n/i18n/pl.json'), 'utf8'),
 ) as Record<string, string>;
 
+/** The `ButtonSpec` fields every button edits. */
+const BUTTON_SPEC_KEYS = ['backgroundColor', 'fill', 'icon', 'iconPosition', 'label', 'link', 'size', 'style', 'textColor'];
+/** R20E (T296): the shared button look an embedded button edits beside them. */
+const BUTTON_LOOK_KEYS = ['borderColor', 'iconOnlyShape', 'transparentOutline'];
+
 const en = (key: string): string => CORE_EN[key] ?? `«core is missing ${key}»`;
 
 describe('createButtonListField (T016)', () => {
@@ -48,7 +53,7 @@ describe('createButtonListField (T016)', () => {
     expect(field.type).toBe('array');
     expect(field.max).toBe(6);
     expect(Object.keys(field.arrayFields).sort()).toEqual(
-      ['backgroundColor', 'fill', 'icon', 'iconPosition', 'label', 'link', 'size', 'style', 'textColor'].sort(),
+      [...BUTTON_SPEC_KEYS, ...BUTTON_LOOK_KEYS].sort(),
     );
     // `text` is today's `ghost` variant (plan § Extend, don't narrow).
     const fill = field.arrayFields.fill as { options: { value: string }[] };
@@ -80,11 +85,16 @@ describe('responsive ButtonSpec fields (T039)', () => {
     expect((responsive.arrayFields.size as { metadata?: unknown }).metadata).toBeUndefined();
   });
 
+  it('a single-button field without the look keeps the ButtonSpec properties alone (R20E, T296)', () => {
+    const field = createButtonSpecField({ label: 'Button', responsive: true, look: false });
+    expect(Object.keys(field.objectFields).sort()).toEqual([...BUTTON_SPEC_KEYS].sort());
+  });
+
   it('a single-button field edits every ButtonSpec property with the link picker', () => {
     const field = createButtonSpecField({ label: 'Button', responsive: true });
     expect(field.type).toBe('object');
     expect(Object.keys(field.objectFields).sort()).toEqual(
-      ['backgroundColor', 'fill', 'icon', 'iconPosition', 'label', 'link', 'size', 'style', 'textColor'].sort(),
+      [...BUTTON_SPEC_KEYS, ...BUTTON_LOOK_KEYS].sort(),
     );
     expect((field.objectFields.link as { type: string }).type).toBe('custom');
     expect((field.objectFields.fill as { metadata?: unknown }).metadata).toEqual(PB_RESPONSIVE_METADATA);
@@ -201,5 +211,32 @@ describe('createResponsiveImageField (T016)', () => {
     const last = onChange.mock.calls.at(-1)?.[0] as ResponsiveImage;
     expect(last.ratio).toEqual({ base: '4:5', desktop: '5:2' });
     expect(responsiveImageSchema.safeParse(last).success).toBe(true);
+  });
+
+  // R19C (T263): with a mobile image, the breakpoint from which the desktop image takes over.
+  it('offers where the desktop image starts only with a mobile image, and writes nothing for the default', () => {
+    renderImageField({ imageSource: 'url', src: 'https://example.com/a.jpg', alt: '' });
+    expect(screen.queryByRole('combobox', { name: en('pageBuilder.imageField.desktopFrom') })).toBeNull();
+  });
+
+  it('keeps the mobile image up to the desktop tier when asked', () => {
+    const onChange = renderImageField({
+      imageSource: 'url',
+      src: 'https://example.com/a.jpg',
+      mobileSrc: 'https://example.com/m.jpg',
+      alt: '',
+    });
+    const select = screen.getByRole('combobox', { name: en('pageBuilder.imageField.desktopFrom') }) as HTMLSelectElement;
+    expect(select.value).toBe('tablet');
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
+      en('pageBuilder.imageField.desktopFrom.tablet'),
+      en('pageBuilder.imageField.desktopFrom.desktop'),
+    ]);
+    fireEvent.change(select, { target: { value: 'desktop' } });
+    const last = onChange.mock.calls.at(-1)?.[0] as ResponsiveImage;
+    expect(last.desktopFrom).toBe('desktop');
+    expect(responsiveImageSchema.safeParse(last).success).toBe(true);
+    fireEvent.change(select, { target: { value: 'tablet' } });
+    expect(onChange.mock.calls.at(-1)?.[0]).not.toHaveProperty('desktopFrom');
   });
 });

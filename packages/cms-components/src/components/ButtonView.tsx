@@ -47,9 +47,52 @@ function overrideStyle(button: Pick<ButtonSpec, 'backgroundColor' | 'textColor'>
   } as CSSProperties;
 }
 
+/**
+ * R19B (T245, T246): what a block may add to one button's look — the outline
+ * fill made transparent and a border colour (already a CSS colour: a hex or a
+ * brand variable). Unset, the button renders as before. R23 (T447): an
+ * icon-only button's px size (R19B) and a pill's px width (R20E) were removed;
+ * the button follows its size option, a pill is 1.15 times its height.
+ */
+export interface ButtonViewLook {
+  transparentOutline?: boolean;
+  borderColor?: string;
+  /** R20E (T296): an icon-only button's shape — today's circle, or a pill 1.15 times as wide as it is tall. */
+  iconOnlyShape?: 'circle' | 'pill';
+}
+
+/**
+ * R20E (T296, T297): the look a button carries itself (a block-embedded
+ * `ButtonSpec`), merged under the block's own options (`cms.Button`, whose
+ * look stays block-level as stored), so both reach the button through one
+ * path. A border colour is resolved here (a hex or a brand token); `null`
+ * when nothing is set.
+ */
+function mergedLook(button: ButtonSpec, look: ButtonViewLook | undefined): ButtonViewLook | undefined {
+  const border = colorValueToCss(button.borderColor);
+  const own: ButtonViewLook = {
+    ...(button.transparentOutline === true ? { transparentOutline: true } : {}),
+    ...(border ? { borderColor: border } : {}),
+    ...(button.iconOnlyShape === 'pill' ? { iconOnlyShape: 'pill' as const } : {}),
+  };
+  const merged = { ...own, ...(look ?? {}) };
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+/** R19B (T245, T246): the outline fill and the border colour as the button's own custom properties. */
+function lookStyle(look: ButtonViewLook | undefined): CSSProperties {
+  if (!look) return {};
+  const border = look.borderColor?.trim().replace(/[;{}<>]/g, '') ?? '';
+  return {
+    ...(look.transparentOutline === true ? { '--cmsc-btn-outline-bg': 'transparent' } : {}),
+    ...(border ? { '--cmsc-btn-border': border } : {}),
+  } as CSSProperties;
+}
+
 export interface ButtonViewProps {
   button: ButtonSpec;
   className?: string;
+  look?: ButtonViewLook;
 }
 
 /**
@@ -59,7 +102,8 @@ export interface ButtonViewProps {
  * round button whose accessible name is the label. A link that resolves to
  * nothing renders the same box with no link.
  */
-export function ButtonView({ button, className }: ButtonViewProps): ReactNode {
+export function ButtonView({ button, className, look: blockLook }: ButtonViewProps): ReactNode {
+  const look = mergedLook(button, blockLook);
   const assets = useCmsRenderAssets();
   const mediaBaseUrl = useCmsRenderMediaBaseUrl();
   const link = resolveLinkHref(button.link, { assets, mediaBaseUrl });
@@ -67,16 +111,19 @@ export function ButtonView({ button, className }: ButtonViewProps): ReactNode {
   const iconOnly = Icon !== null && button.iconPosition === 'only' && button.label.trim() !== '';
   const iconAtEnd = button.iconPosition === 'end' || button.iconPosition === undefined;
 
+  // R20E (T296): an icon-only button drawn as a pill.
+  const pill = iconOnly && look?.iconOnlyShape === 'pill';
   const classes = [
     'cmsc-btn',
     ...appearanceClasses(button),
     `cmsc-btn--${button.size ?? 'medium'}`,
     iconOnly ? 'cmsc-btn--icon-only' : '',
+    pill ? 'cmsc-btn--icon-pill' : '',
     className ?? '',
   ]
     .filter(Boolean)
     .join(' ');
-  const style = overrideStyle(button);
+  const style = { ...overrideStyle(button), ...lookStyle(look) } as CSSProperties;
   const icon = Icon ? <Icon aria-hidden="true" className="cmsc-btn__icon" /> : null;
 
   const content = iconOnly ? (

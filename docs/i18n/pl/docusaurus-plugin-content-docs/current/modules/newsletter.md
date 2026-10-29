@@ -132,6 +132,9 @@ umieścić formularz zapisu na dowolnej stronie CMS:
 | Tematy | Do 12 pól wyboru, każde z etykietą i **kodem tagu** newslettera; zaznaczone trafiają do subskrybenta jako tagi. **Topics required** wymaga zaznaczenia co najmniej jednego. Temat z nieprawidłowym kodem tagu nie jest pokazywany. |
 | Etykieta zgody | Tekst pola zgody, które jest zawsze pokazywane i zawsze wymagane. To tekst sformatowany w jednej linii, więc może zawierać link do polityki prywatności. |
 | Układ | W linii (pole i przycisk obok siebie) albo w ramce. |
+| Położenie przycisku, kształt pola | **Obok pola** (domyślnie) albo **Wewnątrz pola**: pole e-mail i przycisk mają wspólną ramkę, **Zaokrągloną** (domyślnie) albo w kształcie **Pigułki**. |
+| Kolumny tematów | Tematy w siatce 1–4 kolumn; pozostawione puste, układają się w jednym zawijanym rzędzie. |
+| Ukryj etykietę pola e-mail | Ukrywa wizualnie etykietę pola e-mail; pozostaje ona etykietą pola, więc czytniki ekranu nadal ją odczytują. Użyj tekstu zastępczego, aby widzący odwiedzający wiedzieli, co wpisać. |
 | Komunikaty | Teksty pokazywane po zapisie: oczekiwanie na potwierdzenie, zapisano oraz odmowy (brak zgody, nieprawidłowy e-mail, nie wybrano tematu, usługa niedostępna). |
 
 Każdy tekst można przetłumaczyć akcją **Przetłumacz** w Page Builderze. Na

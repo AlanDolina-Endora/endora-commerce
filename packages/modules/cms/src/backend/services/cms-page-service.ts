@@ -15,6 +15,7 @@ import { walkBlockEmbeds, walkUnknownComponents } from './content-tree-walker.js
 import { assertAnchors } from './anchor-guard.js';
 import type { CmsContentInvalidator } from './cms-content-invalidator.js';
 import type { CmsReferenceRegistry } from './cms-reference-registry.js';
+import { addressesOf, anyNested, duplicatePath, loadChannelPageNodes } from './page-paths.js';
 
 type PageRow = {
   id: string;
@@ -35,6 +36,10 @@ type PageRow = {
   breadcrumbs_visible: boolean;
   breadcrumbs_scheme: 'light' | 'muted' | 'dark';
   share_image_asset_id: string | null;
+  /** R19D — absent on a row read before the migration ran. */
+  parent_path_in_url?: boolean | null;
+  /** R21H (T355): the trail over the first section. */
+  breadcrumbs_overlay?: boolean | null;
 };
 
 const emptyContent = { languages: {} };
@@ -179,9 +184,16 @@ export class CmsPageService {
     options: { withDescendants?: boolean } = {},
   ): Promise<void> {
     if (!this.invalidator) return;
-    const slugs = await this.slugsOf(pageId);
-    if (options.withDescendants) slugs.push(...(await this.descendantSlugs(pageId)));
-    await this.invalidateForSlugs(slugs);
+    const em = this.emFactory();
+    const slugs = await this.slugsOf(pageId, em);
+    const ids = new Set([pageId]);
+    if (options.withDescendants) {
+      slugs.push(...(await this.descendantSlugs(pageId, em)));
+      for (const descendant of await this.descendantIds(pageId, em)) ids.add(descendant);
+    }
+    // R19D: the computed paths too — a nested page is cached under its path.
+    const { addresses } = await this.addressSnapshot(em, ids);
+    await this.invalidateForSlugs([...slugs, ...addresses]);
   }
 
   /** Every slug a page is served under — its own and each channel's. */
@@ -215,7 +227,9 @@ export class CmsPageService {
       parentPageId: row.parent_page_id,
       breadcrumbsVisible: row.breadcrumbs_visible,
       breadcrumbsScheme: row.breadcrumbs_scheme,
+      breadcrumbsOverlay: row.breadcrumbs_overlay === true,
       shareImageAssetId: row.share_image_asset_id,
+      parentPathInUrl: row.parent_path_in_url === true,
       version: row.version,
     };
   }
@@ -282,7 +296,7 @@ export class CmsPageService {
   }
 
   /**
-   * The slugs of every page below this one. A page's name, meta title, status
+   * The slugs of every page below this one. A page's name, status
    * and channel scope appear in its descendants' breadcrumb trails, so a write
    * to it must drop their cached answers as well as its own.
    */
@@ -304,8 +318,71 @@ export class CmsPageService {
     return rows.map((row) => row.slug);
   }
 
-  private async invalidateForSlugs(slugs: Iterable<string>): Promise<void> {
-    await this.invalidator?.pagesChanged(slugs);
+  private async invalidateForSlugs(slugs: Iterable<string>, options: { addressesMoved?: boolean } = {}): Promise<void> {
+    await this.invalidator?.pagesChanged(slugs, options);
+  }
+
+  /** The ids of every page below this one, bounded like every tree walk here. */
+  private async descendantIds(pageId: string, em: EntityManager): Promise<string[]> {
+    const rows = (await em.execute(
+      `with recursive subtree(id, depth) as (
+         select id, 0 from cms_pages where parent_page_id = ?
+         union all
+         select p.id, s.depth + 1
+         from cms_pages p join subtree s on p.parent_page_id = s.id
+         where s.depth < ?
+       )
+       select distinct id::text as id from subtree`,
+      [pageId, CMS_PAGE_TREE_MAX_DEPTH],
+    )) as Array<{ id: string }>;
+    return rows.map((row) => row.id).filter((id) => id !== pageId);
+  }
+
+  /** The channels any of the given pages is served in. */
+  private async channelsOfPages(em: EntityManager, pageIds: ReadonlySet<string>): Promise<string[]> {
+    if (pageIds.size === 0) return [];
+    const placeholders = [...pageIds].map(() => '?').join(', ');
+    const rows = (await em.execute(
+      `select distinct sales_channel_id::text as id from cms_page_sales_channels where page_id in (${placeholders})`,
+      [...pageIds],
+    )) as Array<{ id: string }>;
+    return rows.map((row) => row.id);
+  }
+
+  /**
+   * The public addresses of a page and its descendants in every channel they
+   * are served in (R19D, T282) — each channel slug and each computed path — and
+   * whether any of them is nested. Read before and after a write, so the
+   * invalidation names the addresses a page had as well as the ones it has.
+   */
+  private async addressSnapshot(
+    em: EntityManager,
+    pageIds: ReadonlySet<string>,
+  ): Promise<{ addresses: Set<string>; nested: boolean }> {
+    if (pageIds.size === 0) return { addresses: new Set(), nested: false };
+    const nodes = await loadChannelPageNodes(em, await this.channelsOfPages(em, pageIds));
+    return { addresses: addressesOf(nodes, pageIds), nested: anyNested(nodes, pageIds) };
+  }
+
+  /**
+   * R19D (T282): refuse a write after which two pages of one channel share a
+   * public path, where one of them is the page written or one of its
+   * descendants. Runs inside the Command after the write, so a refusal rolls
+   * the write back and the bus records no entry; the advisory lock serialises
+   * the writes that can move a path, as the parent lock does for the tree.
+   */
+  private async assertPathsUnique(em: EntityManager, pageIds: ReadonlySet<string>): Promise<void> {
+    await em.execute("select pg_advisory_xact_lock(hashtext('cms_pages.public_path'))");
+    const nodes = await loadChannelPageNodes(em, await this.channelsOfPages(em, pageIds));
+    const duplicate = duplicatePath(nodes, pageIds);
+    if (duplicate) {
+      throw new HttpError(
+        409,
+        ERROR_CODES.CMS_SLUG_CONFLICT,
+        `Another CMS Page is already served at "/${duplicate.path}".`,
+        { path: duplicate.path },
+      );
+    }
   }
 
   async list(filters: { salesChannelId?: string; status?: string; q?: string } = {}): Promise<{
@@ -363,6 +440,7 @@ export class CmsPageService {
       ]),
     );
     const body = Object.fromEntries(input.languages.map((language) => [language, '']));
+    const createdAddresses = new Set<string>([input.slug]);
 
     await this.commandBus.run<void>({
       action: 'cms_page.create',
@@ -377,10 +455,11 @@ export class CmsPageService {
             (id, path, status, title, body, published_at, archived_at, created_at, updated_at,
              name, slug, active, description, meta_title, meta_description, meta_keywords,
              content, languages, version,
-             parent_page_id, breadcrumbs_visible, breadcrumbs_scheme, share_image_asset_id)
+             parent_page_id, breadcrumbs_visible, breadcrumbs_scheme, share_image_asset_id,
+             parent_path_in_url, breadcrumbs_overlay)
            values (?, ?, 'draft', ?::jsonb, ?::jsonb, null, null, ?, ?,
              ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, 1,
-             ?, ?, ?, ?)`,
+             ?, ?, ?, ?, ?, ?)`,
           [
             id,
             this.legacyPath(input.slug, id),
@@ -401,9 +480,15 @@ export class CmsPageService {
             input.breadcrumbsVisible ?? true,
             input.breadcrumbsScheme ?? 'light',
             input.shareImageAssetId ?? null,
+            input.parentPathInUrl ?? false,
+            input.breadcrumbsOverlay ?? false,
           ],
         );
         await this.replaceChannelScope(tx, id, input.salesChannelIds, input.slug);
+        await this.assertPathsUnique(tx, new Set([id]));
+        for (const address of (await this.addressSnapshot(tx, new Set([id]))).addresses) {
+          createdAddresses.add(address);
+        }
         const created = await this.findRow(id, tx);
         return {
           result: undefined,
@@ -413,7 +498,7 @@ export class CmsPageService {
       },
     });
 
-    await this.invalidateForSlugs([input.slug]);
+    await this.invalidateForSlugs(createdAddresses);
     return this.get(id);
   }
 
@@ -431,6 +516,7 @@ export class CmsPageService {
     // else made later.
     if (input.slug !== undefined) await this.assertSlugNotReserved(input.slug);
     const slugsToInvalidate = new Set<string>();
+    let addressesMoved = false;
     await this.commandBus.run<void>({
       action: 'cms_page.update',
       objectType: PAGE_OBJECT_TYPE,
@@ -454,6 +540,17 @@ export class CmsPageService {
           await this.assertParentAllowed(tx, id, input.parentPageId);
         }
 
+        // R19D: a write that can move a public path — its own and its nested
+        // descendants' — is checked for a duplicate after it is made, and both
+        // sets of addresses are invalidated.
+        const movesPaths =
+          input.slug !== undefined ||
+          input.salesChannelIds !== undefined ||
+          input.parentPageId !== undefined ||
+          input.parentPathInUrl !== undefined;
+        const subtree = new Set([id, ...(movesPaths ? await this.descendantIds(id, tx) : [])]);
+        const pathsBefore = movesPaths ? await this.addressSnapshot(tx, subtree) : null;
+
         const meta = input.meta !== undefined ? this.splitMeta(input.meta ?? null) : null;
         const sets: string[] = [];
         const params: unknown[] = [];
@@ -470,7 +567,9 @@ export class CmsPageService {
         if (input.parentPageId !== undefined) set('parent_page_id = ?', input.parentPageId);
         if (input.breadcrumbsVisible !== undefined) set('breadcrumbs_visible = ?', input.breadcrumbsVisible);
         if (input.breadcrumbsScheme !== undefined) set('breadcrumbs_scheme = ?', input.breadcrumbsScheme);
+        if (input.breadcrumbsOverlay !== undefined) set('breadcrumbs_overlay = ?', input.breadcrumbsOverlay);
         if (input.shareImageAssetId !== undefined) set('share_image_asset_id = ?', input.shareImageAssetId);
+        if (input.parentPathInUrl !== undefined) set('parent_path_in_url = ?', input.parentPathInUrl);
         if (meta) {
           set('meta_title = ?::jsonb', JSON.stringify(meta.metaTitle));
           set('meta_description = ?::jsonb', JSON.stringify(meta.metaDescription));
@@ -492,6 +591,12 @@ export class CmsPageService {
         }
         slugsToInvalidate.add(nextSlug);
         for (const slug of await this.descendantSlugs(id, tx)) slugsToInvalidate.add(slug);
+        if (pathsBefore) {
+          await this.assertPathsUnique(tx, subtree);
+          const pathsAfter = await this.addressSnapshot(tx, subtree);
+          for (const address of [...pathsBefore.addresses, ...pathsAfter.addresses]) slugsToInvalidate.add(address);
+          addressesMoved = pathsBefore.nested || pathsAfter.nested;
+        }
 
         // A patch that named no field wrote no row, so it leaves no entry: "no
         // write, no audit row" is the bus's own rule and `skipAudit` its spelling.
@@ -505,7 +610,7 @@ export class CmsPageService {
       },
     });
 
-    await this.invalidateForSlugs(slugsToInvalidate);
+    await this.invalidateForSlugs(slugsToInvalidate, { addressesMoved });
     return this.get(id);
   }
 
@@ -584,6 +689,7 @@ export class CmsPageService {
     // the slugs cascade with it. Invalidated after the commit, so a storefront
     // read racing the delete cannot re-cache a page that is about to be gone.
     let slugs: string[] = [];
+    let movedOnDelete = false;
     await this.commandBus.run<void>({
       action: 'cms_page.delete',
       objectType: PAGE_OBJECT_TYPE,
@@ -597,11 +703,15 @@ export class CmsPageService {
         // The children lose this page as their parent (`on delete set null`),
         // so their trails change with it.
         slugs = [...(await this.slugsOf(id, em)), ...(await this.descendantSlugs(id, em))];
+        // R19D: and the paths, which move for every nested descendant.
+        const snapshot = await this.addressSnapshot(em, new Set([id, ...(await this.descendantIds(id, em))]));
+        slugs.push(...snapshot.addresses);
+        movedOnDelete = snapshot.nested;
         await em.execute('delete from cms_pages where id = ?', [id]);
         return { result: undefined, before, after: null };
       },
     });
-    await this.invalidateForSlugs(slugs);
+    await this.invalidateForSlugs(slugs, { addressesMoved: movedOnDelete });
   }
 
   private async transition(
@@ -819,6 +929,7 @@ export class CmsPageService {
       createdAt: this.iso(row.created_at),
       updatedAt: this.iso(row.updated_at),
       parentPageId: row.parent_page_id,
+      parentPathInUrl: row.parent_path_in_url === true,
     };
   }
 
@@ -831,6 +942,7 @@ export class CmsPageService {
       },
       breadcrumbsVisible: row.breadcrumbs_visible,
       breadcrumbsScheme: row.breadcrumbs_scheme,
+      breadcrumbsOverlay: row.breadcrumbs_overlay === true,
       shareImageAssetId: row.share_image_asset_id,
     };
   }

@@ -79,7 +79,15 @@ export const CMS_CONTENT_CHANGED_EVENT = 'cms.content_changed.v1';
  * reaches the storefront inlined into a page.
  */
 export type CmsContentChange =
-  | { readonly kind: 'page'; readonly slugs: readonly string[] }
+  | {
+      readonly kind: 'page';
+      readonly slugs: readonly string[];
+      /**
+       * A nested page's public path moved (feature 163, R19D). The path is
+       * written into the links of *other* pages, so every page read is stale.
+       */
+      readonly addressesMoved?: true;
+    }
   | { readonly kind: 'block'; readonly codes: readonly string[] }
   | { readonly kind: 'template' }
   | { readonly kind: 'hook'; readonly codes: readonly string[] };

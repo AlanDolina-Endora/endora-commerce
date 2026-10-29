@@ -16,14 +16,25 @@ export interface BreadcrumbCrumb {
 /**
  * The colour scheme the trail sits on (feature 163, FR-031). `light`, the
  * default, keeps the trail's own colours; on `muted` and `dark` the trail reads
- * the scheme's variables, which the surrounding `data-cmsb-scheme` binds.
+ * the scheme's variables, which the surrounding `data-cmsb-scheme` binds — R22J
+ * (T394): the links in the scheme's muted text (its text on hover), the current
+ * page in its text colour.
  */
 export type BreadcrumbsScheme = 'light' | 'muted' | 'dark';
 
 const TRAIL_CLASS = 'm-0 mb-[16px] flex list-none flex-wrap gap-[6px] p-0 text-[12px]';
+/**
+ * R19C (T267): on a painted band the trail has no bottom margin — it would
+ * collapse out of the band and open a strip of the page background under it.
+ * The band pads itself instead (`app/(content)/[...slug]/page.tsx`).
+ */
+const PAINTED_TRAIL_CLASS = 'm-0 mb-0 flex list-none flex-wrap gap-[6px] p-0 text-[12px]';
 const CRUMB_CLASS = "before:mr-[6px] before:text-line-strong before:content-['›'] first:before:hidden";
 const SCHEME_CRUMB_CLASS =
   "before:mr-[6px] before:text-[color:var(--cmsb-border,#d9e0e7)] before:content-['›'] first:before:hidden";
+const SCHEME_TRAIL_COLOURS =
+  'text-[color:var(--cmsb-fg-muted,#64748b)] [&_a]:text-[color:var(--cmsb-fg-muted,#64748b)] [&_a:hover]:text-[color:var(--cmsb-fg,#15202b)]';
+const SCHEME_CURRENT_CLASS = 'text-[color:var(--cmsb-fg,#15202b)]';
 
 /**
  * Renders the navigation trail with `BreadcrumbList` JSON-LD so crawlers
@@ -56,7 +67,7 @@ export function Breadcrumbs(props: { crumbs: BreadcrumbCrumb[]; scheme?: Breadcr
       <ol
         className={
           painted
-            ? `${TRAIL_CLASS} text-[color:var(--cmsb-fg-muted,#64748b)] [&_a]:text-[color:var(--cmsb-link,#1261a6)]`
+            ? `${PAINTED_TRAIL_CLASS} ${SCHEME_TRAIL_COLOURS}`
             : `${TRAIL_CLASS} text-muted`
         }
       >
@@ -66,7 +77,9 @@ export function Breadcrumbs(props: { crumbs: BreadcrumbCrumb[]; scheme?: Breadcr
             className={painted ? SCHEME_CRUMB_CLASS : CRUMB_CLASS}
           >
             {idx === props.crumbs.length - 1 ? (
-              <span aria-current="page">{c.label}</span>
+              <span aria-current="page" {...(painted ? { className: SCHEME_CURRENT_CLASS } : {})}>
+                {c.label}
+              </span>
             ) : c.href !== null ? (
               <Link href={c.href}>{c.label}</Link>
             ) : (

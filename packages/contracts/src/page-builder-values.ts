@@ -104,6 +104,17 @@ export const BACKGROUND_SIZE_PERCENT_MAX = 400;
 export const BACKGROUND_REPEATS = ['no-repeat', 'repeat', 'repeat-x', 'repeat-y'] as const;
 export type BackgroundRepeat = (typeof BACKGROUND_REPEATS)[number];
 
+/**
+ * R19C (T263): the breakpoint tier from which an art-directed image (or a
+ * section background's image or video pair) shows its desktop variant —
+ * `tablet` (768 px, today's) or `desktop` (1024 px). Unset reads as `tablet`.
+ */
+export const DESKTOP_FROM_TIERS = ['tablet', 'desktop'] as const;
+export type DesktopFromTier = (typeof DESKTOP_FROM_TIERS)[number];
+
+/** R19C (T265): the largest background outset of a `cms.Column`, px per side (R23 T449: a Section has none). */
+export const SECTION_OUTSET_PX_MAX = 400;
+
 /** A stored background size: a keyword, `{px}` (whole px 1–4000) or `{percent}` (1–400). */
 export type BackgroundSizeValue = BackgroundSizeKeyword | { px: number } | { percent: number };
 

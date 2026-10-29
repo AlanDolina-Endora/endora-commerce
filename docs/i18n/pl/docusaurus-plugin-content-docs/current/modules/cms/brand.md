@@ -37,7 +37,7 @@ wygląd bloków sprzed powstania tego ekranu.
 | Typografia | Czcionka nagłówków i czcionka tekstu (zob. [Czcionki](#czcionki)) oraz skala typografii: Display, Nagłówek 1–6, Lead, Body i Small, każdy z rozmiarem na telefon i na komputer, interlinią, grubością, odstępem między literami i wyborem czcionki nagłówków albo tekstu. Nagłówki 1–6 dotyczą też nagłówków pisanych w tekście sformatowanym (blok Treść sformatowana, tekst sformatowany bloku). |
 | Przyciski | Kształt narożników (kwadratowe, zaokrąglone albo pigułka), wysokość małego, średniego i dużego przycisku, grubość etykiety i wielkość liter etykiety. |
 | Odstępy | Nazwane stopnie, z których wybiera się odstęp nad i pod sekcją — brak, bardzo mały, mały, średni, duży, bardzo duży, największy — każdy z rozmiarem na telefon i na komputer. |
-| Układ | Szerokość treści, szerokość szerokiej treści oraz margines boczny na telefonie i na komputerze. |
+| Układ | Szerokość treści, szerokość szerokiej treści oraz margines boczny na telefonie i na komputerze. Szerokość treści to kontener strony — 1360 px razem z marginesami bocznymi, dopóki jej nie zmienisz; ustaw ją większą, aby poszerzyć ramkę na każdej stronie CMS: podąża za nią każda sekcja Contained, treść trzymana w kontenerze strony i ścieżka nawigacji strony. Dwa opcjonalne mnożniki skalują tekst i kroki odstępów między progami: **Skala tekstu i odstępów na tablecie (768–1023 px)** mnoży tam rozmiary mobilne (np. 1,15 to 15 % więcej), a **Skala tekstu i odstępów na małym komputerze (1024–1279 px)** rozmiary z komputera. Puste pole to 1: nic się nie zmienia. Rozmiary ustawione w bloku we własnych pikselach (rozmiar lub odstęp **Własny (px)**) nie są skalowane. Dwa dalsze opcjonalne ustawienia, domyślnie wyłączone: **Zwiększaj rozmiary z komputera wraz z szerokością okna za małym komputerem** sprawia, że rozmiary rosną z szerokością okna od mnożnika małego komputera przy 1280 px do pełnych rozmiarów z komputera przy **Pełne rozmiary z komputera od (px, domyślnie szerokość kontenera strony)**; **Skaluj wysokość przycisków razem z tekstem i odstępami** stosuje mnożniki także do wysokości przycisków (przycisk z samą ikoną podąża za nimi, bo jest od nich liczony). |
 
 **Podgląd** pokazuje przykład w każdym z trzech schematów z wartościami
 widocznymi na ekranie, jeszcze przed zapisem.
@@ -258,7 +258,33 @@ zaczynający się od `/` na publiczny adres API, tak jak względny adres wideo.
 | `--cmsb-container`, `--cmsb-wide`, `--cmsb-gutter` | Układ |
 
 Rozmiary inne na komputerze są podmieniane w jednym bloku
-`@media (min-width: 1024px)`. Dla każdego poziomu nagłówka `h1`–`h6`, którego
+`@media (min-width: 1024px)`. Z mnożnikiem tabletu innym niż 1
+(`tierScale.tablet`) blok `@media (min-width: 768px) and (max-width:
+1023.98px)` przed nim podmienia każde `--cmsb-t-<token>-size` i
+`--cmsb-space-<step>` na wartość mobilną razy mnożnik; z mnożnikiem małego
+komputera (`tierScale.smallDesktop`) blok `@media (min-width: 1024px) and
+(max-width: 1279.98px)` po nim robi to samo z wartościami z komputera. Margines
+boczny i kontener nie są skalowane. Bez mnożników żaden z tych bloków nie jest
+zapisywany, więc wynik jest bajt w bajt taki sam jak wcześniej. Dwa dalsze
+opcjonalne ustawienia rozszerzają te bloki (każde nic nie zapisuje, dopóki nie
+jest ustawione):
+
+- `tierScale.fluidDesktop: true`, przy mnożniku małego komputera poniżej 1,
+  dodaje blok od końca małego komputera do `tierScale.fluidUntilPx` (inaczej
+  `layout.containerMaxPx`), w którym każdy rozmiar tekstu i krok odstępu
+  z komputera to `clamp(<wartość × mnożnik>px, <wartość × 100 / koniec>vw,
+  <wartość>px)` — mnożnik rośnie z szerokością okna do 1 na końcu;
+- `tierScale.buttons: true` zapisuje także `--cmsb-btn-h-s|m|l` w blokach
+  tabletu, małego komputera i płynnym, skalowane tak samo.
+
+Zakres małego komputera zawsze kończy się na 1279.98 px, tak jak zakłada
+arkusz stylów każdego bloku, a margines boczny i kontener strony są takie same
+na każdym progu między telefonem a komputerem. Własne wartości **Własny (px)**
+bloku są zapisywane jako dosłowne piksele i nie są skalowane. Klucze zapisane
+przez wcześniejszą wersję tego ekranu (`smallDesktopUntilPx`, `blockPx`,
+`buttonLabels`, marginesy i kontener na progach, `fluidContainer`,
+`breadcrumbsPaddingYPx`, `trackingMobileEm`) znikają przy następnym zapisie
+marki, a do tego czasu niczego nie zapisują. Dla każdego poziomu nagłówka `h1`–`h6`, którego
 styl typografii jest ustawiony, wynik zawiera też jedną regułę, która nadaje
 nagłówkom tego poziomu w tekście sformatowanym (`.cmsc-pb-rich-content`,
 `.cmsc-pb-rich`, `.cmsc-pb-hero__body`, `.cmsc-pb-feature-list__body`) rozmiar,

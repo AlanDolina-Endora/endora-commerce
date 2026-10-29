@@ -28,7 +28,13 @@ const REDUCED_MOTION_MEDIA = '(prefers-reduced-motion: reduce)';
  * its background pair, not the videos of a block inside it, which that block
  * plays itself (a hero's media, T043).
  */
-export function useBreakpointVideo(ref: RefObject<HTMLElement | null>, selector = 'video[data-bp]'): void {
+export function useBreakpointVideo(
+  ref: RefObject<HTMLElement | null>,
+  selector = 'video[data-bp]',
+  /** R19C (T263): the query under which the mobile video plays; unset, below the tablet tier. */
+  options?: { mobileMedia?: string },
+): void {
+  const mobileMedia = options?.mobileMedia ?? MOBILE_MEDIA;
   useEffect(() => {
     const root = ref.current;
     if (!root || typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
@@ -36,7 +42,7 @@ export function useBreakpointVideo(ref: RefObject<HTMLElement | null>, selector 
     if (videos.length === 0) return undefined;
     if (typeof IntersectionObserver !== 'function') return undefined;
 
-    const mobile = window.matchMedia(MOBILE_MEDIA);
+    const mobile = window.matchMedia(mobileMedia);
     const reduced = window.matchMedia(REDUCED_MOTION_MEDIA);
     let visible = false;
 
@@ -78,5 +84,5 @@ export function useBreakpointVideo(ref: RefObject<HTMLElement | null>, selector 
       reduced.removeEventListener('change', sync);
       for (const video of videos) if (!video.paused) video.pause();
     };
-  }, [ref, selector]);
+  }, [ref, selector, mobileMedia]);
 }

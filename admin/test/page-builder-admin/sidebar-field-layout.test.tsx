@@ -187,7 +187,15 @@ describe('in the real page editor (T116, T117)', () => {
       (component) => component.name === 'cms.Section',
     );
     // T148 (deliberately changed, standing rule 13): the overlap is a fourth responsive field.
-    expect([...(section?.responsiveFields ?? [])].sort()).toEqual(['contentPosition', 'overlap', 'spaceBottom', 'spaceTop']);
+    // R19C (T260, T261; deliberately changed, standing rule 13): the width and the background outset join them.
+    // R23 (T449): the background outset was removed again.
+    expect([...(section?.responsiveFields ?? [])].sort()).toEqual([
+      'contentPosition',
+      'overlap',
+      'spaceBottom',
+      'spaceTop',
+      'width',
+    ]);
   });
 
   it('shows the Section\'s settings as fields of their own, translated, the responsive ones on the Responsive tab', async () => {
@@ -202,12 +210,15 @@ describe('in the real page editor (T116, T117)', () => {
     };
     // Each setting is a top-level field; the old one-object field is gone.
     expect(panel.querySelector('[data-pb-field="section"]')).toBeNull();
-    for (const name of ['scheme', 'background', 'width', 'anchor', 'reveal']) {
+    // R19C (T260; deliberately changed, standing rule 13): the width is per breakpoint, on the Responsive tab.
+    for (const name of ['scheme', 'background', 'anchor', 'reveal']) {
       expect(wrapper(name).hidden, name).toBe(false);
     }
-    for (const name of ['spaceTop', 'spaceBottom', 'contentPosition']) {
+    for (const name of ['width', 'spaceTop', 'spaceBottom', 'contentPosition']) {
       expect(wrapper(name).hidden, name).toBe(true);
     }
+    // R23 (T449): no Section background outset.
+    expect(panel.querySelector('[data-pb-field="outsetPx"]')).toBeNull();
     expect(within(panel).getByRole('combobox', { name: 'Schemat kolorów', hidden: true })).toBeTruthy();
     // No field draws a Mobile / Tablet / Desktop switch of its own.
     expect(panel.querySelectorAll('[data-pb-field] [role="tab"]')).toHaveLength(0);
@@ -215,7 +226,7 @@ describe('in the real page editor (T116, T117)', () => {
     await act(async () => {
       fireEvent.click(within(panel).getByRole('tab', { name: 'Responsive', hidden: true }));
     });
-    for (const name of ['spaceTop', 'spaceBottom', 'contentPosition']) {
+    for (const name of ['width', 'spaceTop', 'spaceBottom', 'contentPosition']) {
       expect(wrapper(name).hidden, name).toBe(false);
     }
     expect(wrapper('scheme').hidden).toBe(true);

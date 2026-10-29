@@ -3,6 +3,7 @@
 import { useRef, type CSSProperties, type ReactNode } from 'react';
 import type { ComponentConfig, Fields, PuckComponent } from '@puckeditor/core';
 import {
+  createColorField,
   createToggleField,
   PB_RESPONSIVE_METADATA,
   plainTextToInlineRichText,
@@ -37,6 +38,19 @@ import { textWeightField } from './typography.js';
 import { Picture } from './Picture.js';
 import { buttonWidthField } from './button-full-width.js';
 import { BlockHeading, ButtonRow, hasImage, isEmptyInline, ItemIcon, plainTextToDoc, RichBody, useAssetUrl, usesCustom, blockHeadingStyle, blockHeadingStyleFields, isUnusedHeadingMaxWidthPx } from './section-parts.js';
+import { customLeadingAttrs, lineHeightField, sizeUsesCustom, textStyleAttrs } from './text-style.js';
+import { pxCss, tierVars } from './tier-vars.js';
+import { spaceTokenField, spaceTokenOf, spaceTokenVars } from './space-token.js';
+import {
+  chosenSpans,
+  COLUMN_GAP_PX_FIELD,
+  COLUMNS_ANCHOR_FIELD,
+  LAYOUT_ADVANCED_FIELD,
+  TWELVE_COLUMN_KEYS,
+  twelveColumns,
+  usesAdvancedLayout,
+} from './twelve-columns.js';
+import { colorValueToCss } from '../utils/color-value.js';
 
 /**
  * `cms.MediaText` — `specs/163-page-builder-marketing-pages/` contracts/blocks.md,
@@ -61,6 +75,12 @@ import { BlockHeading, ButtonRow, hasImage, isEmptyInline, ItemIcon, plainTextTo
  * of either kind (T142): a pair per breakpoint, of which the stylesheet shows
  * one. The mobile video may have its own poster (T162), a library image or a
  * URL; one video with its own mobile poster is a pair of the same file.
+ *
+ * R20F (T315), each unset writes nothing: the space below each heading,
+ * between the paragraphs of the text and between stacked media and text, px
+ * per breakpoint (root classes and `--cmsc-mt-*` properties); a row's own
+ * vertical alignment (unset, the block's); the text's size per breakpoint and
+ * line height.
  */
 
 const DEFAULT_RATIO = '4:3';
@@ -99,17 +119,17 @@ export function MediaTextMediaFrame({ media }: { media: MediaTextMedia | undefin
     // poster (each `preload="none"`, so nothing loads twice) — or one video for every breakpoint.
     const pair = Boolean(sources.desktop && sources.mobile && sources.desktop !== sources.mobile) || mobilePoster !== poster;
     const video = (src: string, breakpoint: 'mobile' | 'desktop' | 'all', still: string): ReactNode => {
+      // R20E (T295): the key is passed directly — React warns about a `key` spread into JSX.
       const common = {
-        key: breakpoint,
         src,
         preload: 'none' as const,
         playsInline: true,
         ...(still ? { poster: still } : {}),
       };
       // Autoplay: muted, looped, started on screen by `useBreakpointVideo` (never under reduced motion).
-      if (autoplay) return <video {...common} muted loop data-bp={breakpoint} data-autoplay="" aria-hidden="true" />;
+      if (autoplay) return <video key={breakpoint} {...common} muted loop data-bp={breakpoint} data-autoplay="" aria-hidden="true" />;
       // Otherwise the visitor starts it; only a pair needs the breakpoint mark, for the stylesheet.
-      return <video {...common} controls {...(pair ? { 'data-bp': breakpoint } : {})} />;
+      return <video key={breakpoint} {...common} controls {...(pair ? { 'data-bp': breakpoint } : {})} />;
     };
     // T126: the frame's ratio per breakpoint; none keeps 16:9.
     const vars = ratioVars(sanitizeRatio(media.ratio as Responsive<string> | undefined, undefined, false));
@@ -141,10 +161,12 @@ type FeatureTitleStyle = Pick<MediaTextProps, 'featureTitleSize' | 'featureTitle
 function Features({
   features,
   titleStyle,
+  bodyStyle,
   tier,
 }: {
   features: IconTextItem[] | undefined;
   titleStyle: FeatureTitleStyle;
+  bodyStyle: { classes: string[]; style: Record<string, string> };
   tier: BreakpointTier | null;
 }): ReactNode {
   const list = (features ?? []).filter((item) => item && typeof item === 'object');
@@ -174,7 +196,14 @@ function Features({
                 </ItemText>
               </h3>
             ) : null}
-            {item.body?.trim() ? <p className="cmsc-pb-media-text__feature-body">{item.body}</p> : null}
+            {item.body?.trim() ? (
+              <p
+                className={['cmsc-pb-media-text__feature-body', ...bodyStyle.classes].join(' ')}
+                {...(Object.keys(bodyStyle.style).length > 0 ? { style: bodyStyle.style as CSSProperties } : {})}
+              >
+                {item.body}
+              </p>
+            ) : null}
           </div>
         </li>
       ))}
@@ -186,14 +215,40 @@ interface RowContent extends MediaTextRow {
   side: 'start' | 'end';
 }
 
-function Row({ row, props, tier }: { row: RowContent; props: MediaTextProps; tier: BreakpointTier | null }): ReactNode {
+/** Today's text (`.cmsc-pb-media-text__body`), read by a breakpoint left on Default when another is set. */
+const BODY_TODAY = { size: '16px', lineHeight: '1.65' };
+/** R21G (T333): the heading's own line height (its size's), read by a breakpoint left empty when another is set. */
+const HEADING_TODAY = { size: 'inherit', lineHeight: 'inherit' };
+/** R22I (T376): today's feature text (`.cmsc-pb-media-text__feature-body`), read by a breakpoint left on Default. */
+const FEATURE_BODY_TODAY = { size: '15px', lineHeight: '1.55' };
+const VERTICAL_ALIGNS = ['start', 'center', 'end'];
+
+function Row({
+  row,
+  props,
+  tier,
+  bodyText,
+  headingLeading,
+  featureBody,
+}: {
+  row: RowContent;
+  props: MediaTextProps;
+  tier: BreakpointTier | null;
+  bodyText: { classes: string[]; style: Record<string, string> };
+  headingLeading: { classes: string[]; style: Record<string, string> };
+  featureBody: { classes: string[]; style: Record<string, string> };
+}): ReactNode {
+  // R20F (T315): a row's own alignment; unset (or unknown), the block's.
+  const valign = typeof row.verticalAlign === 'string' && VERTICAL_ALIGNS.includes(row.verticalAlign) ? row.verticalAlign : (props.verticalAlign ?? 'center');
   return (
     <div
       className="cmsc-pb-media-text__row"
       data-media-side={row.side}
       data-mobile-order={props.mobileOrder ?? 'media-first'}
       data-split={props.split ?? '5-5'}
-      data-valign={props.verticalAlign ?? 'center'}
+      data-valign={valign}
+      /* R19A (T238): side by side from the desktop only — stacked on a tablet too. Unset is today's tablet. */
+      {...(props.sideBySide === 'desktop' ? { 'data-side-by-side': 'desktop' } : {})}
     >
       <div className="cmsc-pb-media-text__media">
         <MediaTextMediaFrame media={row.media} />
@@ -205,11 +260,17 @@ function Row({ row, props, tier }: { row: RowContent; props: MediaTextProps; tie
           size={props.headingSize}
           sizePx={props.headingSizePx}
           {...blockHeadingStyle(props)}
-          className="cmsc-pb-media-text__heading"
+          /* R21G (T333): the heading's line height per breakpoint, written only when chosen. */
+          {...(Object.keys(headingLeading.style).length > 0 ? { style: headingLeading.style } : {})}
+          className={['cmsc-pb-media-text__heading', ...headingLeading.classes].join(' ')}
           tier={tier}
         />
-        <RichBody value={row.body} className="cmsc-pb-media-text__body cmsc-pb-rich" />
-        <Features features={row.features} titleStyle={props} tier={tier} />
+        <RichBody
+          value={row.body}
+          className={['cmsc-pb-media-text__body cmsc-pb-rich', ...bodyText.classes].join(' ')}
+          {...(Object.keys(bodyText.style).length > 0 ? { style: bodyText.style } : {})}
+        />
+        <Features features={row.features} titleStyle={props} bodyStyle={featureBody} tier={tier} />
         <ButtonRow buttons={row.buttons} tier={tier} fullWidth={props.buttonsFullWidth} className="cmsc-pb-media-text__actions cmsc-pb-actions" />
       </div>
     </div>
@@ -239,13 +300,56 @@ function MediaTextBody({ props, tier }: { props: MediaTextProps; tier: Breakpoin
       .filter((row) => row && typeof row === 'object')
       .map((row, index) => ({ ...row, side: alternate && (index + 1) % 2 === 1 ? flip(side) : side })),
   ];
+  // R20F (T315): the spaces and the text's look, written only when chosen. R23 (T437): one spacing step
+  // for the text's inner spaces (below the heading, between paragraphs), one for the stacked gap.
+  const innerSpace = spaceTokenOf(props.innerSpace);
+  const spaces = [
+    { classes: ['cmsc-pb-media-text--heading-space'], vars: spaceTokenVars('cmsc-mt-heading-space', innerSpace, tier) },
+    { classes: ['cmsc-pb-media-text--body-space'], vars: spaceTokenVars('cmsc-mt-body-space', innerSpace, tier) },
+    { classes: ['cmsc-pb-media-text--stacked-gap'], vars: spaceTokenVars('cmsc-mt-stacked-gap', props.stackedGap, tier) },
+  ].filter((space) => Object.keys(space.vars).length > 0);
+  // R21G (T332): the media's and the text's columns of 12 for either side (rows alternate); nothing set, today's split.
+  // R23 (T438): the raw columns with the Advanced switch on; the split stays the layout's main choice.
+  const start = twelveColumns(chosenSpans(props), 'start');
+  const end = twelveColumns(chosenSpans(props), 'end');
+  // R22I (T370): with the columns of 12, their own gap per breakpoint (unset: today's, the stylesheet's fallback).
+  const columns =
+    start && end
+      ? {
+          '--cmsc-mt-media-col': start.media,
+          '--cmsc-mt-text-col': start.text,
+          '--cmsc-mt-media-col-end': end.media,
+          '--cmsc-mt-text-col-end': end.text,
+          ...tierVars<number>('cmsc-grid-gap', props.columnGapPx, tier, pxCss(200)),
+        }
+      : null;
+  // R21G (T333): the check and chevron markers' colour in the text.
+  const marker = colorValueToCss(props.listMarkerColor);
+  const rootClass = ['cmsc-pb-media-text', ...(columns ? ['cmsc-pb-media-text--columns'] : []), ...spaces.flatMap((space) => space.classes)].join(' ');
+  const rootStyle = Object.assign({}, columns ?? {}, ...spaces.map((space) => space.vars), marker ? { '--cmsc-list-marker': marker } : {}) as Record<
+    string,
+    string
+  >;
+  const bodyText = textStyleAttrs(
+    { size: props.bodySize, sizePx: props.bodySizePx, weight: props.bodyWeight, lineHeight: props.bodyLineHeight },
+    tier,
+    BODY_TODAY,
+  );
+  // R23 (T435): the heading's line height with a Custom px size only.
+  const headingLeading = customLeadingAttrs(props.headingSize, props.headingLineHeight, tier, HEADING_TODAY.lineHeight);
+  // R22I (T376): the features' text size and weight, written only when chosen.
+  const featureBody = textStyleAttrs(
+    { size: props.featureBodySize, sizePx: props.featureBodySizePx, weight: props.featureBodyWeight },
+    tier,
+    FEATURE_BODY_TODAY,
+  );
 
   return (
-    <div className="cmsc-pb-media-text" ref={ref}>
+    <div className={rootClass} ref={ref} {...(Object.keys(rootStyle).length > 0 ? { style: rootStyle as CSSProperties } : {})}>
       {rows.map((row, index) => (
         <div key={index} className="cmsc-pb-media-text__group">
           {index > 0 && props.divider === true ? <hr className="cmsc-pb-media-text__divider" /> : null}
-          <Row row={row} props={props} tier={tier} />
+          <Row row={row} props={props} tier={tier} bodyText={bodyText} headingLeading={headingLeading} featureBody={featureBody} />
         </div>
       ))}
       <RichBody value={props.footnote} className="cmsc-pb-media-text__footnote cmsc-pb-rich" />
@@ -343,6 +447,10 @@ const MEDIA_TEXT_FIELDS = {
   featureTitleSize: sizeFieldWithDefault('Item title size'),
   featureTitleSizePx: sizePxField('Custom item title size (px)'),
   featureTitleWeight: { ...textWeightField('Item title weight'), metadata: PB_RESPONSIVE_METADATA },
+  // R22I (T376): every feature text's size and weight; Default keeps today's 15 px muted text. R23: one weight.
+  featureBodySize: sizeFieldWithDefault('Item text size'),
+  featureBodySizePx: sizePxField('Custom item text size (px)'),
+  featureBodyWeight: textWeightField('Item text weight'),
   buttons: buttonsField('Buttons', 4),
   // T168: every row's buttons at the full width per breakpoint (Responsive tab); unset keeps today's.
   buttonsFullWidth: buttonWidthField('Button width'),
@@ -357,6 +465,15 @@ const MEDIA_TEXT_FIELDS = {
       { label: 'Text first', value: 'text-first' },
     ],
   },
+  // R19A (T238): the tier from which media and text sit side by side; unset is the tablet (today's).
+  sideBySide: {
+    type: 'select' as const,
+    label: 'Side by side from',
+    options: [
+      { label: 'Tablet (768 px)', value: 'tablet' },
+      { label: 'Desktop (1024 px)', value: 'desktop' },
+    ],
+  },
   split: {
     type: 'select' as const,
     label: 'Split (media – text)',
@@ -368,7 +485,28 @@ const MEDIA_TEXT_FIELDS = {
       { label: '7 – 4', value: '7-4' },
     ],
   },
+  // R21G (T332): from the side-by-side tier, the widths in columns of 12 and the columns between (as the split slide's).
+  // R23 (T438): behind the Advanced switch; the split above is the layout's main choice.
+  layoutAdvanced: LAYOUT_ADVANCED_FIELD,
+  mediaSpan: { type: 'number' as const, label: 'Media width (columns of 12)', min: 1, max: 11, step: 1 },
+  textSpan: { type: 'number' as const, label: 'Text width (columns of 12)', min: 1, max: 11, step: 1 },
+  textOffset: { type: 'number' as const, label: 'Columns between the media and the text', min: 0, max: 10, step: 1 },
+  // R22I (T371, T370): with the columns of 12, where the pair sits and the gap between the columns.
+  columnsAnchor: COLUMNS_ANCHOR_FIELD,
+  columnGapPx: COLUMN_GAP_PX_FIELD,
   verticalAlign: { type: 'select' as const, label: 'Vertical alignment', options: VERTICAL_ALIGN_OPTIONS },
+  // R21G (T333): the heading's line height per breakpoint — R23 (T435): with a Custom px heading size only.
+  headingLineHeight: lineHeightField('Heading line height'),
+  // R20F (T315): the text's size and line height.
+  bodySize: sizeFieldWithDefault('Text size'),
+  bodySizePx: sizePxField('Custom text size (px)'),
+  // R21G (T333): the text's weight (R23: one value) and the list markers' colour.
+  bodyWeight: textWeightField('Text weight'),
+  bodyLineHeight: lineHeightField('Text line height'),
+  listMarkerColor: createColorField({ label: 'List marker color' }),
+  // R23 (T437): one spacing step below the heading and between paragraphs, one between media and text when stacked.
+  innerSpace: spaceTokenField('Space between the heading and the paragraphs'),
+  stackedGap: spaceTokenField('Space between media and text when stacked'),
   rows: {
     type: 'array' as const,
     label: 'More rows',
@@ -379,6 +517,8 @@ const MEDIA_TEXT_FIELDS = {
       body: createRichTextDocField({ label: 'Text' }),
       features: featuresField('Items'),
       buttons: buttonsField('Buttons', 4),
+      // R20F (T315): this row's own vertical alignment; empty follows the block's.
+      verticalAlign: { type: 'select' as const, label: 'Vertical alignment', options: [{ label: 'Same as the block', value: 'inherit' }, ...VERTICAL_ALIGN_OPTIONS] },
     },
     defaultItemProps: {
       media: { kind: 'image', image: { imageSource: 'library', alt: '' } },
@@ -392,6 +532,9 @@ const MEDIA_TEXT_FIELDS = {
   alternate: createToggleField({ label: 'Alternate the media side row by row', defaultValue: true }),
   divider: createToggleField({ label: 'Rule between rows' }),
 };
+
+/** R23 (T438): the raw 12-column numbers, shown with the Advanced switch on. */
+const MEDIA_TEXT_RAW_COLUMN_KEYS: ReadonlySet<string> = new Set(['mediaSpan', 'textSpan', 'textOffset', 'columnsAnchor']);
 
 const mediaTextConfig: ComponentConfig<{ props: MediaTextProps }> = {
   label: 'Media and text',
@@ -421,11 +564,26 @@ const mediaTextConfig: ComponentConfig<{ props: MediaTextProps }> = {
     for (const [key, field] of Object.entries((params?.fields as Record<string, unknown> | undefined) ?? MEDIA_TEXT_FIELDS)) {
       if (key === 'headingSizePx' && !usesCustom(props.headingSize)) continue;
       if (key === 'featureTitleSizePx' && !usesCustom(props.featureTitleSize)) continue;
+      if (key === 'bodySizePx' && !usesCustom(props.bodySize)) continue;
+      if (key === 'featureBodySizePx' && !usesCustom(props.featureBodySize)) continue;
+      // R23 (T438): the raw columns with the Advanced switch on.
+      if (MEDIA_TEXT_RAW_COLUMN_KEYS.has(key) && !usesAdvancedLayout(props)) continue;
+      // R22I (T370, T371): the pair's anchor and the column gap only with the columns of 12.
+      if (TWELVE_COLUMN_KEYS.has(key) && twelveColumns(chosenSpans(props), 'start') === null) continue;
+      // R23 (T435): a line height with a Custom px size only.
+      if (key === 'headingLineHeight' && !sizeUsesCustom(props.headingSize)) continue;
+      if (key === 'bodyLineHeight' && !sizeUsesCustom(props.bodySize)) continue;
       if (isUnusedHeadingMaxWidthPx(key, props)) continue;
       if ((key === 'alternate' || key === 'divider') && (props.rows ?? []).length === 0) continue;
       fields[key] = field;
     }
     return fields as unknown as Fields<MediaTextProps>;
+  },
+  // R23 (T438): raw columns stored before the Advanced switch existed show it on, as they render.
+  resolveData: async (data) => {
+    const props = data.props as MediaTextProps;
+    if (props.layoutAdvanced === undefined && usesAdvancedLayout(props)) return { props: { ...props, layoutAdvanced: true } as never };
+    return { props: props as never };
   },
   render: (props) =>
     props.puck?.isEditing ? <MediaTextEditingRender {...props} /> : <MediaTextPublishedRender {...props} />,

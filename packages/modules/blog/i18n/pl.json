@@ -251,6 +251,9 @@
   "blocks.latestPosts.fields.controls.fields.disabledArrowLook.options.outline-light": "Jasny obrys (ciemne tło)",
   "blocks.latestPosts.fields.controls.fields.disabledArrowLook.options.color": "Kolor",
   "blocks.latestPosts.fields.controls.fields.disabledArrowColor.label": "Kolor nieaktywnej strzałki",
+  "blocks.latestPosts.fields.controls.fields.arrowGlyphColor.label": "Kolor ikony strzałki (styl wypełniony)",
+  "blocks.latestPosts.fields.controls.fields.hideArrowsOn.label": "Ukryj strzałki na",
+  "blocks.latestPosts.fields.controls.fields.hideDotsOn.label": "Ukryj kropki na",
   "blocks.latestPosts.fields.controlsPlacement.label": "Położenie strzałek",
   "blocks.latestPosts.fields.controlsPlacement.options.below": "Pod slajdami",
   "blocks.latestPosts.fields.controlsPlacement.options.header": "W nagłówku sekcji",
@@ -397,5 +400,16 @@
   "blocks.latestPosts.fields.readMoreWeight.options.500": "Średnia (500)",
   "blocks.latestPosts.fields.readMoreWeight.options.600": "Półgruba (600)",
   "blocks.latestPosts.fields.readMoreWeight.options.700": "Gruba (700)",
-  "blocks.latestPosts.fields.readMoreWeight.options.800": "Bardzo gruba (800)"
+  "blocks.latestPosts.fields.readMoreWeight.options.800": "Bardzo gruba (800)",
+  "blocks.latestPosts.fields.controlsAlign.options.dots-start": "Kropki na początku, strzałki na końcu",
+  "blocks.latestPosts.fields.controls.fields.arrowsWhenFit.label": "Zostaw strzałki, gdy mieszczą się wszystkie slajdy",
+  "blocks.latestPosts.fields.headingLineHeight.label": "Wysokość linii nagłówka",
+  "blocks.latestPosts.fields.leadWeight.label": "Grubość wprowadzenia",
+  "blocks.latestPosts.fields.leadWeight.options.300": "Cienka (300)",
+  "blocks.latestPosts.fields.leadWeight.options.400": "Normalna (400)",
+  "blocks.latestPosts.fields.leadWeight.options.500": "Średnia (500)",
+  "blocks.latestPosts.fields.leadWeight.options.600": "Półgruba (600)",
+  "blocks.latestPosts.fields.leadWeight.options.700": "Gruba (700)",
+  "blocks.latestPosts.fields.leadWeight.options.800": "Bardzo gruba (800)",
+  "blocks.latestPosts.fields.leadWeight.options.default": "Domyślna"
 }

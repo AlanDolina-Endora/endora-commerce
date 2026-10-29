@@ -212,7 +212,9 @@ describe('CMS page tree and breadcrumbs contract (feature 163, T079)', () => {
     expect(rows.find((row) => row.id === child.id)?.parentPageId).toBe(parent.id);
   });
 
-  it('resolves the trail root-first, naming an ancestor by its meta title', async () => {
+  // R19C (T270, deliberately changed): every crumb is named by its page name — the
+  // current page's crumb always was; an ancestor's meta title is the browser title, not its crumb.
+  it('resolves the trail root-first, naming an ancestor by its page name, not its meta title', async () => {
     const root = await createPage('trail-root');
     const a = await createPage('trail-a', { meta: { 'en-US': { title: 'Client zone' } } });
     const child = await createPage('trail-child');
@@ -226,8 +228,8 @@ describe('CMS page tree and breadcrumbs contract (feature 163, T079)', () => {
       visible: true,
       scheme: 'light',
       trail: [
-        { name: 'Page trail-root', slug: root.slug },
-        { name: 'Client zone', slug: a.slug },
+        { name: 'Page trail-root', slug: root.slug, path: root.slug },
+        { name: 'Page trail-a', slug: a.slug, path: a.slug },
       ],
     });
   });
@@ -241,7 +243,7 @@ describe('CMS page tree and breadcrumbs contract (feature 163, T079)', () => {
     const res = await bySlug(child.slug);
     expect(res.statusCode).toBe(200);
     expect((res.json() as { data: { breadcrumbs: { trail: unknown } } }).data.breadcrumbs.trail).toEqual([
-      { name: 'Page draft-parent', slug: null },
+      { name: 'Page draft-parent', slug: null, path: null },
     ]);
   });
 
@@ -255,14 +257,14 @@ describe('CMS page tree and breadcrumbs contract (feature 163, T079)', () => {
     const here = await bySlug(child.slug);
     expect(here.statusCode).toBe(200);
     expect((here.json() as { data: { breadcrumbs: { trail: unknown } } }).data.breadcrumbs.trail).toEqual([
-      { name: 'Page elsewhere-parent', slug: null },
+      { name: 'Page elsewhere-parent', slug: null, path: null },
     ]);
 
     // The channel that does serve the parent links it.
     const there = await bySlug(child.slug, otherChannel.code);
     expect(there.statusCode).toBe(200);
     expect((there.json() as { data: { breadcrumbs: { trail: unknown } } }).data.breadcrumbs.trail).toEqual([
-      { name: 'Page elsewhere-parent', slug: a.slug },
+      { name: 'Page elsewhere-parent', slug: a.slug, path: a.slug },
     ]);
   });
 
@@ -279,6 +281,27 @@ describe('CMS page tree and breadcrumbs contract (feature 163, T079)', () => {
     expect((read.json() as { data: { breadcrumbs: unknown } }).data.breadcrumbs).toEqual({
       visible: false,
       scheme: 'dark',
+      trail: [],
+    });
+  });
+
+  // R21H (T355): the trail over the first section — off by default, on the detail, the audit and the storefront read.
+  it('round-trips breadcrumbsOverlay, off by default and answered on the storefront read only when on', async () => {
+    const page = await createPage('overlay');
+    expect(await current(page.id)).toMatchObject({ breadcrumbsOverlay: false });
+    const res = await patch(page.id, { breadcrumbsOverlay: true, breadcrumbsScheme: 'dark', version: page.version });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ data: { breadcrumbsOverlay: true } });
+    const rows = await auditRows(page.id);
+    expect(rows[0]!.stateBefore).toMatchObject({ breadcrumbsOverlay: false });
+    expect(rows[0]!.stateAfter).toMatchObject({ breadcrumbsOverlay: true });
+
+    await publishWithContent(page.id);
+    const read = await bySlug(page.slug);
+    expect((read.json() as { data: { breadcrumbs: unknown } }).data.breadcrumbs).toEqual({
+      visible: true,
+      scheme: 'dark',
+      overlay: true,
       trail: [],
     });
   });

@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { isValidElement, type ReactNode } from 'react';
 import { type ComponentConfig, type PuckComponent } from '@puckeditor/core';
 import {
   resolveTextAlignForTier,
@@ -20,6 +20,8 @@ import {
 } from '../fields/shared-fields.js';
 import { resolveTextContent, type LegacyTextSource } from './text-content.js';
 import { editingTypographyStyle, responsiveTypographyVars, typographyStyle } from './typography.js';
+import { InlineRich } from './InlineRich.js';
+import { createInlineRichTextField } from '../fields/inline-rich-text-field.js';
 import { textMaxWidthAttrs, textMaxWidthFields, usesCustomTextMaxWidth } from './text-max-width.js';
 
 const TEXT_DEFAULTS = { fontSize: 16, fontWeight: 400, lineHeight: 1.65 };
@@ -31,6 +33,8 @@ const TEXT_DEFAULTS = { fontSize: 16, fontWeight: 400, lineHeight: 1.65 };
  */
 function resolveEditingTextContent(props: LegacyTextSource) {
   const { text, html, tiptapContent } = props;
+  // R19A (T232): an inline rich text renders its runs (on the canvas it arrives as its in-place editor, below).
+  if (isInlineRichDoc(text)) return <InlineRich value={text as never} />;
   if (typeof text !== 'string' && text != null) {
     return text as ReactNode;
   }
@@ -73,9 +77,18 @@ const TextEditingRender: PuckComponent<TextProps> = (props) => {
   );
 };
 
+/**
+ * R19A (T232): a text stored as inline rich text (a one-paragraph document) —
+ * bold, italic, links, emphasis — rather than a plain string. A plain string,
+ * as every text stored before, keeps today's path and markup.
+ */
+function isInlineRichDoc(value: unknown): boolean {
+  return value !== null && typeof value === 'object' && !isValidElement(value) && (value as { type?: unknown }).type === 'doc';
+}
+
 const TextPublishedRender: PuckComponent<TextProps> = (props) => {
   const { text, html, tiptapContent, textAlign, ...box } = props;
-  const resolvedText = resolveTextContent({ text, html, tiptapContent });
+  const resolvedText = isInlineRichDoc(text) ? <InlineRich value={text as never} /> : resolveTextContent({ text, html, tiptapContent });
   const alignAttrs = textAlignDataAttrs(textAlign, 'left');
   const measure = textMaxWidthAttrs(props, null);
 
@@ -101,7 +114,8 @@ const TextPublishedRender: PuckComponent<TextProps> = (props) => {
 };
 
 const TEXT_FIELDS: NonNullable<ComponentConfig<{ props: TextProps }>['fields']> = {
-  text: { type: 'textarea', label: 'Text', contentEditable: true },
+  // R19A (T232): inline rich text (bold, italic, links, emphasis), typed on the canvas as before; a stored string reads as one paragraph.
+  text: createInlineRichTextField({ label: 'Text', canvas: true }) as never,
   ...TEXT_TYPOGRAPHY_FIELDS,
   // T134: a maximum width for the text, per breakpoint; unset keeps today's full width.
   ...textMaxWidthFields(),
@@ -133,18 +147,22 @@ const textConfig: ComponentConfig<{ props: TextProps }> = {
     }
     return fields as never;
   },
+  // Puck widens the stored document's one-paragraph tuple to an array; the props are the stored shape.
   resolveData: async ({ props }) => {
-    const resolved = resolveTextContent(props);
-    const hasDirectText = typeof props.text === 'string' && props.text.trim().length > 0;
-    if (!hasDirectText && resolved && (props.tiptapContent || props.html)) {
+    const stored = props as unknown as TextProps;
+    // R19A (T232): an inline rich text is the text itself; nothing is carried.
+    if (isInlineRichDoc(stored.text)) return { props: stored };
+    const resolved = resolveTextContent(stored);
+    const hasDirectText = typeof stored.text === 'string' && stored.text.trim().length > 0;
+    if (!hasDirectText && resolved && (stored.tiptapContent || stored.html)) {
       return {
         props: {
-          ...props,
+          ...stored,
           text: resolved,
         },
       };
     }
-    return { props };
+    return { props: stored };
   },
   render: (props) =>
     props.puck?.isEditing ? <TextEditingRender {...props} /> : <TextPublishedRender {...props} />,

@@ -208,6 +208,8 @@ export {
 export {
   ASPECT_TOKENS,
   BACKGROUND_REPEATS,
+  DESKTOP_FROM_TIERS,
+  SECTION_OUTSET_PX_MAX,
   BACKGROUND_SIZE_KEYWORDS,
   BACKGROUND_SIZE_PERCENT_MAX,
   BACKGROUND_SIZE_PX_MAX,
@@ -235,6 +237,7 @@ export {
   type BackgroundRepeat,
   type BackgroundSizeKeyword,
   type BackgroundSizeValue,
+  type DesktopFromTier,
   type ButtonFill,
   type ButtonIconPosition,
   type ButtonSize,

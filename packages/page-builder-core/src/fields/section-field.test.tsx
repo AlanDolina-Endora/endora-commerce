@@ -236,6 +236,27 @@ describe('createSectionBackgroundField (T117: a main-tab field)', () => {
     expect(has('Overlay')).toBe(true);
   });
 
+  // R19C (T263): with a mobile image or video, the breakpoint from which the desktop one takes over.
+  it('offers where the mobile art stops only with a mobile image or video, and stores the default as nothing', () => {
+    const { value } = mount<Record<string, unknown>>(createSectionBackgroundField({ label: 'Background' }));
+    change(control<HTMLSelectElement>('Background'), 'image');
+    change(control('Image URL'), '/media/wide.jpg');
+    expect(has('Mobile image or video shown on')).toBe(false);
+    change(control('Mobile image URL'), '/media/tall.jpg');
+    const select = control<HTMLSelectElement>('Mobile image or video shown on');
+    expect(options(select)).toEqual(['tablet', 'desktop']);
+    expect(select.value).toBe('tablet');
+    change(select, 'desktop');
+    expect(value()).toMatchObject({ kind: 'image', mobileImageUrl: '/media/tall.jpg', desktopFrom: 'desktop' });
+    change(control<HTMLSelectElement>('Mobile image or video shown on'), 'tablet');
+    expect(value()).not.toHaveProperty('desktopFrom');
+
+    change(control<HTMLSelectElement>('Background'), 'video');
+    expect(has('Mobile image or video shown on')).toBe(false);
+    change(control('Mobile video'), '2c3d4e5f-6071-4b8c-9d0e-1f2a3b4c5d6e');
+    expect(has('Mobile image or video shown on')).toBe(true);
+  });
+
   it('marks the decorative backdrop, and clears to nothing when set back to none', () => {
     const { value } = mount<Record<string, unknown> | undefined>(createSectionBackgroundField({ label: 'Background' }));
     click(control('Decorative backdrop (dark scheme)'));

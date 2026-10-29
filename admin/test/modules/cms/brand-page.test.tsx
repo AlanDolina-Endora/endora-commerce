@@ -290,6 +290,72 @@ describe('BrandPage', () => {
     expect((put.mock.calls[1]![1] as { tokens: CmsBrandTokens }).tokens.schemes.dark).not.toHaveProperty('decorativeUrl');
   });
 
+  // R20F (T322): the tablet and small-desktop scale factors; empty is 1 (nothing stored).
+  it('saves a tablet and a small-desktop scale factor, and removes one when its field is cleared', async () => {
+    const put = vi.spyOn(apiClient, 'put').mockResolvedValue({ data: { version: 4, warnings: [] } } as never);
+    mount();
+    await loaded();
+
+    const tablet = screen.getByLabelText(copy('brand.layout.tabletScale')) as HTMLInputElement;
+    const small = screen.getByLabelText(copy('brand.layout.smallDesktopScale')) as HTMLInputElement;
+    expect(tablet.value).toBe('');
+    expect(screen.getByText(copy('brand.layout.scaleHint'))).toBeTruthy();
+    fireEvent.change(tablet, { target: { value: '1.15' } });
+    fireEvent.change(small, { target: { value: '0.9' } });
+    fireEvent.click(screen.getByRole('button', { name: copy('common.save') }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect((put.mock.calls[0]![1] as { tokens: CmsBrandTokens }).tokens.tierScale).toEqual({ tablet: 1.15, smallDesktop: 0.9 });
+
+    // The save reloads the stored set (here without factors): the fields follow it.
+    await waitFor(() => expect(tablet.value).toBe(''));
+    fireEvent.change(tablet, { target: { value: '1.2' } });
+    fireEvent.change(small, { target: { value: '0.9' } });
+    fireEvent.change(tablet, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: copy('common.save') }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+    expect((put.mock.calls[1]![1] as { tokens: CmsBrandTokens }).tokens.tierScale).toEqual({ smallDesktop: 0.9 });
+  });
+
+  // R21H (T351, T352): fluid desktop sizes and scaled buttons; empty stores nothing. R23 (T432): no small-desktop end, no frame per tier.
+  it('saves fluid desktop and button scaling, and offers no small-desktop end or frame per tier', async () => {
+    const put = vi.spyOn(apiClient, 'put').mockResolvedValue({ data: { version: 4, warnings: [] } } as never);
+    mount();
+    await loaded();
+
+    // By id, with the label checked once per field: label queries over the whole screen are slow here.
+    const field = (id: string, key: string): HTMLInputElement => {
+      const input = document.getElementById(id) as HTMLInputElement | null;
+      expect(input, id).not.toBeNull();
+      const label = input!.type === 'checkbox' ? input!.closest('label') : document.querySelector(`label[for="${id}"]`);
+      expect(label?.textContent?.trim(), id).toBe(copy(key));
+      return input!;
+    };
+    const fluid = field('brand-tier-scale-fluidDesktop', 'brand.layout.fluidDesktop');
+    for (const gone of ['brand-tier-scale-smallDesktopUntilPx', 'brand-layout-gutterTabletPx', 'brand-layout-gutterSmallDesktopPx', 'brand-layout-containerSmallDesktopPx']) {
+      expect(document.getElementById(gone), gone).toBeNull();
+    }
+    expect(fluid.checked).toBe(false);
+    expect(document.getElementById('brand-tier-scale-fluidUntilPx')).toBeNull();
+    fireEvent.change(field('brand-tier-scale-smallDesktop', 'brand.layout.smallDesktopScale'), { target: { value: '0.9' } });
+    fireEvent.click(fluid);
+    fireEvent.change(field('brand-tier-scale-fluidUntilPx', 'brand.layout.fluidUntilPx'), { target: { value: '1440' } });
+    fireEvent.click(field('brand-tier-scale-buttons', 'brand.layout.scaleButtons'));
+    const save = screen.getByRole('button', { name: copy('common.save') });
+    fireEvent.click(save);
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    const tokens = (put.mock.calls[0]![1] as { tokens: CmsBrandTokens }).tokens;
+    expect(tokens.tierScale).toEqual({ smallDesktop: 0.9, fluidDesktop: true, fluidUntilPx: 1440, buttons: true });
+
+    // The stored set comes back without them: cleared fields and switches store nothing,
+    // and the fluid end, which applies only with the fluid sizes on, is gone.
+    await waitFor(() => expect((document.getElementById('brand-tier-scale-smallDesktop') as HTMLInputElement).value).toBe(''));
+    expect(document.getElementById('brand-tier-scale-fluidUntilPx')).toBeNull();
+    fireEvent.click(save);
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+    const again = (put.mock.calls[1]![1] as { tokens: CmsBrandTokens }).tokens;
+    expect(again).not.toHaveProperty('tierScale');
+  });
+
   it('refuses to save a backdrop URL that is not https: or site-relative, naming the field', async () => {
     const put = vi.spyOn(apiClient, 'put');
     mount();
