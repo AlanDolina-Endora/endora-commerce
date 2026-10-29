@@ -342,6 +342,7 @@
   "digest.title": "Dzienne podsumowanie",
   "digest.toggle": "Wysyłaj mi dzienne podsumowanie",
   "digest.hour": "Godzina",
+  "digest.saveHour": "Zapisz godzinę",
   "digest.hint": "Raz dziennie, o tej godzinie w strefie czasowej zadań, otrzymasz powiadomienie i e-mail z listą Twoich otwartych zadań z terminem na ten dzień lub po terminie. W dniu bez takich zadań nic nie jest wysyłane.",
   "digest.on": "Dzienne podsumowanie włączone, o {hour}.",
   "digest.off": "Dzienne podsumowanie wyłączone.",

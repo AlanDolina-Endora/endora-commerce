@@ -342,6 +342,7 @@
   "digest.title": "Daily digest",
   "digest.toggle": "Send me a daily digest",
   "digest.hour": "Hour",
+  "digest.saveHour": "Save the hour",
   "digest.hint": "Once a day, at this hour in the tasks time zone, you get a notification and an e-mail listing your open tasks due that day or overdue. Nothing is sent on a day with none.",
   "digest.on": "Daily digest on, at {hour}.",
   "digest.off": "Daily digest off.",

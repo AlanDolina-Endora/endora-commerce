@@ -58,7 +58,7 @@ describe('DigestControl (US7)', () => {
     expect(getSpy).toHaveBeenCalledWith(DIGEST_PATH);
   });
 
-  it('turns it on at 08:00 by default, then changes the hour', async () => {
+  it('turns it on at 08:00 by default, then saves a chosen hour with an explicit Save', async () => {
     const user = userEvent.setup();
     renderTasks(<DigestControl />);
     await waitFor(() => expect(toggle()).toBeEnabled());
@@ -68,8 +68,18 @@ describe('DigestControl (US7)', () => {
     expect(toggle()).toBeChecked();
     expect(await screen.findByText(en('digest.on', { hour: '08:00' }))).toBeInTheDocument();
 
+    // Nothing to save until the hour differs from the stored one.
+    expect(screen.getByRole('button', { name: en('digest.saveHour') })).toBeDisabled();
+    // Choosing an hour only stages it: arrow keys on a select must not write once per keypress (WCAG 3.2.2).
     await user.selectOptions(hour(), '7');
+    await user.selectOptions(hour(), '6');
+    await user.selectOptions(hour(), '7');
+    expect(putSpy).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: en('digest.saveHour') }));
     await waitFor(() => expect(putSpy).toHaveBeenLastCalledWith(DIGEST_PATH, { hour: 7 }));
+    expect(putSpy).toHaveBeenCalledTimes(2);
+    // Save is disabled again once saved: focus goes back to the hour it saved (WCAG 2.4.3).
+    await waitFor(() => expect(hour()).toHaveFocus());
     expect(await screen.findByText(en('digest.on', { hour: '07:00' }))).toBeInTheDocument();
   });
 

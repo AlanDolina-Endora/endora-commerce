@@ -1,5 +1,5 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
-import { Alert, AlertDescription, Checkbox, Label, Select } from '@endora-commerce/admin-kit/ui';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Alert, AlertDescription, Button, Checkbox, Label, Select } from '@endora-commerce/admin-kit/ui';
 import { useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../api.js';
 import { errorMessage } from '../lib/labels.js';
@@ -19,8 +19,11 @@ function hourLabel(hour: number): string {
  *
  * The caller's own, off by default (Q3 = A): on, at an hour of the Tasks time
  * zone, a notification and an e-mail list their open Tasks due that day or
- * overdue — and nothing is sent on a day with none. Each change is saved at
- * once (`PUT` / `DELETE /tasks/me/digest`) and said in a polite live region.
+ * overdue — and nothing is sent on a day with none. Turning it on or off is
+ * saved at once; a chosen hour is staged and saved with *Save the hour*, so
+ * moving through the list with the arrow keys writes nothing (WCAG 3.2.2,
+ * T092) (`PUT` / `DELETE /tasks/me/digest`). Each save is said in a polite
+ * live region.
  */
 export function DigestControl(): ReactNode {
   const t = useTranslation('tasks');
@@ -28,10 +31,21 @@ export function DigestControl(): ReactNode {
   const hourId = useId();
   const hintId = useId();
   const [hour, setHour] = useState<number | null>(null);
+  /** The hour chosen in the list and not saved yet; `null` when it is the stored one. */
+  const [staged, setStaged] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const hourRef = useRef<HTMLSelectElement>(null);
+  /** After saving a staged hour: back to the list, since *Save the hour* is disabled again. */
+  const [refocusHour, setRefocusHour] = useState(false);
+
+  useEffect(() => {
+    if (!refocusHour || busy) return;
+    setRefocusHour(false);
+    hourRef.current?.focus();
+  }, [refocusHour, busy]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,11 +73,13 @@ export function DigestControl(): ReactNode {
       if (next === null) {
         await tasksApi.stopDigest();
         setHour(null);
+        setStaged(null);
         setNotice(t('digest.off'));
       } else {
         const saved = await tasksApi.setDigest(next);
         const savedHour = saved?.hour ?? next;
         setHour(savedHour);
+        setStaged(null);
         setNotice(t('digest.on', { hour: hourLabel(savedHour) }));
       }
     } catch (failure) {
@@ -91,14 +107,18 @@ export function DigestControl(): ReactNode {
               {t('digest.toggle')}
             </label>
             {hour !== null ? (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Label htmlFor={hourId}>{t('digest.hour')}</Label>
                 <Select
+                  ref={hourRef}
                   id={hourId}
                   className="w-28"
-                  value={String(hour)}
+                  value={String(staged ?? hour)}
                   disabled={busy}
-                  onChange={(event): void => void save(Number(event.target.value))}
+                  onChange={(event): void => {
+                    const chosen = Number(event.target.value);
+                    setStaged(chosen === hour ? null : chosen);
+                  }}
                 >
                   {HOURS.map((value) => (
                     <option key={value} value={value}>
@@ -106,6 +126,21 @@ export function DigestControl(): ReactNode {
                     </option>
                   ))}
                 </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11 sm:min-h-8"
+                  disabled={busy || staged === null}
+                  aria-busy={busy}
+                  onClick={(): void => {
+                    if (staged === null) return;
+                    setRefocusHour(true);
+                    void save(staged);
+                  }}
+                >
+                  {t('digest.saveHour')}
+                </Button>
               </div>
             ) : null}
           </div>
