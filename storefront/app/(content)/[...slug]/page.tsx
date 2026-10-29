@@ -8,6 +8,7 @@ import { OrganizationJsonLd } from '../../../components/seo/OrganizationJsonLd';
 import { getCmsPageBySlug, normalizeCmsUrlPath } from '../../../lib/api/cms';
 import { getHomepageConfig } from '../../../lib/api/homepage';
 import { tForLocale } from '../../../lib/i18n/messages';
+import { requestedLanguage } from '../../../lib/i18n/requested-language';
 import { getServerContext } from '../../../lib/server-context';
 import { cmsSocialMetadata } from '../../../lib/seo/cms-share-metadata';
 import { canonicalPath } from '../../../lib/seo/route-seo';
@@ -16,7 +17,8 @@ import { seo } from './seo';
 
 interface PageProps {
   params: Promise<{ slug: string[] }>;
-  searchParams?: Promise<PageSearchParams>;
+  /** `lang` — the language a link asked for (R24), as on a product page. */
+  searchParams?: Promise<PageSearchParams & { lang?: string | string[] }>;
 }
 
 /**
@@ -34,24 +36,30 @@ interface PageProps {
  * is rendered by `CmsPageRenderer` here exactly as it is on the home page.
  */
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
   const { slug } = await params;
+  const search = (await searchParams) ?? {};
   const path = normalizeCmsUrlPath(slug.join('/'));
-  const { ctx } = await getServerContext();
+  const { ctx } = await getServerContext({ langOverride: requestedLanguage(search.lang) });
   const page = await getCmsPageBySlug(path, ctx);
   if (!page) return { title: 'Not found', robots: { index: false, follow: false } };
   // R19D: the canonical address is the page's public path, which differs from
   // the request for the flat slug of a nested page (that request redirects).
-  const canonical = canonicalPath(seo.route, { slug: publicPath(page, path).split('/') });
+  // R24: it is the backend's URL for the served language — the path in that
+  // language, with `?lang=` when it is not the channel default; the fallback
+  // covers an answer cached before the field existed.
+  const canonical = page.url ?? canonicalPath(seo.route, { slug: publicPath(page, path).split('/') });
+  const languages = hreflangAlternates(page);
   // Feature 163 (FR-033, FR-034): the sharing card — image, locale and its
-  // alternates. No `alternates.languages`: there are no per-language URLs.
+  // alternates.
   const social = cmsSocialMetadata(page, canonical);
   return {
     title: social.title,
     description: page.meta.description ?? undefined,
     keywords: page.meta.keywords ?? undefined,
-    // Indexable (FR-010/FR-012).
-    alternates: { canonical },
+    // Indexable (FR-010/FR-012). R24: each language at its own URL, so the
+    // languages are `hreflang` alternates — only when there are several.
+    alternates: { canonical, ...(languages ? { languages } : {}) },
     openGraph: social.openGraph,
     twitter: social.twitter,
   };
@@ -61,7 +69,7 @@ export default async function CmsContentPage({ params, searchParams }: PageProps
   const { slug } = await params;
   const query = (await searchParams) ?? {};
   const path = normalizeCmsUrlPath(slug.join('/'));
-  const { ctx, locale, modules } = await getServerContext();
+  const { ctx, locale, modules } = await getServerContext({ langOverride: requestedLanguage(query.lang) });
   const t = tForLocale(locale);
   const [page, { cmsPageSlug }] = await Promise.all([
     getCmsPageBySlug(path, ctx),
@@ -97,7 +105,10 @@ export default async function CmsContentPage({ params, searchParams }: PageProps
 
   // R19D (T285): one address per page. The flat slug of a page served under
   // its parent's path still resolves, and answers a permanent redirect to it.
-  if (canonical !== path) permanentRedirect(`/${canonical}`);
+  // R24: one address per page *and language* — the slug of another language
+  // (a reader who switched language) answers a redirect to the served one's
+  // URL, which the backend built, `?lang=` included.
+  if (canonical !== path) permanentRedirect(page.url ?? `/${canonical}`);
 
   // Feature 163 (FR-030, FR-031): Home › the ancestors the backend resolved for
   // this channel › the page. An ancestor this channel does not serve arrives
@@ -115,8 +126,12 @@ export default async function CmsContentPage({ params, searchParams }: PageProps
     { href: `/${path}`, label: page.name },
   ];
 
+  // R24 — `?lang=` writes this page in the override's language, which the root
+  // layout's `<html lang>` does not know (L-1), so the page marks its own
+  // content's language (WCAG 3.1.2), as the product page does (T155, B3).
+  // `contents`: the wrapper draws no box, so the sections lay out as before.
   return (
-    <>
+    <div lang={page.language} className="contents">
       {/* Feature 163 (FR-035): the organisation's data on every CMS page, not only on `/`. */}
       <OrganizationJsonLd ctx={ctx} />
       {breadcrumbs.visible && breadcrumbs.overlay === true ? (
@@ -153,11 +168,22 @@ export default async function CmsContentPage({ params, searchParams }: PageProps
         </div>
       ) : null}
       <CmsPageRenderer page={page} ctx={ctx} modules={modules} location={cmsRenderLocation(`/${path}`, query)} />
-    </>
+    </div>
   );
 }
 
 const DEFAULT_BREADCRUMBS: CmsResolvedPage['breadcrumbs'] = { visible: true, scheme: 'light', trail: [] };
+
+/**
+ * The `hreflang` alternates (R24): the backend's URL of every language the page
+ * is served in, or `undefined` for a page in one language — and for an answer
+ * cached before the field existed.
+ */
+function hreflangAlternates(page: CmsResolvedPage): Record<string, string> | undefined {
+  const alternates = page.alternates ?? [];
+  if (alternates.length < 2) return undefined;
+  return Object.fromEntries(alternates.map((alternate) => [alternate.language, alternate.url]));
+}
 
 /**
  * The page's one address (R19D): the public path the backend resolved for this

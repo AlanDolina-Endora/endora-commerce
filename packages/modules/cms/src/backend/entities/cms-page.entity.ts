@@ -1,6 +1,7 @@
 import { Entity, Index, OptionalProps, PrimaryKey, Property, Unique } from '@mikro-orm/core';
 import { GlobalEntity } from '@endora-commerce/platform/tenancy';
 import { randomUUID } from 'crypto';
+import type { CmsPageTranslations } from '@endora-commerce/contracts';
 
 /**
  * CmsPage — feature 014 successor to the pre-014 cms_pages entity. Adds
@@ -35,7 +36,8 @@ export class CmsPage {
     | 'breadcrumbsScheme'
     | 'shareImageAssetId'
     | 'parentPathInUrl'
-    | 'breadcrumbsOverlay';
+    | 'breadcrumbsOverlay'
+    | 'translations';
 
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
@@ -152,4 +154,15 @@ export class CmsPage {
    */
   @Property({ type: 'boolean' })
   breadcrumbsOverlay: boolean = false;
+
+  // ── R24 (feature 163, issue #521) ───────────────────────────────────
+
+  /**
+   * The page's name, slug and description per language:
+   * `{ <lang>: { name?, slug?, description? } }`. A language without an entry,
+   * or a blank field, inherits the page's own `name`, `slug` and `description`
+   * (`cmsLocalizedPage`). `{}` by default, so every stored page reads as before.
+   */
+  @Property({ type: 'json' })
+  translations: CmsPageTranslations = {};
 }

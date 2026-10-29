@@ -3138,3 +3138,49 @@ as before. Data-model §7 and contracts/blocks.md § "R23" hold the lists. Task 
 975 → 933, with nested object and array fields 1615 → 1541; fields a new block shows in the editor
 (its `resolveFields` over the default props) 790 → 735. Brand: 9 stored keys removed; the screen's
 Layout card 9 controls → 5, the type scale table one column fewer.
+
+## R24 — name, slug and description per language (issue #521)
+
+Owner decisions (2026-10-29): the page's own fields stay the default and a language overrides
+any of them (empty = inherited); a language is addressed as a product is (`?lang=` outside the
+channel default, 308 to the served language's address, `hreflang`, a sitemap entry per language);
+documented here as a round of 163. Spec FR-034 amended, FR-034a; data-model §1.1, §5.2.
+
+- [X] T470 [R24] Contracts: `cmsPageTranslationSchema` / `cmsPageTranslationsSchema` on summary,
+  detail, create and patch; `cmsLocalizedPage`; `cmsPageUrl`; `url` and `alternates` on the
+  resolved page and the index entry. Test: `packages/contracts/src/cms-page-translations.test.ts`
+  (RED 12/13 before the code).
+- [X] T471 [R24] Migration `20261029T131218_cms_page_translations.ts` (`translations jsonb not null
+  default '{}'`), entity `CmsPage.translations`, registry regenerated. Test: case in
+  `backend/test/integration/cms/migration.test.ts`.
+- [X] T472 [R24] `page-paths.ts`: `languageSlug`, `channelLanguages`, `channelPaths(…, language)`;
+  `duplicatePath`, `addressesOf`, `anyNested` over the channel-slug tree and every language's.
+  Test: `page-paths.test.ts` (RED 7 before the code).
+- [X] T473 [R24] `CmsPageService`: writes `translations` (blank fields dropped) in the create and
+  update Commands, refuses an undeclared language (400) and a duplicate language address (409)
+  inside the Command, checks every language slug against the reserved segments, records
+  `translations` in the audit state, searches the list by it, invalidates every language address
+  of the subtree. `StorefrontResolver`: resolution order of data-model §5.2, served-language
+  `path`, `url`, `alternates`, `name`, trail and `page` links; the index's `url` and `alternates`
+  per servable language. Test: contract `backend/test/contract/cms/page-translations.contract.test.ts`
+  (13 / 13 on the test Postgres); `test/contract/cms` + `test/integration/cms` 40 files, 499 / 499.
+- [X] T474 [R24] Admin page editor: *Language version* card (name, slug, description, meta per
+  language; placeholders show the inherited value; the address preview per language; a language
+  slug follows its name until edited); its tabs and the canvas tabs switch one language. Fixes on
+  the way: the meta fields were read from `en-US` whatever the page's languages, and a save sent
+  the active language's meta only, which replaced every other language's on the server. en + pl
+  strings. Test: `admin/test/modules/cms/cms-editors-settings-panel.test.tsx` (RED 3 before the
+  code; the R19D case now sees the address in both cards).
+- [X] T475 [R24] Storefront `(content)/[...slug]`: `?lang=` passed as the page's language override
+  (`requestedLanguage` moved to `lib/i18n/requested-language.ts`), 308 to `url`, canonical `url`,
+  `hreflang` alternates, content marked with its language (WCAG 3.1.2); sitemap entry per language
+  URL with alternates. Tests: `storefront/test/seo/cms-language-urls.test.tsx` (RED 5/6),
+  `sitemap-cms.test.ts` R24 case (RED), `catalog/pdp-redirect.test.ts` Q-M7 guard extended to the
+  CMS page.
+- [X] T476 [R24] Docs: `cms` module page *Name, slug and description per language*, sharing
+  metadata and API rows; PL mirror; translation cache rehashed.
+- [X] T477 [R24] Changeset `.changeset/163-r24-cms-page-translations.md`.
+- [ ] T478 [R24] Follow-ups not done here: `seo`'s sitemap generator and meta-tag rule, and
+  `megamenu` CMS-page links, read `CmsPageRecord` (no translations) and build `/<slug>` — they
+  reach a translated page through the redirect; the AI translation of a canvas does not translate
+  the page's name or description; no redirect from a language slug after it changes.

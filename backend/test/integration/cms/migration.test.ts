@@ -196,6 +196,22 @@ describe('cms migration (T008 — 035_cms_init)', () => {
     expect(rows).toEqual([{ data_type: 'boolean', is_nullable: 'NO', column_default: 'false' }]);
   });
 
+  /**
+   * Feature 163 R24 (issue #521): a page's name, slug and description per
+   * language. Empty by default, so every stored page inherits its own fields.
+   */
+  it('adds translations to cms_pages, not null and empty by default (163 R24)', async () => {
+    const conn = db.orm.em.getConnection();
+    const rows = await conn.execute<
+      Array<{ data_type: string; is_nullable: string; column_default: string | null }>
+    >(
+      `select data_type, is_nullable, column_default
+       from information_schema.columns
+       where table_schema = 'public' and table_name = 'cms_pages' and column_name = 'translations'`,
+    );
+    expect(rows).toEqual([{ data_type: 'jsonb', is_nullable: 'NO', column_default: "'{}'::jsonb" }]);
+  });
+
   it('seeds 23 base Hook codes with is_system=true', async () => {
     const conn = db.orm.em.getConnection();
     const rows = await conn.execute<Array<{ code: string }>>(
