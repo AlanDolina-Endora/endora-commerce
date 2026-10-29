@@ -193,6 +193,8 @@ describe('crm attachments', () => {
           // The number, not the title: whoever is deleting a file in the
           // library need not be somebody who may read the Opportunity.
           label: `Sales opportunity ${opportunity.number}`,
+          // The asset the reference points at (feature 166, research R-6).
+          assetId: file.id,
         },
       ]);
       // The library itself refuses, through its own admin API.

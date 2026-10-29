@@ -24,6 +24,15 @@ export const TASKS_READ_PERMISSION = 'tasks:read';
  */
 export const PROJECTS_READ_PERMISSION = 'projects:read';
 
+/**
+ * This module's own read code — what "may read an Opportunity" means for a
+ * question asked behind another module's gate: which Opportunities the asset
+ * library may show a file of (`specs/166-asset-reference-visibility/` R-15).
+ * The routes gate on it; the library's question reaches no route of this
+ * module, so it is asked here.
+ */
+export const CRM_READ_PERMISSION = 'crm:read';
+
 /** The permission `catalog` gates its admin product reads with. */
 export const CATALOG_READ_PERMISSION = 'catalog:read';
 

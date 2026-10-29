@@ -94,7 +94,10 @@ export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
   'services/project-asset-references.ts':
     'The asset library’s deletion guard: one batched, platform-wide "does a Project use this file" ' +
     'answered to whoever deletes it, labelled by the Project’s number only — referential integrity, ' +
-    'which must hold for a deleter who may not see the Project and while this module is off.',
+    'which must hold for a deleter who may not see the Project and while this module is off. Its reader ' +
+    'restriction (`specs/166-asset-reference-visibility/` FR-002) adds the attached files of the Projects the ' +
+    'caller may **not** see — the NULL-safe complement of `visibleProjectSql`, `(…) is not true` — and every ' +
+    'attached file, read while Projects is off; which Projects the caller sees is `visibleIds`.',
   'services/history-service.ts':
     'A history page starts from `loadVisible`; the values its entries changed are read from ' +
     '`project_value_changes` by that Project’s id and the row ids its audit entries point at — a ' +

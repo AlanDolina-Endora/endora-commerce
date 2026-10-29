@@ -73,7 +73,12 @@ import { TaskHierarchyService } from './services/hierarchy-service.js';
 import { TaskRelationService } from './services/relation-service.js';
 import { TaskDocumentLookupService } from './services/document-lookup-service.js';
 import { createTaskAudience, TaskMentionService, type TaskAudience } from './services/mention-service.js';
-import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
+import {
+  createOwnerReadCheck,
+  createOwnerReadChecks,
+  TASKS_READ_PERMISSION,
+  type OwnerReadChecks,
+} from './services/owner-read-permissions.js';
 import { TaskPriorityService } from './services/priority-service.js';
 import { TaskRecordLinkService } from './services/record-link-service.js';
 import { TaskReminderService } from './services/reminder-service.js';
@@ -539,10 +544,21 @@ export function registerModule(ctx: ModuleContext): void {
    * on would let an operator delete a file that comes back as a broken
    * attachment when Tasks is switched on again (Constitution XVII).
    */
+  //
+  // The descriptor is also **reader-restricted** (`specs/166-asset-reference-visibility/`
+  // FR-002): the library shows a file only to a reader who may see a record
+  // using it, and asks this module which Tasks the caller may see. It asks only
+  // while Tasks is present — the library decides that, not this hook — and
+  // every service it reaches is resolved per call through getters, never here.
   ctx.onBoot(() => {
     registerTaskAssetReferences(
       lazyPort<AssetReferenceRegistryPort>(ctx, 'assetReferenceRegistry'),
       ctx.cradle<TasksCradle>().emFactory,
+      {
+        access: () => ctx.cradle<TasksCradle>().tasksAccess,
+        visibility: () => ctx.cradle<TasksCradle>().tasksVisibility,
+        mayReadTasks: createOwnerReadCheck(lazyPort<PermissionReadPort>(ctx, 'permissionService'), TASKS_READ_PERMISSION),
+      },
     );
   });
   // --- end of Collaboration ----------------------------------------------------------

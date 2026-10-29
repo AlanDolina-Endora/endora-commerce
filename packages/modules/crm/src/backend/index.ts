@@ -72,7 +72,12 @@ import { registerCrmAuditReferences } from './services/crm-audit-references.js';
 import { CrmDocumentLookupService } from './services/crm-document-lookup-service.js';
 import { CrmLookupService } from './services/crm-lookup-service.js';
 import { createAdminReach } from './services/admin-reach.js';
-import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
+import {
+  createOwnerReadCheck,
+  createOwnerReadChecks,
+  CRM_READ_PERMISSION,
+  type OwnerReadChecks,
+} from './services/owner-read-permissions.js';
 import { createCrmNotifier, type CrmNotifier } from './services/crm-notifier.js';
 import { createCrmQuoteRequests, type CrmQuoteRequests } from './services/crm-quote-requests.js';
 import { createCrmProjects, type CrmProjects } from './services/crm-projects.js';
@@ -436,10 +441,22 @@ export function registerModule(ctx: ModuleContext): void {
    * non-destructive and reversible (Constitution XVII); the registry honours
    * an absent contributor for exactly this reason.
    */
+  //
+  // The descriptor is also **reader-restricted** (`specs/166-asset-reference-visibility/`
+  // FR-002, R-15): the library shows a file only to a reader who may see a
+  // record using it, and asks this module which Opportunities the caller
+  // reaches. It asks only while CRM is present — the library decides that, not
+  // this hook — and the permission read is a lazy port, resolved per call.
   ctx.onBoot(() => {
     registerCrmAssetReferences(
       lazyPort<AssetReferenceRegistryPort>(ctx, 'assetReferenceRegistry'),
       ctx.cradle<CrmCradle>().emFactory,
+      {
+        mayReadOpportunities: createOwnerReadCheck(
+          lazyPort<PermissionReadPort>(ctx, 'permissionService'),
+          CRM_READ_PERMISSION,
+        ),
+      },
     );
   });
 

@@ -28,6 +28,13 @@ export const CATALOG_READ_PERMISSION = 'catalog:read';
 export const QUOTE_REQUESTS_READ_PERMISSION = 'rfqs:handle';
 export const CRM_READ_PERMISSION = 'crm:read';
 export const PROJECTS_READ_PERMISSION = 'projects:read';
+/**
+ * This module's own read code. `TaskVisibility` leaves it to the routes, so a
+ * question asked behind another module's gate — which Tasks the asset library
+ * may show a file of (`specs/166-asset-reference-visibility/` FR-002) — asks it
+ * here: a reader without it sees no Task.
+ */
+export const TASKS_READ_PERMISSION = 'tasks:read';
 
 /** Whether whoever is behind the request may read what one other module owns. */
 export type OwnerReadCheck = () => Promise<boolean>;

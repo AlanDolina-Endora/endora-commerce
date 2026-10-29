@@ -23,6 +23,7 @@ adds a method to a port only `assets_library` provides (`release-intent.md`).
 | `src/backend/index.ts` (the asset-reference boot hook, today 542-547) | Passes the getters. Still a contribution-only hook with no presence probe. | `module-activation.md` item 3 |
 | `src/backend/services/attachment-service.ts` | `add()` asks `assets.visibleToCaller([assetId])` right after `findById`, before `#refuseAFileHeldOutOfSight`, the private-file and the active-content refusals; absent → `fileUnavailable()`. The `assets` dependency type widens to include `visibleToCaller`. | R-13, F-19 |
 | `src/backend/services/task-asset-references.test.ts` (new, co-located) | The restriction's wiring: hits carry `assetId`, getters resolved per call, the `tasks:read` clause, a `null` condition. No co-located test of this package opens a database (T001 (f)), so the SQL complement property is in §F. | R-16 |
+| `src/backend/services/task-access.ts` (`TASK_ACCESS_READERS`, the reason for `task-asset-references.ts`) and `src/backend/task-visibility-seam.test.ts` (`RULE_SCOPED_READ_LEDGER`, 2 → 5) | The seam ledger derived from the descriptor's reads: the restriction adds the hidden-set join and the all-referenced read. Re-measured, not computed. | AGENTS.md traps (a derived ledger) |
 | `docs/tasks.md` | One sentence in the attachments section: the library hides a file of a Task the reader may not see. | Docs |
 
 ## C. `packages/modules/projects/`
@@ -33,6 +34,7 @@ adds a method to a port only `assets_library` provides (`release-intent.md`).
 | `src/backend/index.ts` (boot hook, today 638-643) | Passes the getters. | — |
 | `src/backend/services/attachment-service.ts` | `add()` asks `visibleToCaller` as Tasks does. | R-13 |
 | `src/backend/services/project-asset-references.test.ts` (new) | The restriction's wiring (as Tasks); the SQL complement property is in §F (T001 (f)). |
+| `src/backend/services/project-access.ts` (`PROJECT_ACCESS_READERS`, the reason for `project-asset-references.ts`) and `src/backend/project-access-seam.test.ts` (read ledger, 2 → 5) | The seam ledger derived from the descriptor's reads, as for Tasks. | AGENTS.md traps (a derived ledger) |
 | `docs/projects.md` | The same sentence. | Docs |
 
 ## D. `packages/modules/crm/`

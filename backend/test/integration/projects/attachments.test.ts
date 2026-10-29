@@ -278,7 +278,7 @@ describe('projects — attachments (US7)', () => {
       });
       expect(registry().owners()).toContain('projects');
       expect(await registry().findReferences(attached.assetId)).toEqual([
-        { kind: 'project_attachment', entityId: project.id, label: `Project ${project.number}` },
+        { kind: 'project_attachment', entityId: project.id, label: `Project ${project.number}`, assetId: attached.assetId },
       ]);
       const refused = await h.app.inject({
         method: 'DELETE',
@@ -356,7 +356,7 @@ describe('projects — attachments (US7)', () => {
             code: ERROR_CODES.ASSET_REFERENCED,
           });
           expect(await own.findReferences(attached.assetId)).toEqual([
-            { kind: 'project_attachment', entityId: project.id, label: `Project ${project.number}` },
+            { kind: 'project_attachment', entityId: project.id, label: `Project ${project.number}`, assetId: attached.assetId },
           ]);
         });
 

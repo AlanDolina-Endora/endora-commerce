@@ -159,7 +159,7 @@ describe('tasks — attachments (US1)', () => {
     const attached = await upload(task.id, { filename: 'kept.png', mime: 'image/png', value: TINY_PNG });
     expect(registry().owners()).toContain('tasks');
     expect(await registry().findReferences(attached.assetId)).toEqual([
-      { kind: 'task_attachment', entityId: task.id, label: `Task ${task.number}` },
+      { kind: 'task_attachment', entityId: task.id, label: `Task ${task.number}`, assetId: attached.assetId },
     ]);
     const refused = await h.app.inject({ method: 'DELETE', url: `/api/v1/admin/assets/${attached.assetId}`, cookies: admin });
     expect(refused.statusCode, refused.body).toBe(409);
