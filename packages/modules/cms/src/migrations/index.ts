@@ -31,6 +31,7 @@ import { Migration20261022T163218CmsBrandTokens } from './20261022T163218_cms_br
 import { Migration20261023T052237CmsPageTreeAndShare } from './20261023T052237_cms_page_tree_and_share.js';
 import { Migration20261027T165458CmsPageParentPathInUrl } from './20261027T165458_cms_page_parent_path_in_url.js';
 import { Migration20261028T090524CmsPageBreadcrumbsOverlay } from './20261028T090524_cms_page_breadcrumbs_overlay.js';
+import { Migration20261029T131218CmsPageTranslations } from './20261029T131218_cms_page_translations.js';
 
 export const migrations = [
   Migration20260425T162418CmsPagesInit,
@@ -42,6 +43,7 @@ export const migrations = [
   Migration20261023T052237CmsPageTreeAndShare,
   Migration20261027T165458CmsPageParentPathInUrl,
   Migration20261028T090524CmsPageBreadcrumbsOverlay,
+  Migration20261029T131218CmsPageTranslations,
 ];
 
 export {
@@ -54,4 +56,5 @@ export {
   Migration20261023T052237CmsPageTreeAndShare,
   Migration20261027T165458CmsPageParentPathInUrl,
   Migration20261028T090524CmsPageBreadcrumbsOverlay,
+  Migration20261029T131218CmsPageTranslations,
 };

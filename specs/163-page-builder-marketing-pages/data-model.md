@@ -27,6 +27,7 @@ types are inferred from it.
 | `share_image_asset_id` | `uuid null` | An asset id. It is not an FK, because assets live in `assets_library`; the column is listed in the `cms` asset-reference scan |
 | `parent_path_in_url` | `boolean not null default false` | **R19D**, its own migration (`Migration20261027T165458CmsPageParentPathInUrl`). On: the public path is the parent's public path, `/` and the page's slug. The path is computed on read, never stored |
 | `breadcrumbs_overlay` | `boolean not null default false` | **R21H** (T355), its own migration (`Migration20261028T090524CmsPageBreadcrumbsOverlay`). On: the storefront draws the trail over the first section instead of in a band above it |
+| `translations` | `jsonb not null default '{}'` | **R24** (issue #521), its own migration (`Migration20261029T131218CmsPageTranslations`). `{ <lang>: { name?, slug?, description? } }`; a blank or absent field inherits the page's own column (`cmsLocalizedPage`). An entry counts only while the page declares its language. See §5.2 |
 
 - **Index**: `cms_pages_parent_page_id_idx`.
 - **Entity**: `CmsPage` gains `parentPageId`, `breadcrumbsVisible`, `breadcrumbsScheme` and
@@ -623,6 +624,39 @@ trail: Array<{ name; slug; path?: string | null }>;  // path: the ancestor's pub
 - **Moves.** Renaming or moving a parent moves its nested descendants; the old path stops
   answering (no redirects facility exists to carry it). A write that moves a nested path drops
   every cached page answer (`CmsContentChange.addressesMoved` → the broad `cms:page` tag).
+
+### 5.2 Per-language name, slug and description (R24, issue #521)
+
+```ts
+// summary, detail, create, patch (replaced whole when present):
+translations: Record<lang, { name?: string; slug?: string /* cmsSlugRe */; description?: string }>;
+// resolved page:
+url?: string;                                   // cmsPageUrl(path, served language)
+alternates?: Array<{ language; url }>;          // one per servable language
+name: string;                                   // the served language's
+// by-channel entries gain url?: string and alternates?: Array<{ language; url }>
+```
+
+- **Effective values** (`cmsLocalizedPage`, `packages/contracts/src/cms.ts`): a language's
+  override, else the page's own field; a blank override and an override of an undeclared language
+  inherit. A request naming an undeclared language is refused with
+  `400 CMS_LANGUAGE_NOT_IN_CHANNEL_SCOPE`; a stored one is kept, unused.
+- **URL** (`cmsPageUrl`): `/<path>`, plus `?lang=<L>` when L is not the channel default — the rule
+  `productPath` states for a product. Built by the backend only.
+- **Trees.** A channel is addressed through its channel-slug tree (§5.1) and one tree per
+  language its pages declare, each from every page's effective slug in that language. Paths are
+  unique per tree: a write producing a duplicate is refused with `409 CMS_SLUG_CONFLICT`
+  (`details.language` when the tree is a language's), nothing written or audited. One slug in two
+  languages of two pages is allowed.
+- **Resolution.** `by-slug` asks the requested language's tree, then the channel default's, then
+  every other language's, then the channel-slug tree (the identity a `LinkValue`, the home-page
+  setting and the mega menu name a page by); each by whole path, then flat slug. The page is
+  served in the requested language by the existing fallback, at that language's `path`; the
+  storefront redirects (308) to `url` when the request differs.
+- **Trail and links** read each ancestor's name and slug in the served language; a `page` link is
+  rewritten to its target's path in it (keyed by the target's own slug, then its language slug).
+- **Invalidation** names every address of the written subtree in every tree, before and after;
+  any patch snapshots the subtree, since a name is in the descendants' trails.
 
 ---
 

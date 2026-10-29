@@ -188,11 +188,16 @@ describe('the product page composes no product URL of its own', () => {
  * Final QA review Q-M7 (L-1) — the product page alone lets `?lang=` choose the request's
  * language: both its metadata and its body hand `requestedLanguage(search.lang)` to the
  * server context, and no other caller passes a language override.
+ *
+ * Feature 163 R24 (issue #521) adds the CMS page, whose URL carries `?lang=` on the same
+ * rule (`cmsPageUrl`), under the same discipline: metadata and body both pass it.
  */
-describe('only the product page passes the `?lang` override to the server context (Q-M7, L-1)', () => {
+describe('only the product and CMS pages pass the `?lang` override to the server context (Q-M7, L-1; R24)', () => {
   const root = resolve(import.meta.dirname, '../..');
   const pagePath = resolve(root, 'app/(catalog)/p/[slug]/page.tsx');
   const page = readFileSync(pagePath, 'utf8');
+  const cmsPagePath = resolve(root, 'app/(content)/[...slug]/page.tsx');
+  const cmsPage = readFileSync(cmsPagePath, 'utf8');
   const OVERRIDE = 'getServerContext({ langOverride: requestedLanguage(search.lang) })';
 
   function body(source: string, signature: RegExp): string {
@@ -208,6 +213,16 @@ describe('only the product page passes the `?lang` override to the server contex
     expect(page.split('langOverride').length - 1).toBe(2);
   });
 
+  it('the CMS page passes it in generateMetadata and in the page, and nowhere else (R24)', () => {
+    expect(body(cmsPage, /export async function generateMetadata\(/)).toContain(
+      'getServerContext({ langOverride: requestedLanguage(search.lang) })',
+    );
+    expect(body(cmsPage, /export default async function CmsContentPage\(/)).toContain(
+      'getServerContext({ langOverride: requestedLanguage(query.lang) })',
+    );
+    expect(cmsPage.split('langOverride').length - 1).toBe(2);
+  });
+
   it('no other storefront source passes langOverride', () => {
     const skip = new Set(['node_modules', '.next', 'test', 'dist', 'coverage', 'public']);
     const offenders: string[] = [];
@@ -217,7 +232,7 @@ describe('only the product page passes the `?lang` override to the server contex
         const full = resolve(dir, entry.name);
         if (entry.isDirectory()) walk(full);
         else if (/\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) {
-          if (full === pagePath) continue;
+          if (full === pagePath || full === cmsPagePath) continue;
           const text = readFileSync(full, 'utf8');
           // A call passes it as `langOverride: …` or as the shorthand `{ langOverride }`;
           // the declaration in `lib/server-context.ts` (`langOverride?:`) passes nothing.
