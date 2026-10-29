@@ -119,8 +119,8 @@ Unknown status, priority and tag ids **match nothing**; they never produce a 422
 | `PATCH /tasks/statuses/:code` | C | Every field except `code` |
 | `DELETE /tasks/statuses/:code?replacement=` | C | `replacement` is required when the status is in use. 409 `TASK_STATUS_IN_USE_TOO_MANY` |
 | `PUT /tasks/transitions` | C | `{add?: Edge[], remove?: Edge[]}`. Every write answers with the whole workflow and ends with `assertValid`, giving 422 `TASK_WORKFLOW_INVALID {rule}` on failure |
-| `GET /tasks/priorities` · `POST` · `PATCH /:code` · `DELETE /:code?replacement=` | R / C | Same shape as statuses. `replacement` may be `none` |
-| `GET /tasks/tags` · `POST` · `PATCH /:id` · `DELETE /:id` | R / C | `list` carries `usageCount`. 409 `TASK_TAG_NAME_TAKEN` |
+| `GET /tasks/priorities` · `POST` · `PATCH /:code` · `DELETE /:code?replacement=` | R / C | Same shape as statuses: every write answers the whole list. `replacement` may be `none`, and is required while Tasks hold the priority. A taken code and a missing replacement are 422 `TASK_WORKFLOW_INVALID {rule: priority_code_taken \| priority_replacement_required}`; an unknown replacement 422 `TASK_PRIORITY_UNKNOWN`; above `TASK_STATUS_REASSIGN_MAX` Tasks 409 `TASK_STATUS_IN_USE_TOO_MANY {code: priority}` (T082) |
+| `GET /tasks/tags` · `POST` · `PATCH /:id` · `DELETE /:id` | R / C | `list` carries `usageCount`. 409 `TASK_TAG_NAME_TAKEN`. `PATCH` answers the tag, `DELETE` 204 |
 | `GET` / `PUT /tasks/board/card-fields` | R / C | Validated against the catalogue and the definitions of `task` custom fields |
 | `GET` / `PUT /tasks/settings/time-zone` | R / C | IANA name, validated |
 
