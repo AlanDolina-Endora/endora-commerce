@@ -12,6 +12,7 @@ import {
   createCrmOpportunity,
   removeCrmAssets,
   restoreDefaultCrmWorkflow,
+  seedCrmAdmin,
   seedCrmAsset,
   seedCrmOrder,
   submitCrmQuoteRequest,
@@ -247,7 +248,7 @@ describe('tasks off-state (Constitution XVII)', () => {
       expect(asked).toHaveLength(3);
     });
 
-    it.each(AXES)('a file a Task uses stays protected from deletion while %s', async (axis) => {
+    it.each(AXES)('a file a Task uses stays protected from deletion while %s, and hidden from a restricted reader until Tasks is back', async (axis) => {
       const file = await seedCrmAsset(h.em());
       assets.push(file.id);
       const attached = await h.app.inject({
@@ -258,11 +259,33 @@ describe('tasks off-state (Constitution XVII)', () => {
       });
       expect(attached.statusCode, attached.body).toBe(201);
       const registry = h.container.resolve<AssetReferenceRegistryPort>('assetReferenceRegistry');
-      await withModuleOff('tasks', axis, async () => {
-        const refused = await h.app.inject({ method: 'DELETE', url: `/api/v1/admin/assets/${file.id}`, cookies: admin });
-        expect(refused.statusCode, refused.body).toBe(409);
-        expect((refused.json() as { error: { code: string } }).error.code).toBe(ERROR_CODES.ASSET_REFERENCED);
-      });
+      // `specs/166-asset-reference-visibility/` US5 (FR-009, FR-010): a reader of
+      // Tasks who is not the Platform administrator sees the file through the
+      // Task while Tasks is on, not while it is off; the Platform administrator
+      // sees it throughout.
+      const reader = await seedCrmAdmin(h.em(), `off-${axis}`, ['tasks:read', 'assets.read', 'assets.write']);
+      const lists = async (cookies: Record<string, string>): Promise<boolean> => {
+        const response = await h.app.inject({
+          method: 'GET',
+          url: `/api/v1/admin/assets?q=${encodeURIComponent(file.filename)}`,
+          cookies,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return (response.json() as { data: Array<{ id: string }> }).data.some((row) => row.id === file.id);
+      };
+      try {
+        expect(await lists(reader.cookies), 'listed for the reader while Tasks is on').toBe(true);
+        await withModuleOff('tasks', axis, async () => {
+          const refused = await h.app.inject({ method: 'DELETE', url: `/api/v1/admin/assets/${file.id}`, cookies: admin });
+          expect(refused.statusCode, refused.body).toBe(409);
+          expect((refused.json() as { error: { code: string } }).error.code).toBe(ERROR_CODES.ASSET_REFERENCED);
+          expect(await lists(reader.cookies), 'hidden from the reader while Tasks is off').toBe(false);
+          expect(await lists(admin), 'listed for the Platform administrator while Tasks is off').toBe(true);
+        });
+        expect(await lists(reader.cookies), 'listed for the reader once Tasks is back').toBe(true);
+      } finally {
+        reader.undo();
+      }
       const removed = await h.app.inject({
         method: 'DELETE',
         url: `${API}/${task.id}/attachments/${(attached.json() as { data: { id: string } }).data.id}`,
