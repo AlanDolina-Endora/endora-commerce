@@ -102,7 +102,14 @@ const SUBJECTS: readonly Subject[] = [
     axis: 'deactivated',
     admin: cmsAdmin,
   },
-  { module: 'blog', actions: ['new-post'], axis: 'deactivated', admin: blogAdmin },
+  // Issue #510 (Principle XVI): the three screens the sidebar lists gained the
+  // actions that open them, beside the create form's.
+  {
+    module: 'blog',
+    actions: ['new-post', 'open-blog-categories', 'open-blog-posts', 'open-blog-tags'],
+    axis: 'deactivated',
+    admin: blogAdmin,
+  },
 ];
 
 /**
