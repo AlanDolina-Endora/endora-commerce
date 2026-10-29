@@ -131,9 +131,9 @@ is not enough.
    It is *covered* when some manifest action — any module's — names it as its `targetRoute`.
    Three classes, three treatments:
    - the **landing** route (`index: true`) must be covered, with no exception;
-   - a **sidebar** destination must be covered — a sidebar entry is top-level by definition.
-     The test's `PALETTE_COVERAGE_DEBT` holds the gaps that predated the rule, in modules the
-     issue did not name; it only shrinks, and an entry whose gap is closed fails as stale;
+   - a **sidebar** destination must be covered, with no exception — a sidebar entry is
+     top-level by definition. The gaps that predated the rule were held in a shrink-only debt
+     ledger until issue #516 paid the last of them and removed it with its code path;
    - **any other** static route — a create form its list opens, a tab of another screen, a
      legacy address kept for bookmarks — is covered **or** listed in the test's
      `PALETTE_EXEMPTIONS` under its module, with a reason. That ledger is the escape hatch, and

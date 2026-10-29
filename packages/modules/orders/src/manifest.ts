@@ -734,6 +734,19 @@ export const manifest = defineModuleManifest({
       keywords: ['orders', 'sales', 'zamówienia', 'sprzedaż'],
       weight: 220,
     },
+    // Issue #516 (Principle XVI): the create form is a sidebar entry of its
+    // own, so the palette offers it too. `orders:write`, the code its route
+    // and the create `POST` enforce.
+    {
+      id: 'new-order',
+      labelKey: 'actions.newOrder.label',
+      descriptionKey: 'actions.newOrder.description',
+      icon: 'Plus',
+      targetRoute: '/orders/new',
+      requiredPermission: 'orders:write',
+      keywords: ['order', 'new', 'create', 'on behalf', 'zamówienie', 'nowe', 'utwórz'],
+      weight: 221,
+    },
     {
       id: 'order-statuses',
       labelKey: 'actions.orderStatusConfig.label',

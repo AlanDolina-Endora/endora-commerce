@@ -90,7 +90,16 @@ const SUBJECTS: readonly Subject[] = [
   },
   {
     module: 'inventory',
-    actions: ['open-inventory'],
+    // `import-stock`, `open-low-stock`, `open-stock-notifications` and
+    // `open-warehouses` arrived with issue #516: the sidebar's remaining
+    // screens (Principle XVI).
+    actions: [
+      'import-stock',
+      'open-inventory',
+      'open-low-stock',
+      'open-stock-notifications',
+      'open-warehouses',
+    ],
     axis: 'deactivated',
     admin: inventoryAdmin,
   },

@@ -72,51 +72,6 @@ const PALETTE_EXEMPTIONS: PaletteLedger = {
   },
 };
 
-/**
- * **The debt ledger** — sidebar entries that had no palette action when this
- * rule landed, in modules issue #510 did not name. A sidebar entry is top-level
- * by definition, so none of these is a deliberate exemption: each one is a gap,
- * recorded so the rule could land without rewriting ten modules in one change.
- * It only shrinks — adding an entry is refused in review, and an entry whose
- * gap was closed fails as stale until it is deleted.
- */
-const PALETTE_COVERAGE_DEBT: PaletteLedger = {
-  catalog: {
-    '/catalog/attribute-sets': 'Pre-existing gap when the rule landed (issue #510).',
-    '/catalog/attachment-types': 'Pre-existing gap when the rule landed (issue #510).',
-    '/catalog/bulk-operations': 'Pre-existing gap when the rule landed (issue #510).',
-  },
-  crm: {
-    '/crm/workflow': 'Pre-existing gap when the rule landed (issue #510).',
-    '/crm/tags': 'Pre-existing gap when the rule landed (issue #510).',
-  },
-  inventory: {
-    '/inventory/low-stock': 'Pre-existing gap when the rule landed (issue #510).',
-    '/inventory/notifications': 'Pre-existing gap when the rule landed (issue #510).',
-    '/inventory/import': 'Pre-existing gap when the rule landed (issue #510).',
-    '/warehouses': 'Pre-existing gap when the rule landed (issue #510).',
-  },
-  newsletter: {
-    '/newsletter/tags': 'Pre-existing gap when the rule landed (issue #510).',
-    '/newsletter/blocks': 'Pre-existing gap when the rule landed (issue #510).',
-    '/newsletter/provider': 'Pre-existing gap when the rule landed (issue #510).',
-  },
-  orders: {
-    '/orders/new': 'Pre-existing gap when the rule landed (issue #510).',
-  },
-  projects: {
-    '/projects/roles': 'Pre-existing gap when the rule landed (issue #510).',
-    '/projects/loss-reasons': 'Pre-existing gap when the rule landed (issue #510).',
-  },
-  promotions: {
-    '/promotion-rules': 'Pre-existing gap when the rule landed (issue #510).',
-  },
-  settings: {
-    '/settings/groups': 'Pre-existing gap when the rule landed (issue #510).',
-    '/settings/cache': 'Pre-existing gap when the rule landed (issue #510).',
-  },
-};
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 interface ManifestShape {
@@ -168,13 +123,11 @@ describe('palette coverage rule (red proofs)', () => {
     surfaces?: CoverageSurface[];
     actions?: CoverageAction[];
     exemptions?: PaletteLedger;
-    debt?: PaletteLedger;
   }): string[] =>
     paletteCoverageFindings({
       surfaces: over.surfaces ?? [surface()],
       actions: over.actions ?? all,
       exemptions: over.exemptions ?? {},
-      debt: over.debt ?? {},
     }).map((f: PaletteCoverageFinding) => `${f.kind} ${f.path}`);
   const reason = 'created from the list header, never on its own';
 
@@ -191,9 +144,8 @@ describe('palette coverage rule (red proofs)', () => {
       run({
         actions: [action('/widgets/new'), action('/widget-groups')],
         exemptions: { widgets: { '/widgets': reason } },
-        debt: { widgets: { '/widgets': reason } },
       }),
-    ).toEqual(['uncovered-landing /widgets', 'stale-exemption /widgets', 'stale-debt /widgets']);
+    ).toEqual(['uncovered-landing /widgets', 'stale-exemption /widgets']);
   });
 
   it('refuses a sidebar entry with no action, and refuses to exempt it', () => {
@@ -209,16 +161,6 @@ describe('palette coverage rule (red proofs)', () => {
     expect(run({ surfaces: [surface({ nav: [{ to: '/widget-roles' }] })] })).toEqual([
       'uncovered-sidebar-entry /widget-roles',
     ]);
-  });
-
-  it('accepts a debt entry for an uncovered sidebar destination', () => {
-    expect(
-      run({ actions: [action('/widgets'), action('/widgets/new')], debt: { widgets: { '/widget-groups': reason } } }),
-    ).toEqual([]);
-  });
-
-  it('refuses a debt entry whose sidebar destination gained an action', () => {
-    expect(run({ debt: { widgets: { '/widget-groups': reason } } })).toEqual(['stale-debt /widget-groups']);
   });
 
   it('refuses a non-sidebar static route with no action and no exemption', () => {
@@ -302,7 +244,6 @@ describe('palette coverage of the real admin registry (Principle XVI)', () => {
       surfaces,
       actions,
       exemptions: PALETTE_EXEMPTIONS,
-      debt: PALETTE_COVERAGE_DEBT,
     });
     expect(findings.map(describeFinding)).toEqual([]);
   });

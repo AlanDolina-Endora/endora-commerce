@@ -61,7 +61,10 @@ Rendered from the module's own manifest, and from nothing written by hand. What 
 | Action | Opens | Permission |
 | --- | --- | --- |
 | `new-product` | `/catalog/products/new` | `catalog:write` |
+| `open-attachment-types` | `/catalog/attachment-types` | `catalog:read` |
+| `open-attribute-sets` | `/catalog/attribute-sets` | `catalog:read` |
 | `open-attributes` | `/catalog/attributes` | `catalog:read` |
+| `open-bulk-operations` | `/catalog/bulk-operations` | `catalog:read` |
 | `open-categories` | `/catalog/categories` | `catalog:read` |
 | `open-products` | `/catalog/products` | `catalog:read` |
 

@@ -621,6 +621,39 @@ export const manifest = defineModuleManifest({
       keywords: ['attribute', 'attributes', 'atrybuty'],
       weight: 400,
     },
+    // Issue #516 (Principle XVI): the three remaining sidebar screens were
+    // reachable from the sidebar alone. Each opens on `catalog:read`, the code
+    // its route and its list `GET` enforce; writes stay gated on the screen.
+    {
+      id: 'open-attribute-sets',
+      labelKey: 'actions.openAttributeSets.label',
+      descriptionKey: 'actions.openAttributeSets.description',
+      icon: 'Tag',
+      targetRoute: '/catalog/attribute-sets',
+      requiredPermission: 'catalog:read',
+      keywords: ['attribute set', 'attribute sets', 'attributes', 'zestaw', 'zestawy', 'atrybuty'],
+      weight: 410,
+    },
+    {
+      id: 'open-attachment-types',
+      labelKey: 'actions.openAttachmentTypes.label',
+      descriptionKey: 'actions.openAttachmentTypes.description',
+      icon: 'FileText',
+      targetRoute: '/catalog/attachment-types',
+      requiredPermission: 'catalog:read',
+      keywords: ['attachment', 'attachments', 'attachment type', 'certificate', 'załącznik', 'załączniki', 'rodzaje', 'certyfikat'],
+      weight: 420,
+    },
+    {
+      id: 'open-bulk-operations',
+      labelKey: 'actions.openBulkOperations.label',
+      descriptionKey: 'actions.openBulkOperations.description',
+      icon: 'ListChecks',
+      targetRoute: '/catalog/bulk-operations',
+      requiredPermission: 'catalog:read',
+      keywords: ['bulk', 'bulk edit', 'bulk actions', 'operations', 'masowe', 'masowa', 'akcje'],
+      weight: 430,
+    },
   ],
   /**
    * The eight Page Builder blocks this module owns — five in the CMS palette
