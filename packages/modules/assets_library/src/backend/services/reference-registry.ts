@@ -70,6 +70,15 @@ export class AssetReferenceRegistry implements AssetReferenceRegistryPort {
     };
   }
 
+  /**
+   * Every descriptor, in registration order — the order `findReferences`
+   * answers in, which the detail's filtered "used by" list keeps (feature 166,
+   * US3), so a reader who sees every reference sees today's list.
+   */
+  inRegistrationOrder(): readonly AssetReferenceDescriptor[] {
+    return [...this.descriptors];
+  }
+
   async findReferences(assetId: string): Promise<AssetReferenceHit[]> {
     const all = await Promise.all(
       this.descriptors.map((d) => d.findReferences([assetId])),

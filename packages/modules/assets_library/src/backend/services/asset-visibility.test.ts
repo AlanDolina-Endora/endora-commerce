@@ -383,6 +383,16 @@ describe('AssetVisibility.visibleReferences (FR-007)', () => {
     for (const ref of refs) expect(ref).not.toHaveProperty('assetId');
   });
 
+  it('keeps the registry’s order, restricted and unrestricted interleaved — today’s detail order', async () => {
+    const before = unrestricted('cms', 'cms_body_embed', { [A1]: ['page'] });
+    const tasks = restricted('tasks', 'task_attachment', { [A1]: ['t-visible'] }, ['t-visible']);
+    const after = unrestricted('catalog', 'product_gallery', { [A1]: ['p1'] });
+    for (const context of [asAdmin(), asWildcard()]) {
+      const h = harness([before, tasks, after], { context });
+      expect((await h.visibility.visibleReferences(A1)).map((r) => r.entityId)).toEqual(['page', 't-visible', 'p1']);
+    }
+  });
+
   it('names no restricted reference of a switched-off owner to an admin', async () => {
     const h = harness(build(), { absent: ['tasks'] });
     const refs = await h.visibility.visibleReferences(A1);

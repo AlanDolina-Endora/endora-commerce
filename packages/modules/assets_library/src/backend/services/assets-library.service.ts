@@ -53,9 +53,10 @@ export interface AssetsLibraryServiceDeps {
    * Which assets the ambient caller may see (`specs/166-asset-reference-visibility/`
    * R-5, R-9, R-11): the list leaves hidden assets out, move-many skips them
    * and a permalink conflict does not name them. An unrestricted caller (the
-   * system, the platform wildcard) is answered without a read.
+   * system, the platform wildcard) is answered without a read. Every detail
+   * names only the references the caller may see (FR-007, R-8).
    */
-  visibility: Pick<AssetVisibility, 'exclusionFor' | 'hiddenAmong'>;
+  visibility: Pick<AssetVisibility, 'exclusionFor' | 'hiddenAmong' | 'visibleReferences'>;
   /** Upload-policy provider — reads `assets.allowed_file_types` + max-size. */
   loadUploadPolicy: () => Promise<UploadPolicy>;
   /** Live retention setting; omitted by standalone consumers to keep the 30-day default. */
@@ -625,7 +626,12 @@ export class AssetsLibraryService {
 
   private async detail(a: Asset): Promise<AssetDetail> {
     const summary = await this.summary(a);
-    const references = await this.deps.referenceRegistry.findReferences(a.id);
+    // The caller's "used by" list, never the registry's full one: a record the
+    // caller may not see is neither named nor counted, and `assetId` stays in
+    // the library (`specs/166-asset-reference-visibility/` FR-007, R-8). Every
+    // route that answers a detail — read, edit, move, replace, restore,
+    // permalink — answers through here.
+    const references = await this.deps.visibility.visibleReferences(a.id);
     // Read once: it dates the previous version and is named by the replace
     // confirmation. Whole days, at least one, as the contract declares.
     const retentionDays = this.deps.loadRetentionDays ? await this.deps.loadRetentionDays() : 30;

@@ -37,14 +37,20 @@ function fakeEm(rows: Array<{ id: string; folderId?: string | null }>) {
 
 function service(
   em: ReturnType<typeof fakeEm>,
-  visibility: AssetsLibraryServiceDeps['visibility'],
+  visibility: Omit<AssetsLibraryServiceDeps['visibility'], 'visibleReferences'> &
+    Partial<Pick<AssetsLibraryServiceDeps['visibility'], 'visibleReferences'>>,
   extra: Partial<AssetsLibraryServiceDeps> = {},
 ): AssetsLibraryService {
   return new AssetsLibraryService({
     emFactory: () => em as unknown as EntityManager,
     adapters: {} as AdapterRegistry,
     referenceRegistry: new AssetReferenceRegistry(),
-    visibility,
+    visibility: {
+      visibleReferences: async () => {
+        throw new Error('visibleReferences: not expected in this case');
+      },
+      ...visibility,
+    },
     loadUploadPolicy: async () => ({ allowedTypes: ['*'], maxFileSizeMb: 0 }),
     ...extra,
   });
@@ -110,5 +116,52 @@ describe('AssetsLibraryService.setPermalink — a hidden holder is not named (R-
       code: ERROR_CODES.ASSET_PERMALINK_TAKEN,
       details: { permalink: 'docs/held.pdf', assetId: expected },
     });
+  });
+});
+
+describe('AssetsLibraryService detail — the "used by" list is the caller’s (FR-007, R-8)', () => {
+  it('answers the references the evaluator lets the caller see, never the registry’s full list', async () => {
+    const row = {
+      id: VISIBLE,
+      folderId: null,
+      filename: 'chair.png',
+      label: null,
+      mimeType: 'image/png',
+      sizeBytes: 1,
+      visibility: 'public',
+      storageBackend: 'local',
+      storageLocator: 'aa/bb/chair.png',
+      storageUrl: 'aa/bb/chair.png',
+      contentVersion: 'v1',
+      createdAt: new Date('2026-10-29T00:00:00Z'),
+      updatedAt: new Date('2026-10-29T00:00:00Z'),
+      deletedAt: null,
+      pendingCleanup: false,
+      permalink: null,
+      altText: null,
+    };
+    const em = fakeEm([]);
+    em.findOne.mockImplementation(async () => row as never);
+    const adapter = { resolveUrl: async () => ({ url: 'https://cdn.test/chair.png', expiresAt: null }) };
+    const registry = new AssetReferenceRegistry();
+    const everyDescriptor = vi.fn(async () => [
+      { kind: 'task_attachment' as const, entityId: 'hidden-task', label: 'Task', assetId: VISIBLE },
+    ]);
+    registry.register({ ownerModuleId: 'tasks', findReferences: everyDescriptor });
+    const visible = [{ kind: 'product_gallery' as const, entityId: 'p1', label: 'Product' }];
+    const visibleReferences = vi.fn(async () => visible);
+
+    const detail = await service(
+      em,
+      { exclusionFor: async () => [], hiddenAmong: async () => new Set(), visibleReferences },
+      {
+        referenceRegistry: registry,
+        adapters: { getForBackend: async () => adapter, localPublicBase: async () => '' } as unknown as AdapterRegistry,
+      },
+    ).getAsset(VISIBLE);
+
+    expect(visibleReferences).toHaveBeenCalledWith(VISIBLE);
+    expect(detail.references).toEqual(visible);
+    expect(everyDescriptor).not.toHaveBeenCalled();
   });
 });

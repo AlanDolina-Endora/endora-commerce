@@ -51,7 +51,7 @@ export interface AssetVisibilityContext {
 }
 
 export interface AssetVisibilityDeps {
-  registry: Pick<AssetReferenceRegistry, 'partition' | 'referencesOf'>;
+  registry: Pick<AssetReferenceRegistry, 'partition' | 'referencesOf' | 'inRegistrationOrder'>;
   /** `effectiveState.isPresent`, read per evaluation. */
   isPresent: (moduleId: string) => boolean;
   /** `admin_roles`' `permissionService`, resolved per call. */
@@ -182,29 +182,25 @@ export class AssetVisibility {
    * The references of one asset the caller may be told about (FR-007, R-8):
    * every unrestricted reference, plus the restricted references whose record
    * a present owner says the caller may see — all of them for an unrestricted
-   * caller. `assetId` is stripped: the wire shape is `AssetReference`.
+   * caller. `assetId` is stripped: the wire shape is `AssetReference`. The
+   * registry's order is kept, so a caller who may see every reference gets
+   * today's list unchanged.
    *
    * Invariant I-1 follows from FR-001: a visible asset with references has at
    * least one visible reference.
    */
   async visibleReferences(assetId: string): Promise<AssetReference[]> {
     const caller = await this.caller();
-    const { restricted, unrestricted } = this.deps.registry.partition();
-    const [open, closed] = await Promise.all([
-      Promise.all(unrestricted.map((d) => d.findReferences([assetId]))),
-      Promise.all(
-        restricted.map(async (descriptor) => {
-          const hits = await descriptor.findReferences([assetId]);
-          if (caller.kind === 'unrestricted' || hits.length === 0) return hits;
-          if (!this.#asksOwner(caller, descriptor)) return [];
-          const seen = await descriptor.readerRestriction!.visibleEntityIds([
-            ...new Set(hits.map((hit) => hit.entityId)),
-          ]);
-          return hits.filter((hit) => seen.has(hit.entityId));
-        }),
-      ),
-    ]);
-    return [...open.flat(), ...closed.flat()].map(toReference);
+    const perDescriptor = await Promise.all(
+      this.deps.registry.inRegistrationOrder().map(async (descriptor) => {
+        const hits = await descriptor.findReferences([assetId]);
+        if (!descriptor.readerRestriction || caller.kind === 'unrestricted' || hits.length === 0) return hits;
+        if (!this.#asksOwner(caller, descriptor)) return [];
+        const seen = await descriptor.readerRestriction.visibleEntityIds([...new Set(hits.map((hit) => hit.entityId))]);
+        return hits.filter((hit) => seen.has(hit.entityId));
+      }),
+    );
+    return perDescriptor.flat().map(toReference);
   }
 
   /**

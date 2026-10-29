@@ -764,6 +764,131 @@ describe('assets library — reference visibility (feature 166)', () => {
     });
   });
 
+  describe('US3 — the "used by" list shows only what I may see', () => {
+    /** F: a product and A's private Task. FP: Project P1 and a CMS embed. FO: an O1 Opportunity and a CMS embed. */
+    let F: string;
+    let FP: string;
+    let FO: string;
+    let product: string;
+    let cmsForProject: string;
+    let cmsForOpportunity: string;
+
+    beforeAll(async () => {
+      product = await createProduct('US3');
+      F = await uploadPng(`rvu-${run}-product-task.png`);
+      FP = await uploadPng(`rvu-${run}-project-cms.png`);
+      FO = await uploadPng(`rvu-${run}-opportunity-cms.png`);
+      await useUnrestricted('product_gallery', F, product);
+      await attachToTask(tasks.private, F);
+
+      const conn = h.em().getConnection();
+      await conn.execute(
+        `insert into "project_attachments" ("project_id", "asset_id", "added_by_admin_user_id") values (?, ?, ?)`,
+        [projectP1, FP, A.adminUserId],
+      );
+      await useUnrestricted('cms_body_embed', FP, product);
+      cmsForProject = contentRows.cmsPages.at(-1)!;
+      await conn.execute(
+        `insert into "crm_opportunity_attachments" ("id", "opportunity_id", "asset_id", "file_name", "uploaded_by_admin_user_id", "created_at")
+         values (?, ?, ?, ?, ?, now())`,
+        [randomUUID(), opportunityO1, FO, `rvu-${run}-opportunity-cms.png`, A.adminUserId],
+      );
+      await useUnrestricted('cms_body_embed', FO, product);
+      cmsForOpportunity = contentRows.cmsPages.at(-1)!;
+    });
+
+    /** No reference on the wire carries anything but its kind, record and label (`contracts/admin-api.md` §1 row 7). */
+    function expectWireShape(references: ReadonlyArray<Record<string, unknown>>, label: string): void {
+      for (const reference of references) {
+        expect(Object.keys(reference).sort(), label).toEqual(['entityId', 'kind', 'label']);
+      }
+    }
+
+    it('GET /assets/:id: B and N see the product only; A and W see the product and the Task', async () => {
+      const both = [`product_gallery:${product}`, `task_attachment:${tasks.private}`].sort();
+      const productOnly = [`product_gallery:${product}`];
+      const cases: Array<[string, Record<string, string>, string[]]> = [
+        ['B', B.cookies, productOnly],
+        ['N', N.cookies, productOnly],
+        ['A', A.cookies, both],
+        ['S', S.cookies, both],
+        ['W', W, both],
+      ];
+      for (const [who, cookies, expected] of cases) {
+        const shown = await detail(cookies, F);
+        expect(shown.status, `${who}: ${shown.body}`).toBe(200);
+        expect(named(shown.data.references), who).toEqual(expected);
+        expectWireShape(shown.data.references, who);
+      }
+    });
+
+    it('every mutating by-id route answers B a detail filtered the same way', async () => {
+      const productOnly = [`product_gallery:${product}`];
+      const check = (response: LightMyRequestResponse, label: string): Detail & {
+        contentVersion: string;
+        previousVersion: { contentVersion: string } | null;
+      } => {
+        expect(response.statusCode, `${label}: ${response.body}`).toBe(200);
+        const data = (response.json() as { data: Detail & { contentVersion: string; previousVersion: { contentVersion: string } | null } }).data;
+        expect(named(data.references), label).toEqual(productOnly);
+        expectWireShape(data.references, label);
+        return data;
+      };
+      check(await inject('PATCH', `/api/v1/admin/assets/${F}`, B.cookies, { filename: `rvu-${run}-renamed.png` }), 'PATCH (rename)');
+      check(await inject('POST', `/api/v1/admin/assets/${F}/move`, B.cookies, { folderId: null }), 'move');
+      const { body, contentType } = multipartBody([
+        { name: 'file', filename: 'replacement.png', mime: 'image/png', value: TINY_PNG },
+      ]);
+      const replaced = check(
+        await inject('POST', `/api/v1/admin/assets/${F}/replace`, B.cookies, body, { 'content-type': contentType }),
+        'replace',
+      );
+      expect(replaced.previousVersion, 'the replace kept a previous version').not.toBeNull();
+      check(
+        await inject('POST', `/api/v1/admin/assets/${F}/previous-version/restore`, B.cookies, {
+          expectedContentVersion: replaced.contentVersion,
+          expectedPreviousContentVersion: replaced.previousVersion!.contentVersion,
+        }),
+        'previous-version restore',
+      );
+      check(await inject('PUT', `/api/v1/admin/assets/${F}/permalink`, B.cookies, { permalink: `rvu-${run}/used-by.png` }), 'permalink set');
+      check(await inject('DELETE', `/api/v1/admin/assets/${F}/permalink`, B.cookies), 'permalink remove');
+      check(await inject('POST', `/api/v1/admin/assets/${F}/restore`, B.cookies), 'restore');
+
+      // The control: the same file still names both records to W.
+      expect(named((await detail(W, F)).data.references)).toEqual(
+        [`product_gallery:${product}`, `task_attachment:${tasks.private}`].sort(),
+      );
+    });
+
+    it('a Project and an Opportunity reference beside a CMS embed: B sees the CMS page only', async () => {
+      const cases: Array<[string, string, string, Array<[string, Record<string, string>, boolean]>]> = [
+        [
+          'Project P1',
+          FP,
+          `project_attachment:${projectP1}`,
+          [['B', B.cookies, false], ['N', N.cookies, false], ['S', S.cookies, false], ['A', A.cookies, true], ['W', W, true]],
+        ],
+        [
+          'Opportunity of O1',
+          FO,
+          `crm_opportunity_attachment:${opportunityO1}`,
+          [['B', B.cookies, false], ['N', N.cookies, false], ['S', S.cookies, true], ['A', A.cookies, true], ['W', W, true]],
+        ],
+      ];
+      for (const [what, id, restricted, readers] of cases) {
+        const cms = `cms_body_embed:${id === FP ? cmsForProject : cmsForOpportunity}`;
+        for (const [who, cookies, seesRecord] of readers) {
+          const shown = await detail(cookies, id);
+          const label = `${what} · ${who}`;
+          expect(shown.status, `${label}: ${shown.body}`).toBe(200);
+          expect(named(shown.data.references), label).toEqual(seesRecord ? [cms, restricted].sort() : [cms]);
+          expectWireShape(shown.data.references, label);
+        }
+      }
+    });
+  });
+
   async function cleanupCount(): Promise<number> {
     const rows = await h
       .em()

@@ -189,6 +189,8 @@ describe('AssetReferenceRegistry attribution (feature 166, R-6)', () => {
 
     expect(restricted).toEqual([tasks]);
     expect(unrestricted).toEqual([catalog, cms]);
+    // The detail lists references in this order, whoever reads it (feature 166, US3).
+    expect(registry.inRegistrationOrder()).toEqual([catalog, tasks, cms]);
   });
 
   it('attributes one descriptor\'s batch on its own (the evaluator\'s per-descriptor question)', async () => {

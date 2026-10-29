@@ -28,6 +28,8 @@ const ASSET_ID = 'aabbccdd-1111-2222-3333-444455556666';
 const UNRESTRICTED = {
   exclusionFor: async () => [],
   hiddenAmong: async () => new Set<string>(),
+  // The registry these tests build is empty: an unrestricted caller's list is empty too.
+  visibleReferences: async () => [],
 };
 
 function seededAsset(overrides: Partial<Asset> = {}): Asset {
