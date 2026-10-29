@@ -121,6 +121,8 @@ export function TaskBoard(props: TaskBoardProps): ReactNode {
 
   const [columns, setColumns] = useState<TaskLaneView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** A board read is in flight — the first or a reload after a filter change (`aria-busy`). */
+  const [loading, setLoading] = useState(true);
   const [cardFields, setCardFields] = useState<TaskBoardCardField[]>([]);
   const [movingIds, setMovingIds] = useState<ReadonlySet<string>>(() => new Set());
   /** Per card: the targets the server named when it refused a move — they stand until the card moves. */
@@ -149,6 +151,7 @@ export function TaskBoard(props: TaskBoardProps): ReactNode {
 
   const load = useCallback(async (): Promise<void> => {
     const current = ++sequence.current;
+    setLoading(true);
     setError(null);
     try {
       const board = await tasksApi.board(new URLSearchParams(query));
@@ -157,6 +160,8 @@ export function TaskBoard(props: TaskBoardProps): ReactNode {
       setColumns(viewOf(board));
     } catch (failure) {
       if (current === sequence.current) setError(errorMessage(failure, t('board.error')));
+    } finally {
+      if (current === sequence.current) setLoading(false);
     }
   }, [query, t]);
 
@@ -388,77 +393,88 @@ export function TaskBoard(props: TaskBoardProps): ReactNode {
       <p role="status" className="sr-only">
         {notice}
       </p>
-      <KanbanBoard<TaskSummary, TaskLaneView>
-        columns={lanes}
-        getColumnId={columnId}
-        itemsByColumn={itemsByColumn}
-        getItemId={itemId}
-        disabled={!canWrite}
-        canDrop={(item, toColumnId): boolean => targetsOf(item).some((target) => target.code === toColumnId)}
-        onMove={(movedId, fromColumnId, toColumnId): Promise<void> | void => {
-          const item = itemsByColumn[fromColumnId]?.find((candidate) => candidate.id === movedId);
-          return item ? move(item, toColumnId, false) : undefined;
-        }}
-        getColumnState={(lane): TaskLaneView['state'] => lane.state}
-        renderColumnHeader={(lane): ReactNode => (
-          <div className="space-y-1">
-            <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-              <span
-                aria-hidden="true"
-                className="size-2.5 shrink-0 rounded-full border border-black/10"
-                style={{ backgroundColor: lane.status.color }}
-              />
-              {lane.status.name}
-            </h2>
-            {lane.state === 'ready' ? (
-              <p className="text-xs text-muted-foreground">{t('board.column.count', { count: lane.count })}</p>
-            ) : null}
-          </div>
-        )}
-        renderColumnLoading={(): ReactNode => (
-          <p role="status" className="text-xs text-muted-foreground">
-            {t('board.column.loading')}
+      {lanes.length === 0 ? (
+        // Neither the workflow nor the board has answered: say so, rather than draw an empty board (WCAG 4.1.3).
+        error ? null : (
+          <p role="status" className="text-sm text-muted-foreground">
+            {t('board.loading')}
           </p>
-        )}
-        renderColumnError={(): ReactNode => <p className="text-xs text-destructive">{t('board.column.error')}</p>}
-        renderColumnEmpty={(): ReactNode => (
-          <p className="text-xs text-muted-foreground">
-            {filtered ? t('board.column.emptyFiltered') : t('board.column.empty')}
-          </p>
-        )}
-        renderColumnFooter={(lane): ReactNode =>
-          lane.state === 'ready' && (lane.hasMore || lane.more !== 'idle') ? (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                {t('board.column.shown', { shown: lane.items.length, count: lane.count })}
+        )
+      ) : (
+        <div aria-busy={loading}>
+          <KanbanBoard<TaskSummary, TaskLaneView>
+            columns={lanes}
+            getColumnId={columnId}
+            itemsByColumn={itemsByColumn}
+            getItemId={itemId}
+            disabled={!canWrite}
+            canDrop={(item, toColumnId): boolean => targetsOf(item).some((target) => target.code === toColumnId)}
+            onMove={(movedId, fromColumnId, toColumnId): Promise<void> | void => {
+              const item = itemsByColumn[fromColumnId]?.find((candidate) => candidate.id === movedId);
+              return item ? move(item, toColumnId, false) : undefined;
+            }}
+            getColumnState={(lane): TaskLaneView['state'] => lane.state}
+            renderColumnHeader={(lane): ReactNode => (
+              <div className="space-y-1">
+                <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+                  <span
+                    aria-hidden="true"
+                    className="size-2.5 shrink-0 rounded-full border border-black/10"
+                    style={{ backgroundColor: lane.status.color }}
+                  />
+                  {lane.status.name}
+                </h2>
+                {lane.state === 'ready' ? (
+                  <p className="text-xs text-muted-foreground">{t('board.column.count', { count: lane.count })}</p>
+                ) : null}
+              </div>
+            )}
+            renderColumnLoading={(): ReactNode => (
+              <p role="status" className="text-xs text-muted-foreground">
+                {t('board.column.loading')}
               </p>
-              {lane.more === 'error' ? (
-                <p role="alert" className="text-xs text-destructive">
-                  {t('board.column.moreError')}
-                </p>
-              ) : null}
-              {lane.hasMore ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="min-h-11 w-full sm:min-h-8"
-                  disabled={lane.more === 'loading'}
-                  aria-busy={lane.more === 'loading'}
-                  aria-label={t('board.column.more', { status: lane.status.name })}
-                  onClick={(): void => void showMore(lane.status.code)}
-                >
-                  {t('board.column.moreAction')}
-                </Button>
-              ) : null}
-            </div>
-          ) : null
-        }
-        renderCard={renderCard}
-        labels={labels}
-        // Never taller than the window, so a long lane scrolls in itself; never
-        // lower than 28rem, so a short window still shows cards.
-        className="max-h-[max(28rem,calc(100dvh-8rem))]"
-      />
+            )}
+            renderColumnError={(): ReactNode => <p className="text-xs text-destructive">{t('board.column.error')}</p>}
+            renderColumnEmpty={(): ReactNode => (
+              <p className="text-xs text-muted-foreground">
+                {filtered ? t('board.column.emptyFiltered') : t('board.column.empty')}
+              </p>
+            )}
+            renderColumnFooter={(lane): ReactNode =>
+              lane.state === 'ready' && (lane.hasMore || lane.more !== 'idle') ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {t('board.column.shown', { shown: lane.items.length, count: lane.count })}
+                  </p>
+                  {lane.more === 'error' ? (
+                    <p role="alert" className="text-xs text-destructive">
+                      {t('board.column.moreError')}
+                    </p>
+                  ) : null}
+                  {lane.hasMore ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11 w-full sm:min-h-8"
+                      disabled={lane.more === 'loading'}
+                      aria-busy={lane.more === 'loading'}
+                      aria-label={t('board.column.more', { status: lane.status.name })}
+                      onClick={(): void => void showMore(lane.status.code)}
+                    >
+                      {t('board.column.moreAction')}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null
+            }
+            renderCard={renderCard}
+            labels={labels}
+            // Never taller than the window, so a long lane scrolls in itself; never
+            // lower than 28rem, so a short window still shows cards.
+            className="max-h-[max(28rem,calc(100dvh-8rem))]"
+          />
+        </div>
+      )}
     </div>
   );
 }

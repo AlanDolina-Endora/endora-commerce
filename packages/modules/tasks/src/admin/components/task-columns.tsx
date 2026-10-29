@@ -6,6 +6,7 @@ import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n'
 import { calendarDateLabel, NO_VALUE } from '../lib/labels.js';
 import { ContextLabel } from './ContextLabel.js';
 import { StatusBadge } from './StatusBadge.js';
+import { TaskMarkers } from './TaskMarkers.js';
 
 /** A Task's due date, and "Overdue" in words when it has passed while the Task is open. */
 function DueCell(props: { task: TaskSummary }): ReactNode {
@@ -44,7 +45,13 @@ export function useTaskColumns(): ResponsiveColumn<TaskSummary>[] {
       id: 'title',
       header: t('list.col.title'),
       primary: true,
-      render: (row) => <span className="[overflow-wrap:anywhere]">{row.title}</span>,
+      // Draft, private and sub-task markers beside the title (T092).
+      render: (row) => (
+        <span className="flex flex-col gap-1">
+          <span className="[overflow-wrap:anywhere]">{row.title}</span>
+          <TaskMarkers task={row} />
+        </span>
+      ),
     },
     {
       id: 'status',

@@ -154,6 +154,53 @@ describe('TaskBoard — lanes and reads', () => {
   });
 });
 
+describe('TaskBoard — feedback while it reads (T092)', () => {
+  it('says the board is loading, rather than drawing an empty one, until the workflow arrives', async () => {
+    getSpy.mockImplementation((path: string) =>
+      path === CARD_FIELDS_PATH ? Promise.resolve({ data: { fields: [], available: [], maxFields: 6 } }) : new Promise(() => {}),
+    );
+    renderTasks(<TaskBoard query="" workflow={null} filtered={false} />);
+    expect(await screen.findByText(en('board.loading'))).toHaveAttribute('role', 'status');
+    expect(screen.queryByRole('group', { name: en('board.column.label', { status: 'To do' }) })).toBeNull();
+  });
+
+  it('is aria-busy while the board is read, and not once it answered', async () => {
+    let answer: (value: unknown) => void = () => {};
+    getSpy.mockImplementation((path: string) => {
+      if (path === CARD_FIELDS_PATH) return Promise.resolve({ data: { fields: [], available: [], maxFields: 6 } });
+      if (path.startsWith(BOARD_PATH)) return new Promise((resolve) => (answer = resolve));
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    renderTasks(<TaskBoard query="" workflow={narrowWorkflow()} filtered={false} />);
+    await waitFor(() => expect(lane('To do').closest('[aria-busy]')).toHaveAttribute('aria-busy', 'true'));
+    await act(async () => answer({ data: boardData() }));
+    await screen.findByRole('link', { name: 'Order the racking' });
+    expect(lane('To do').closest('[aria-busy]')).toHaveAttribute('aria-busy', 'false');
+  });
+
+  it('marks a draft, a private Task and a sub-task on its card', async () => {
+    getSpy.mockImplementation((path: string) => {
+      if (path === CARD_FIELDS_PATH) return Promise.resolve({ data: { fields: [], available: [], maxFields: 6 } });
+      if (path.startsWith(BOARD_PATH)) {
+        const data = boardData();
+        data.columns[0]!.items = [
+          { ...RACKING, draft: true, private: true, parent: { id: ID(9), number: 'TSK-000009', available: true } },
+        ];
+        return Promise.resolve({ data });
+      }
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    await renderBoard();
+    const todo = lane('To do');
+    expect(within(todo).getByText(en('detail.draftBadge'))).toBeTruthy();
+    expect(within(todo).getByText(en('detail.privateBadge'))).toBeTruthy();
+    expect(within(todo).getByText(en('list.subtaskOf', { number: 'TSK-000009' }))).toBeTruthy();
+    // The title stays the card's only link: a link never starts a drag.
+    expect(cardTitles('To do')).toEqual(['Order the racking']);
+    expect(within(lane('In progress')).queryByText(en('detail.draftBadge'))).toBeNull();
+  });
+});
+
 describe('TaskBoard — moving a card', () => {
   it('accepts a drop only where the workflow allows a move from the card’s status', async () => {
     await renderBoard();

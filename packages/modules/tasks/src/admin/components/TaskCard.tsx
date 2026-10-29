@@ -13,6 +13,7 @@ import { TagChips } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { calendarDateLabel } from '../lib/labels.js';
 import { ContextLabel } from './ContextLabel.js';
+import { TaskMarkers } from './TaskMarkers.js';
 
 /** A card field's name: a built-in one in the module's words, a custom one by its labels. */
 export function boardFieldLabel(
@@ -108,8 +109,8 @@ function FieldValue(props: { field: TaskBoardCardField; task: TaskSummary }): Re
 
 /**
  * A Task as a board card (`specs/165-task-management/` User Story 3 scenario
- * 2, FR-022): its title, linked, then the fields the operator chose, in their
- * order, each named. A field the Task has no value for is left out.
+ * 2, FR-022): its title, linked, its draft, private and sub-task markers
+ * (T092), then the fields the operator chose, in their order, each named. A field the Task has no value for is left out.
  */
 export function TaskCard(props: { task: TaskSummary; fields: readonly TaskBoardCardField[] }): ReactNode {
   const t = useTranslation('tasks');
@@ -130,6 +131,7 @@ export function TaskCard(props: { task: TaskSummary; fields: readonly TaskBoardC
           {task.title}
         </Link>
       </p>
+      <TaskMarkers task={task} />
       {rows.length > 0 ? (
         <dl className="space-y-1 text-xs">
           {rows.map(({ field, value }) => (
