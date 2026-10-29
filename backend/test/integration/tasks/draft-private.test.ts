@@ -619,4 +619,85 @@ describe('tasks — drafts and private Tasks (US8)', () => {
       });
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // The history (T093, review finding F3)
+  // ---------------------------------------------------------------------------
+
+  describe('the history of a Task the reader may see', () => {
+    type Entry = { action: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null };
+
+    async function historyOf(id: string, cookies: Record<string, string>): Promise<Entry[]> {
+      const response = await call('GET', `/${id}/history?limit=100`, undefined, cookies);
+      expect(response.statusCode, response.body).toBe(200);
+      return (response.json() as { data: Entry[] }).data;
+    }
+
+    it('names a related or parent Task the reader may not see as no Task at all', async () => {
+      const shared = await create({ title: 'Shared, related to a secret' });
+      const open = await create({ title: 'Open neighbour' });
+      const secret = await create({ title: 'Secret neighbour', private: true });
+      const draft = await create({ title: 'Draft parent', draft: true });
+      expect((await call('PUT', `/${shared.id}/relations/${secret.id}`)).statusCode).toBe(204);
+      expect((await call('PUT', `/${shared.id}/relations/${open.id}`)).statusCode).toBe(204);
+      const child = await create({ title: 'Child of a draft' });
+      const adopted = await call('PATCH', `/${child.id}`, { parentTaskId: draft.id });
+      expect(adopted.statusCode, adopted.body).toBe(200);
+
+      const relatedIds = (entries: Entry[]) =>
+        entries
+          .filter((entry) => entry.action.startsWith('tasks.task.relat'))
+          .map((entry) => entry.after?.['relatedTaskId'])
+          .sort();
+      expect(relatedIds(await historyOf(shared.id, ann.cookies))).toEqual([open.id, secret.id].sort());
+      // Ben sees the open neighbour; the secret one is no Task, exactly as one that does not exist.
+      expect(relatedIds(await historyOf(shared.id, ben.cookies))).toEqual([open.id, null].sort());
+      expect(JSON.stringify(await historyOf(shared.id, ben.cookies))).not.toContain(secret.id);
+      // Rae holds tasks:see_private: the private neighbour is hers to see.
+      expect(relatedIds(await historyOf(shared.id, rae.cookies))).toEqual([open.id, secret.id].sort());
+
+      const parentIds = (entries: Entry[]) =>
+        entries
+          .filter((entry) => entry.action === 'tasks.task.parent_change')
+          .map((entry) => [entry.before?.['parentTaskId'], entry.after?.['parentTaskId']]);
+      expect(parentIds(await historyOf(child.id, ann.cookies))).toEqual([[null, draft.id]]);
+      expect(parentIds(await historyOf(child.id, sam.cookies))).toEqual([[null, null]]);
+      expect(JSON.stringify(await historyOf(child.id, sam.cookies))).not.toContain(draft.id);
+    });
+
+    it('shows a reminder only to the person who set it and to those it names (admin-api §1)', async () => {
+      const task = await create({ title: 'Reminded', assigneeIds: [ann.adminUserId, ben.adminUserId] });
+      const own = await call('POST', `/${task.id}/reminders`, {
+        remindAt: '2032-03-10T09:00:00.000Z',
+        recipientIds: [ann.adminUserId],
+      });
+      expect(own.statusCode, own.body).toBe(201);
+      const naming = await call('POST', `/${task.id}/reminders`, {
+        remindAt: '2032-03-11T09:00:00.000Z',
+        recipientIds: [ben.adminUserId],
+      });
+      expect(naming.statusCode, naming.body).toBe(201);
+      const ownId = (own.json() as { data: { id: string } }).data.id;
+      const namingId = (naming.json() as { data: { id: string } }).data.id;
+      expect((await call('DELETE', `/${task.id}/reminders/${ownId}`)).statusCode).toBe(204);
+
+      const reminders = (entries: Entry[]) =>
+        entries
+          .filter((entry) => entry.action.startsWith('tasks.reminder.'))
+          .map((entry) => `${entry.action}:${String((entry.after ?? entry.before)?.['reminderId'])}`)
+          .sort();
+      expect(reminders(await historyOf(task.id, ann.cookies))).toEqual(
+        [`tasks.reminder.add:${ownId}`, `tasks.reminder.add:${namingId}`, `tasks.reminder.remove:${ownId}`].sort(),
+      );
+      // Ben is named by one; Ann's own reminder, set and removed, is not his to see.
+      expect(reminders(await historyOf(task.id, ben.cookies))).toEqual([`tasks.reminder.add:${namingId}`]);
+      expect(JSON.stringify(await historyOf(task.id, ben.cookies))).not.toContain(ownId);
+      // Sam sees the Task and neither reminder.
+      expect(reminders(await historyOf(task.id, sam.cookies))).toEqual([]);
+      // A page is counted over what the reader is shown, not over what was recorded.
+      const first = await call('GET', `/${task.id}/history?limit=1`, undefined, sam.cookies);
+      expect((first.json() as { data: Entry[] }).data.map((entry) => entry.action)).toEqual(['tasks.task.create']);
+      expect((first.json() as { pagination: { hasMore: boolean } }).pagination.hasMore).toBe(false);
+    });
+  });
 });

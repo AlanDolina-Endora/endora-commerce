@@ -243,6 +243,7 @@ export class TaskReminderService {
             remindAt: remindAt.toISOString(),
             offsetMinutes,
             recipientIds: [...body.recipientIds],
+            createdById: me,
           },
         };
       },
@@ -279,6 +280,7 @@ export class TaskReminderService {
             remindAt: reminder.remindAt,
             offsetMinutes: reminder.offsetMinutes,
             recipientIds: reminder.recipients.map((r) => r.id),
+            createdById: reminder.createdBy?.id ?? null,
           },
           after: null,
         };
