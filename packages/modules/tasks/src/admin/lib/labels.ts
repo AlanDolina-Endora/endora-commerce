@@ -16,8 +16,8 @@ export function errorMessage(error: unknown, fallback: string): string {
 
 /*
  * Dates on the Tasks screens are written one way, in the admin UI language
- * (165 T095): a calendar date as the language's medium date (*Oct 30, 2026*,
- * *30 paź 2026*), a moment as that date and the short time — never seconds,
+ * (165 T095): a calendar date as the language's medium date (*Oct 30, 2026*
+ * in English), a moment as that date and the short time — never seconds,
  * never the browser's own locale.
  */
 const dateFormats = new Map<string, Intl.DateTimeFormat>();
@@ -58,7 +58,7 @@ const SIZE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte'] as const;
 /**
  * A file size as a person reads it — *193 bytes*, *2.5 MB* — in the language on
  * screen (Projects' helper). Under a kilobyte the unit is spelled out, which
- * gives it its plural (*193 bajty*, *5 bajtów*); the short form of `byte` is
+ * gives it the language's plural forms; the short form of `byte` is
  * *byte* in English, which the walk found as *193 byte* (165 T095).
  */
 export function fileSizeLabel(bytes: number, language: string): string {
