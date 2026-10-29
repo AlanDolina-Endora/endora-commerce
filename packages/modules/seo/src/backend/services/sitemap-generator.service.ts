@@ -4,6 +4,7 @@ import {
   isInsideWindow,
   isProductVisibleTo,
   channelUrlLanguages,
+  cmsLocalizedPage,
   productPath,
   storefrontPagePath,
   type CatalogProductAvailabilityPort,
@@ -202,8 +203,13 @@ export class SitemapGeneratorService {
           ? channelLanguages
           : channelLanguages.filter((code) => own.some((l) => l.toLowerCase() === code.toLowerCase()));
       for (const languageCode of languages) {
+        // 163 R24 — each language at its own slug.
+        const slug = cmsLocalizedPage(
+          { name: page.name, slug: page.slug, languages: own, translations: page.translations ?? null },
+          languageCode,
+        ).slug;
         urls.push({
-          loc: pageUrl(`/${page.slug}`, languageCode),
+          loc: pageUrl(`/${slug}`, languageCode),
           lastmod: page.publishedAt ?? page.updatedAt,
           changefreq: 'monthly',
           priority: 0.5,

@@ -69,6 +69,27 @@ describe('CMS slugs never collide with a language prefix', () => {
     expect(JSON.stringify(body.error)).toContain(segment);
   });
 
+  // 163 R24 — a page's per-language slugs are addresses too: each is reserved alike.
+  it('refuses a per-language slug that starts with a channel prefix (R24)', async () => {
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/cms/pages',
+      headers: { 'content-type': 'application/json' },
+      cookies: adminCookie,
+      payload: JSON.stringify({
+        name: 'Prefix translation',
+        slug: `ok-${Date.now()}`,
+        active: true,
+        description: null,
+        salesChannelIds: [channelId],
+        languages: ['pl-PL', 'en-US'],
+        translations: { 'en-US': { slug: 'en-gb/about' } },
+      }),
+    });
+    expect(res.statusCode).toBe(409);
+    expect(JSON.stringify(res.json())).toContain('en-gb');
+  });
+
   it('accepts a prefix of a language no channel serves (OR-12)', async () => {
     const res = await createPage(`xq/o-nas-${Date.now()}`);
     expect(res.statusCode).toBe(201);
@@ -81,6 +102,23 @@ describe('CMS slugs never collide with a language prefix', () => {
     expect(shadowed.statusCode).toBe(201);
     const plain = await createPage(`plain-${Date.now()}`);
     expect(plain.statusCode).toBe(201);
+    // R24: a per-language slug can be the one the prefix hides.
+    const translated = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/cms/pages',
+      headers: { 'content-type': 'application/json' },
+      cookies: adminCookie,
+      payload: JSON.stringify({
+        name: 'Translated',
+        slug: `translated-${Date.now()}`,
+        active: true,
+        description: null,
+        salesChannelIds: [channelId],
+        languages: ['pl-PL', 'en-US'],
+        translations: { 'en-US': { slug: 'de/translated' } },
+      }),
+    });
+    expect(translated.statusCode, translated.body).toBe(201);
     // German joins the channel after the page was saved.
     await h.em().getConnection().execute(
       `update sales_channels set languages = '["pl-PL","en-US","en-GB","de-DE"]'::jsonb where id = ?`,
@@ -93,5 +131,6 @@ describe('CMS slugs never collide with a language prefix', () => {
     const pages = (list.json() as { data: Array<{ slug: string; shadowedByLanguagePrefix?: { prefix: string; channelCodes: string[] } }> }).data;
     expect(pages.find((p) => p.slug === 'de')?.shadowedByLanguagePrefix).toEqual({ prefix: 'de', channelCodes: [code] });
     expect(pages.find((p) => p.slug.startsWith('plain-'))?.shadowedByLanguagePrefix).toBeUndefined();
+    expect(pages.find((p) => p.slug.startsWith('translated-'))?.shadowedByLanguagePrefix?.prefix).toBe('de');
   });
 });

@@ -430,12 +430,13 @@ describe('PageEditor breadcrumb settings (feature 163)', () => {
     await screen.findByRole('heading', { level: 1, name: 'Edited page' });
 
     const settings = screen.getByRole('complementary', { name: shell('settings') });
-    expect(within(settings).getByText('/edited')).toBeTruthy();
+    // R24: the page's own address, and the active language's, which inherits it.
+    expect(within(settings).getAllByText('/edited')).toHaveLength(2);
     const nested = within(settings).getByRole('checkbox', { name: copy('pageEditor.parentPathInUrl') });
     expect((nested as HTMLInputElement).checked).toBe(false);
 
     fireEvent.click(nested);
-    expect(await within(settings).findByText('/client-zone/edited')).toBeTruthy();
+    expect(await within(settings).findAllByText('/client-zone/edited')).toHaveLength(2);
 
     fireEvent.click(screen.getByRole('button', { name: copy('common.save') }));
     await waitFor(() => expect(patch).toHaveBeenCalled());
@@ -457,6 +458,130 @@ describe('PageEditor breadcrumb settings (feature 163)', () => {
       'pageEditor.breadcrumbs.scheme.dark',
     ];
     for (const key of keys) {
+      expect(en[key], key).toBeTruthy();
+      expect(pl[key], key).toBeTruthy();
+      expect(pl[key], key).not.toBe(en[key]);
+    }
+  });
+});
+
+/**
+ * Feature 163 R24 (issue #521): a page's name, slug and description per
+ * language, beside its meta fields. The card edits the language the canvas
+ * shows; an empty field inherits the page's own value, which it shows as the
+ * placeholder, and the address preview follows the language's slug.
+ */
+describe('PageEditor language version (feature 163, R24)', () => {
+  const translated = {
+    ...stored,
+    id: 'entity-3',
+    name: 'Edited page',
+    slug: 'edited',
+    description: 'Base description',
+    languages: ['en-US', 'pl-PL'],
+    parentPageId: null,
+    parentPathInUrl: false,
+    translations: { 'pl-PL': { name: 'Strona', slug: 'strona' } },
+    meta: { 'en-US': { title: 'EN title' }, 'pl-PL': { title: 'PL title', description: 'PL description' } },
+  };
+
+  beforeEach(() => {
+    const read = apiClient.get as unknown as { getMockImplementation(): ((path: string) => Promise<unknown>) | undefined };
+    const fallback = read.getMockImplementation()!;
+    vi.spyOn(apiClient, 'get').mockImplementation(((path: string) => {
+      if (path === '/api/v1/admin/cms/pages/entity-3') return Promise.resolve({ data: translated });
+      if (path.startsWith('/api/v1/admin/cms/pages?') || path === '/api/v1/admin/cms/pages') {
+        return Promise.resolve({ data: [], nextCursor: null });
+      }
+      return fallback(path);
+    }) as never);
+  });
+
+  function renderTranslated(): void {
+    renderWithI18n(
+      <MemoryRouter initialEntries={['/cms/pages/entity-3']}>
+        <Routes>
+          <Route path="/cms/pages/:id" element={<PageEditor />} />
+        </Routes>
+      </MemoryRouter>,
+      { cms: en, core: coreEn },
+    );
+  }
+
+  const label = (key: string, language: string) => copy(key).replace('{language}', language);
+
+  it('edits the language the canvas shows, inheriting the page fields, and saves every language', async () => {
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({ data: translated } as never);
+    renderTranslated();
+    await screen.findByRole('heading', { level: 1, name: 'Edited page' });
+    const settings = screen.getByRole('complementary', { name: shell('settings') });
+    expect(within(settings).getByText(copy('pageEditor.languageVersion.title'))).toBeTruthy();
+
+    // en-US, the first language, overrides nothing: its fields are empty and show what they inherit.
+    const enName = within(settings).getByLabelText(label('pageEditor.languageVersion.name', 'en-US')) as HTMLInputElement;
+    expect(enName.value).toBe('');
+    expect(enName.placeholder).toBe('Edited page');
+    expect((within(settings).getByLabelText(label('pageEditor.languageVersion.description', 'en-US')) as HTMLTextAreaElement).placeholder).toBe(
+      'Base description',
+    );
+    expect((within(settings).getByLabelText(label('pageEditor.languageVersion.metaTitle', 'en-US')) as HTMLInputElement).value).toBe('EN title');
+
+    fireEvent.click(within(settings).getByRole('tab', { name: 'pl-PL' }));
+    const plSlug = within(settings).getByLabelText(label('pageEditor.languageVersion.slug', 'pl-PL')) as HTMLInputElement;
+    expect((within(settings).getByLabelText(label('pageEditor.languageVersion.name', 'pl-PL')) as HTMLInputElement).value).toBe('Strona');
+    expect(plSlug.value).toBe('strona');
+    expect(plSlug.placeholder).toBe('edited');
+    expect(within(settings).getByText('/strona')).toBeTruthy();
+    expect((within(settings).getByLabelText(label('pageEditor.languageVersion.metaTitle', 'pl-PL')) as HTMLInputElement).value).toBe('PL title');
+
+    fireEvent.change(plSlug, { target: { value: 'Nowa-Strona' } });
+    expect(within(settings).getByText('/nowa-strona')).toBeTruthy();
+    fireEvent.change(within(settings).getByLabelText(label('pageEditor.languageVersion.description', 'pl-PL')), {
+      target: { value: 'Opis' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: copy('common.save') }));
+
+    await waitFor(() => expect(patch).toHaveBeenCalled());
+    expect(patch.mock.calls[0]![1]).toMatchObject({
+      name: 'Edited page',
+      slug: 'edited',
+      translations: { 'pl-PL': { name: 'Strona', slug: 'nowa-strona', description: 'Opis' } },
+      meta: { 'en-US': { title: 'EN title' }, 'pl-PL': { title: 'PL title', description: 'PL description' } },
+    });
+  });
+
+  it('derives a language slug from its name until the slug is edited', async () => {
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({ data: translated } as never);
+    renderTranslated();
+    await screen.findByRole('heading', { level: 1, name: 'Edited page' });
+    const settings = screen.getByRole('complementary', { name: shell('settings') });
+
+    fireEvent.change(within(settings).getByLabelText(label('pageEditor.languageVersion.name', 'en-US')), {
+      target: { value: 'About the company' },
+    });
+    expect((within(settings).getByLabelText(label('pageEditor.languageVersion.slug', 'en-US')) as HTMLInputElement).value).toBe(
+      'about-the-company',
+    );
+    fireEvent.click(screen.getByRole('button', { name: copy('common.save') }));
+    await waitFor(() => expect(patch).toHaveBeenCalled());
+    expect((patch.mock.calls[0]![1] as { translations: unknown }).translations).toEqual({
+      'en-US': { name: 'About the company', slug: 'about-the-company' },
+      'pl-PL': { name: 'Strona', slug: 'strona' },
+    });
+  });
+
+  it('ships every language-version label in both languages, translated', () => {
+    for (const key of [
+      'pageEditor.languageVersion.title',
+      'pageEditor.languageVersion.help',
+      'pageEditor.languageVersion.name',
+      'pageEditor.languageVersion.slug',
+      'pageEditor.languageVersion.description',
+      'pageEditor.languageVersion.metaTitle',
+      'pageEditor.languageVersion.metaDescription',
+      'pageEditor.languageVersion.metaKeywords',
+      'pageEditor.pageFieldsHelp',
+    ]) {
       expect(en[key], key).toBeTruthy();
       expect(pl[key], key).toBeTruthy();
       expect(pl[key], key).not.toBe(en[key]);

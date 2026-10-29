@@ -331,6 +331,50 @@ storefront's breadcrumb links, canonical link, `og:url` and sitemap use the
 path, and a Page Builder link to a page is rendered at the page's path in the
 request's channel.
 
+### Name, slug and description per language
+
+A page's **Name**, **Slug** and **Description** in the *Page metadata* card
+are its defaults. The **Language version** card gives each language of the
+page its own name, slug and description, next to that language's meta title,
+meta description and meta keywords. A field left empty uses the page's own
+value, which the card shows greyed out as a hint. The card edits the language
+the canvas shows: the language tabs in the card and above the canvas switch
+both. While a language's slug has not been typed, it follows that language's
+name, as a new page's slug follows its name.
+
+The overrides are stored in `cms_pages.translations`
+(`{ "<lang>": { "name", "slug", "description" } }`, `{}` for a page that
+overrides nothing) and are part of the `cms_page.update` audit entry. An
+override counts only while the page has its language: removing a language
+from the page keeps its overrides stored but unused, and adding the language
+back brings them back. The API refuses an override of a language the page does
+not have with `400 CMS_LANGUAGE_NOT_IN_CHANNEL_SCOPE`.
+
+On the storefront:
+
+- **Each language is served at its own slug** — and, for a nested page, at its
+  ancestors' slugs in that language, under that language's path prefix, as a
+  product's address is: `/pl/o-nas` in Polish, `/en/about-us` in English (`/o-nas`
+  when the channel does not prefix its default language — see *Sales channels*).
+- **A page is found by its slug in any of its languages**, and by its own slug,
+  and served in the visitor's language. When the address asked for is not the
+  page's address in that language — a visitor switched language on the page —
+  the storefront answers a permanent (308) redirect to the right one.
+- **Two pages cannot share an address in one channel and one language.** The
+  same slug may be one page's in Polish and another page's in English. A save
+  that breaks this is refused with `409 CMS_SLUG_CONFLICT` (`details.language`
+  names the language) and nothing is written.
+- The page's name in the served language is its title fallback and its crumb in
+  every breadcrumb trail, and a Page Builder link to a page is rendered at the
+  page's address in the served language.
+- The canonical link is the served language's address; every language is a
+  `hreflang` alternate, and the sitemap lists every language's address with
+  the others as alternates. The reserved-segment rule checks every language's
+  slug.
+
+The description is the page's internal note and is not shown on the storefront.
+The page list's search finds a page by its name or slug in any language.
+
 ### Sharing image and search metadata
 
 The page editor's **Sharing** card picks a **Sharing image** from the Assets
@@ -345,9 +389,10 @@ The storefront then emits, for a CMS page and for a CMS-backed home page:
 - `og:image` and `twitter:card` `summary_large_image` when an image exists
   (`summary` otherwise);
 - `og:locale` for the served language and `og:locale:alternate` for the
-  page's other languages that have content. There are no `hreflang` links:
-  one storefront URL serves every language, so per-language alternates would
-  all point at the same address;
+  page's other languages that have content. A CMS page also has `hreflang`
+  links, one per language, because each language has its own address (see
+  *Name, slug and description per language*). The CMS-backed home page has
+  none: `/` serves every language;
 - `Organization` structured data with the shop logo and social profiles from
   the Settings module (`shop.logo_asset_id`, `shop.social_profiles`).
 
@@ -1310,7 +1355,7 @@ page render.
 | GET     | `/pages`                                            | Paginated Page list with filters.               |
 | POST    | `/pages`                                            | Create a Page (always starts as `draft`).       |
 | GET     | `/pages/:id`                                        | Detail with full content envelope + version.    |
-| PATCH   | `/pages/:id`                                        | Edit metadata, including `parentPageId`, `parentPathInUrl`, `breadcrumbsVisible`, `breadcrumbsScheme`, `breadcrumbsOverlay` and `shareImageAssetId`; honours `If-Match` via `version`. A cyclic or too-deep parent answers `422 CMS_PAGE_PARENT_CYCLE`; an address another page has answers `409 CMS_SLUG_CONFLICT`. |
+| PATCH   | `/pages/:id`                                        | Edit metadata, including `parentPageId`, `parentPathInUrl`, `breadcrumbsVisible`, `breadcrumbsScheme`, `breadcrumbsOverlay`, `shareImageAssetId` and `translations` (the per-language name, slug and description, replaced whole); honours `If-Match` via `version`. A cyclic or too-deep parent answers `422 CMS_PAGE_PARENT_CYCLE`; an address another page has answers `409 CMS_SLUG_CONFLICT`. |
 | PUT     | `/pages/:id/content/:language`                      | Save the Page Builder tree per language. A duplicate or reserved anchor answers `422 CMS_DUPLICATE_ANCHOR` / `CMS_RESERVED_ANCHOR`. |
 | POST    | `/pages/:id/{publish,archive,unarchive}`            | Lifecycle transitions.                          |
 | DELETE  | `/pages/:id`                                        | Hard delete (channels are cascade-unbound).     |
@@ -1331,11 +1376,14 @@ page render.
 
 | Method | Path                              | Returns                                                        |
 | ------ | --------------------------------- | -------------------------------------------------------------- |
-| GET    | `/pages/by-slug?slug=…&language=…`| Resolved Page with `embeds.blocks`, `embeds.templates`, assets. `slug` takes the page's whole public path; a nested page's own slug also resolves.|
+| GET    | `/pages/by-slug?slug=…&language=…`| Resolved Page with `embeds.blocks`, `embeds.templates`, assets. `slug` takes the page's whole public path in any of its languages; a nested page's own slug also resolves.|
 | GET    | `/blocks/by-code?code=…&language=…`| Resolved Block (single, channel-filtered, active-only).       |
 | GET    | `/hooks/by-code?code=…&language=…`| Ordered active Block list for the named Hook.                  |
 
-The resolved Page also carries `path` (its public path in the channel),
+The resolved Page also carries `path` (its public path in the channel and the
+served language), `url` (that path as the storefront links it, under the
+language's path prefix), `alternates` (`{language, url}` for
+every language it is served in), `name` in the served language,
 `breadcrumbs` (`visible`, `scheme`, `overlay: true` only when the trail lies
 over the first section, and the `trail` of ancestors, each
 `{name, slug, path}` with `slug` and `path` null for one not published in the

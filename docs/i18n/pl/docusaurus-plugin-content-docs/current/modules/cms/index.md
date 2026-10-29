@@ -347,6 +347,51 @@ nawigacji w storefroncie, link kanoniczny, `og:url` i mapa witryny używają
 ścieżki, a link Page Buildera do strony prowadzi pod jej ścieżkę w kanale
 żądania.
 
+### Nazwa, slug i opis w każdym języku
+
+**Nazwa**, **Slug** i **Opis** strony w karcie *Metadane strony* to jej
+wartości domyślne. Karta **Wersja językowa** daje każdemu językowi strony
+własną nazwę, slug i opis, obok tytułu, opisu i słów kluczowych meta w tym
+języku. Puste pole oznacza wartość strony, którą karta pokazuje na szaro jako
+podpowiedź. Karta edytuje język widoczny na płótnie: zakładki języków w karcie
+i nad płótnem przełączają oba. Dopóki slug języka nie został wpisany, podąża
+za nazwą w tym języku, tak jak slug nowej strony podąża za jej nazwą.
+
+Nadpisania są zapisane w `cms_pages.translations`
+(`{ "<lang>": { "name", "slug", "description" } }`, `{}` dla strony, która
+niczego nie nadpisuje) i wchodzą do wpisu audytu `cms_page.update`.
+Nadpisanie działa tylko wtedy, gdy strona ma dany język: usunięcie języka ze
+strony zostawia jego nadpisania zapisane, ale nieużywane, a ponowne dodanie
+języka je przywraca. API odrzuca nadpisanie języka, którego strona nie ma,
+kodem `400 CMS_LANGUAGE_NOT_IN_CHANNEL_SCOPE`.
+
+W storefroncie:
+
+- **Każdy język ma własny adres ze swoim slugiem** — a dla strony
+  zagnieżdżonej także ze slugami przodków w tym języku, pod prefiksem tego języka,
+  tak jak adres produktu: `/pl/o-nas` po polsku, `/en/about-us` po angielsku
+  (`/o-nas`, gdy kanał nie dodaje prefiksu do języka domyślnego — zob. *Kanały
+  sprzedaży*).
+- **Stronę można znaleźć po slugu w dowolnym z jej języków** oraz po jej
+  własnym slugu, a wyświetla się w języku odwiedzającego. Gdy żądany adres nie
+  jest adresem strony w tym języku — odwiedzający zmienił język na stronie —
+  storefront odpowiada trwałym przekierowaniem (308) na właściwy.
+- **Dwie strony nie mogą mieć tego samego adresu w jednym kanale i jednym
+  języku.** Ten sam slug może należeć do jednej strony po polsku i do innej po
+  angielsku. Zapis, który łamie tę zasadę, jest odrzucany kodem
+  `409 CMS_SLUG_CONFLICT` (`details.language` wskazuje język) i nic nie jest
+  zapisywane.
+- Nazwa strony w wyświetlanym języku jest zapasowym tytułem i jej pozycją w
+  każdej ścieżce nawigacji, a link Page Buildera do strony prowadzi pod jej
+  adres w wyświetlanym języku.
+- Link kanoniczny to adres w wyświetlanym języku; każdy język jest alternatywą
+  `hreflang`, a mapa witryny podaje adres każdego języka z pozostałymi jako
+  alternatywami. Reguła zastrzeżonych segmentów sprawdza slug każdego języka.
+
+Opis to wewnętrzna notatka strony i nie jest pokazywany w storefroncie.
+Wyszukiwarka na liście stron znajduje stronę po nazwie lub slugu w dowolnym
+języku.
+
 ### Obraz do udostępniania i metadane dla wyszukiwarek
 
 Karta **Udostępnianie** w edytorze strony wybiera **Obraz do udostępniania** z
@@ -361,9 +406,10 @@ Storefront publikuje wtedy, dla strony CMS i dla strony głównej opartej na CMS
 - `og:image` oraz `twitter:card` `summary_large_image`, gdy obraz istnieje
   (w przeciwnym razie `summary`);
 - `og:locale` dla wyświetlanego języka i `og:locale:alternate` dla pozostałych
-  języków strony, które mają treść. Linków `hreflang` nie ma: jeden adres
-  storefrontu obsługuje wszystkie języki, więc alternatywy językowe wskazywałyby
-  ten sam adres;
+  języków strony, które mają treść. Strona CMS ma też linki `hreflang`, po
+  jednym na język, bo każdy język ma własny adres (zob. *Nazwa, slug i opis w
+  każdym języku*). Strona główna oparta na CMS ich nie ma: `/` obsługuje
+  wszystkie języki;
 - dane strukturalne `Organization` z logo sklepu i profilami społecznościowymi
   z modułu Settings (`shop.logo_asset_id`, `shop.social_profiles`).
 
@@ -1381,7 +1427,7 @@ albo nieudane pobranie nic nie wyświetla — hooki nie mogą zepsuć wyświetla
 | GET     | `/pages`                                            | Stronicowana lista stron z filtrami.               |
 | POST    | `/pages`                                            | Utworzenie strony (zawsze zaczyna jako `draft`). |
 | GET     | `/pages/:id`                                        | Szczegóły z pełną treścią i wersją.  |
-| PATCH   | `/pages/:id`                                        | Edycja metadanych, w tym `parentPageId`, `parentPathInUrl`, `breadcrumbsVisible`, `breadcrumbsScheme`, `breadcrumbsOverlay` i `shareImageAssetId`; uwzględnia `If-Match` przez `version`. Rodzic tworzący cykl albo zbyt głęboki daje `422 CMS_PAGE_PARENT_CYCLE`; adres, który ma już inna strona, daje `409 CMS_SLUG_CONFLICT`. |
+| PATCH   | `/pages/:id`                                        | Edycja metadanych, w tym `parentPageId`, `parentPathInUrl`, `breadcrumbsVisible`, `breadcrumbsScheme`, `breadcrumbsOverlay`, `shareImageAssetId` i `translations` (nazwa, slug i opis w każdym języku, zastępowane w całości); uwzględnia `If-Match` przez `version`. Rodzic tworzący cykl albo zbyt głęboki daje `422 CMS_PAGE_PARENT_CYCLE`; adres, który ma już inna strona, daje `409 CMS_SLUG_CONFLICT`. |
 | PUT     | `/pages/:id/content/:language`                      | Zapis drzewa Page Buildera dla danego języka. Powtórzona albo zastrzeżona kotwica daje `422 CMS_DUPLICATE_ANCHOR` / `CMS_RESERVED_ANCHOR`. |
 | POST    | `/pages/:id/{publish,archive,unarchive}`            | Przejścia w cyklu życia.                          |
 | DELETE  | `/pages/:id`                                        | Trwałe usunięcie (przypisania do kanałów są usuwane kaskadowo).        |
@@ -1402,11 +1448,14 @@ albo nieudane pobranie nic nie wyświetla — hooki nie mogą zepsuć wyświetla
 
 | Metoda | Ścieżka                              | Zwraca                                                        |
 | ------ | --------------------------------- | -------------------------------------------------------------- |
-| GET    | `/pages/by-slug?slug=…&language=…`| Stronę z `embeds.blocks`, `embeds.templates` i plikami. `slug` przyjmuje całą ścieżkę publiczną strony; własny slug zagnieżdżonej strony też działa. |
+| GET    | `/pages/by-slug?slug=…&language=…`| Stronę z `embeds.blocks`, `embeds.templates` i plikami. `slug` przyjmuje całą ścieżkę publiczną strony w dowolnym z jej języków; własny slug zagnieżdżonej strony też działa. |
 | GET    | `/blocks/by-code?code=…&language=…`| Blok (jeden, z filtrowaniem według kanału, tylko aktywny).|
 | GET    | `/hooks/by-code?code=…&language=…`| Uporządkowaną listę aktywnych bloków dla wskazanego hooka.     |
 
-Odczytana strona zawiera też `path` (swoją ścieżkę publiczną w kanale),
+Odczytana strona zawiera też `path` (swoją ścieżkę publiczną w kanale i
+wyświetlanym języku), `url` (tę ścieżkę tak, jak linkuje ją storefront, pod
+prefiksem języka), `alternates` (`{language, url}` dla każdego
+języka, w którym jest wyświetlana), `name` w wyświetlanym języku,
 `breadcrumbs` (`visible`, `scheme`, `overlay: true` tylko wtedy, gdy ścieżka
 leży na pierwszej sekcji, i `trail` — listę przodków, każdy jako
 `{name, slug, path}`, ze `slug` i `path` równymi null dla przodka

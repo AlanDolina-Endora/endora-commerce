@@ -5,6 +5,7 @@ import {
   firstSlugSegment,
   type CmsPageDetail,
   type CmsPageSummary,
+  type CmsPageTranslations,
   type CreateCmsPageRequest,
   type PatchCmsPageRequest,
 } from '@endora-commerce/contracts';
@@ -40,6 +41,8 @@ type PageRow = {
   parent_path_in_url?: boolean | null;
   /** R21H (T355): the trail over the first section. */
   breadcrumbs_overlay?: boolean | null;
+  /** R24: name, slug and description per language; absent before the migration ran. */
+  translations?: CmsPageTranslations | null;
 };
 
 const emptyContent = { languages: {} };
@@ -89,6 +92,24 @@ export function normalizeReservedSegments(value: unknown): string[] {
     if (segment.length > 0) out.add(segment);
   }
   return [...out];
+}
+
+/**
+ * The per-language overrides as they are stored (R24): a blank field is an
+ * inherited one, so it is not written, and a language left with no field is
+ * not written either. One spelling of "inherits" — absent — keeps the stored
+ * map comparable across saves and its audit entries free of noise.
+ */
+export function normalizeTranslations(translations: CmsPageTranslations): CmsPageTranslations {
+  const out: CmsPageTranslations = {};
+  for (const [language, entry] of Object.entries(translations)) {
+    const kept: CmsPageTranslations[string] = {};
+    if (entry.name !== undefined && entry.name.trim().length > 0) kept.name = entry.name.trim();
+    if (entry.slug !== undefined && entry.slug.trim().length > 0) kept.slug = entry.slug.trim();
+    if (entry.description !== undefined && entry.description.trim().length > 0) kept.description = entry.description;
+    if (Object.keys(kept).length > 0) out[language] = kept;
+  }
+  return out;
 }
 
 /**
@@ -200,6 +221,30 @@ export class CmsPageService {
     );
   }
 
+  /**
+   * R24: an override is written only for a language the page declares. A
+   * stored one whose language was removed stays, and stops counting
+   * (`cmsLocalizedPage`); a *request* naming such a language is a mistake the
+   * operator should hear about.
+   */
+  private assertTranslationsInLanguages(translations: CmsPageTranslations, languages: readonly string[]): void {
+    const undeclared = Object.keys(translations).find((language) => !languages.includes(language));
+    if (undeclared) {
+      throw new HttpError(
+        400,
+        ERROR_CODES.CMS_LANGUAGE_NOT_IN_CHANNEL_SCOPE,
+        `CMS Page language "${undeclared}" is not assigned to this page.`,
+      );
+    }
+  }
+
+  /** The page's slug and every language slug the request writes (R24) — what the reserved-segment refusal reads. */
+  private requestedSlugs(slug: string | undefined, translations: CmsPageTranslations | undefined): string[] {
+    const slugs = slug !== undefined ? [slug] : [];
+    for (const entry of Object.values(translations ?? {})) if (entry.slug) slugs.push(entry.slug);
+    return slugs;
+  }
+
   private async invalidateForPageId(
     pageId: string,
     options: { withDescendants?: boolean } = {},
@@ -243,6 +288,7 @@ export class CmsPageService {
       active: row.active,
       description: row.description,
       languages: row.languages,
+      translations: row.translations ?? {},
       salesChannelIds: await this.channelIdsFor(row.id, em),
       meta: this.combineMeta(row),
       parentPageId: row.parent_page_id,
@@ -401,7 +447,8 @@ export class CmsPageService {
         409,
         ERROR_CODES.CMS_SLUG_CONFLICT,
         `Another CMS Page is already served at "/${duplicate.path}".`,
-        { path: duplicate.path },
+        // R24: the language whose address is taken, when it is a language's.
+        { path: duplicate.path, ...(duplicate.language ? { language: duplicate.language } : {}) },
       );
     }
   }
@@ -429,7 +476,9 @@ export class CmsPageService {
     }
     if (filters.q) {
       params.push(`%${filters.q.toLowerCase()}%`);
-      where.push('(lower(p.name) like ? or lower(p.slug) like ?)');
+      // R24: a page is found by its name or slug in any language too.
+      where.push('(lower(p.name) like ? or lower(p.slug) like ? or lower(p.translations::text) like ?)');
+      params.push(`%${filters.q.toLowerCase()}%`);
       params.push(`%${filters.q.toLowerCase()}%`);
     }
 
@@ -445,9 +494,15 @@ export class CmsPageService {
     // Feature 167 (FR-041) — mark a page shadowed by a channel language prefix.
     const prefixes = await this.languagePrefixes();
     const data = summaries.map((page) => {
-      const segment = firstSlugSegment(page.slug).toLowerCase();
-      const channelCodes = prefixes.get(segment);
-      return channelCodes ? { ...page, shadowedByLanguagePrefix: { prefix: segment, channelCodes: [...channelCodes] } } : page;
+      // The page's own slug and every per-language slug (R24): any of them may be the
+      // one a language prefix hides.
+      const slugs = [page.slug, ...Object.values(page.translations ?? {}).map((t) => t.slug ?? '')];
+      for (const slug of slugs) {
+        const segment = firstSlugSegment(slug).toLowerCase();
+        const channelCodes = segment === '' ? undefined : prefixes.get(segment);
+        if (channelCodes) return { ...page, shadowedByLanguagePrefix: { prefix: segment, channelCodes: [...channelCodes] } };
+      }
+      return page;
     });
     return { data, nextCursor: null };
   }
@@ -457,7 +512,9 @@ export class CmsPageService {
     // against the deployment's configuration and touches no row, so opening a
     // transaction to refuse it would hold a connection for the length of a
     // settings read.
-    await this.assertSlugNotReserved(input.slug);
+    for (const slug of this.requestedSlugs(input.slug, input.translations)) await this.assertSlugNotReserved(slug);
+    const translations = normalizeTranslations(input.translations ?? {});
+    this.assertTranslationsInLanguages(translations, input.languages);
     const id = randomUUID();
     const now = new Date();
     const meta = this.splitMeta(input.meta ?? null);
@@ -484,10 +541,10 @@ export class CmsPageService {
              name, slug, active, description, meta_title, meta_description, meta_keywords,
              content, languages, version,
              parent_page_id, breadcrumbs_visible, breadcrumbs_scheme, share_image_asset_id,
-             parent_path_in_url, breadcrumbs_overlay)
+             parent_path_in_url, breadcrumbs_overlay, translations)
            values (?, ?, 'draft', ?::jsonb, ?::jsonb, null, null, ?, ?,
              ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, 1,
-             ?, ?, ?, ?, ?, ?)`,
+             ?, ?, ?, ?, ?, ?, ?::jsonb)`,
           [
             id,
             this.legacyPath(input.slug, id),
@@ -510,6 +567,7 @@ export class CmsPageService {
             input.shareImageAssetId ?? null,
             input.parentPathInUrl ?? false,
             input.breadcrumbsOverlay ?? false,
+            JSON.stringify(translations),
           ],
         );
         await this.replaceChannelScope(tx, id, input.salesChannelIds, input.slug);
@@ -542,7 +600,8 @@ export class CmsPageService {
     // would make every page whose slug predates the deployment's reserved set
     // uneditable — a rule that punishes the operator for a decision somebody
     // else made later.
-    if (input.slug !== undefined) await this.assertSlugNotReserved(input.slug);
+    for (const slug of this.requestedSlugs(input.slug, input.translations)) await this.assertSlugNotReserved(slug);
+    const translations = input.translations !== undefined ? normalizeTranslations(input.translations) : undefined;
     const slugsToInvalidate = new Set<string>();
     let addressesMoved = false;
     await this.commandBus.run<void>({
@@ -560,6 +619,7 @@ export class CmsPageService {
         const nextChannels = input.salesChannelIds ?? (await this.channelIdsFor(id, tx));
         const nextLanguages = input.languages ?? row.languages;
         await this.assertLanguagesInChannelScope(tx, nextLanguages, nextChannels);
+        if (translations) this.assertTranslationsInLanguages(translations, nextLanguages);
         if (input.slug || input.salesChannelIds) {
           await this.assertSlugAvailable(tx, nextSlug, nextChannels, id);
         }
@@ -571,13 +631,21 @@ export class CmsPageService {
         // R19D: a write that can move a public path — its own and its nested
         // descendants' — is checked for a duplicate after it is made, and both
         // sets of addresses are invalidated.
+        // R24: a language slug moves an address, and so does a language
+        // added or removed, since an override counts only while its language
+        // is declared.
         const movesPaths =
           input.slug !== undefined ||
           input.salesChannelIds !== undefined ||
           input.parentPageId !== undefined ||
-          input.parentPathInUrl !== undefined;
-        const subtree = new Set([id, ...(movesPaths ? await this.descendantIds(id, tx) : [])]);
-        const pathsBefore = movesPaths ? await this.addressSnapshot(tx, subtree) : null;
+          input.parentPathInUrl !== undefined ||
+          input.languages !== undefined ||
+          translations !== undefined;
+        // Every write snapshots the subtree's addresses (R24): a name — the
+        // page's or a language's — is in the descendants' trails, and they are
+        // cached under their language addresses as well as their slugs.
+        const subtree = new Set([id, ...(await this.descendantIds(id, tx))]);
+        const pathsBefore = await this.addressSnapshot(tx, subtree);
 
         const meta = input.meta !== undefined ? this.splitMeta(input.meta ?? null) : null;
         const sets: string[] = [];
@@ -598,6 +666,7 @@ export class CmsPageService {
         if (input.breadcrumbsOverlay !== undefined) set('breadcrumbs_overlay = ?', input.breadcrumbsOverlay);
         if (input.shareImageAssetId !== undefined) set('share_image_asset_id = ?', input.shareImageAssetId);
         if (input.parentPathInUrl !== undefined) set('parent_path_in_url = ?', input.parentPathInUrl);
+        if (translations !== undefined) set('translations = ?::jsonb', JSON.stringify(translations));
         if (meta) {
           set('meta_title = ?::jsonb', JSON.stringify(meta.metaTitle));
           set('meta_description = ?::jsonb', JSON.stringify(meta.metaDescription));
@@ -619,12 +688,10 @@ export class CmsPageService {
         }
         slugsToInvalidate.add(nextSlug);
         for (const slug of await this.descendantSlugs(id, tx)) slugsToInvalidate.add(slug);
-        if (pathsBefore) {
-          await this.assertPathsUnique(tx, subtree);
-          const pathsAfter = await this.addressSnapshot(tx, subtree);
-          for (const address of [...pathsBefore.addresses, ...pathsAfter.addresses]) slugsToInvalidate.add(address);
-          addressesMoved = pathsBefore.nested || pathsAfter.nested;
-        }
+        if (movesPaths) await this.assertPathsUnique(tx, subtree);
+        const pathsAfter = await this.addressSnapshot(tx, subtree);
+        for (const address of [...pathsBefore.addresses, ...pathsAfter.addresses]) slugsToInvalidate.add(address);
+        if (movesPaths) addressesMoved = pathsBefore.nested || pathsAfter.nested;
 
         // A patch that named no field wrote no row, so it leaves no entry: "no
         // write, no audit row" is the bus's own rule and `skipAudit` its spelling.
@@ -958,6 +1025,7 @@ export class CmsPageService {
       updatedAt: this.iso(row.updated_at),
       parentPageId: row.parent_page_id,
       parentPathInUrl: row.parent_path_in_url === true,
+      translations: row.translations ?? {},
     };
   }
 

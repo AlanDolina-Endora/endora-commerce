@@ -137,10 +137,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (const path of blog) localized.push({ url: inLanguage(path, languageCode), lastModified: now, priority: 0.5 });
   }
   for (const entry of await cmsPageEntries(ctx)) {
-    // A page is listed in the languages it has content in; one that names none in every one.
-    const own = entry.languages ?? [];
+    // R24 + feature 167: the backend answers each language's own URL — its own slug,
+    // under its prefix — so those are listed as they are, each declaring the others
+    // as `hreflang` alternates. An index from a backend that predates them lists the
+    // page's path under every channel language.
+    if (entry.alternates.length > 0) {
+      const alternates =
+        entry.alternates.length > 1
+          ? Object.fromEntries(entry.alternates.map((alternate) => [alternate.language, absoluteUrl(alternate.url)]))
+          : null;
+      for (const alternate of entry.alternates) {
+        localized.push({
+          url: absoluteUrl(alternate.url),
+          lastModified: entry.lastModified,
+          changeFrequency: 'monthly',
+          priority: 0.5,
+          ...(alternates ? { alternates: { languages: alternates } } : {}),
+        });
+      }
+      continue;
+    }
     for (const languageCode of languages) {
-      if (languageCode !== undefined && own.length > 0 && !own.some((l) => l.toLowerCase() === languageCode.toLowerCase())) continue;
       localized.push({
         url: inLanguage(entry.path, languageCode),
         lastModified: entry.lastModified,
@@ -237,11 +254,11 @@ async function categoryPaths(ctx: Ctx): Promise<string[]> {
  * *represented* by dropping its slug entry rather than by adding a second `/`.
  */
 interface CmsSitemapEntry {
-  /** The page's logical path. */
+  /** The page's logical path in its primary language (the fallback). */
   readonly path: string;
   readonly lastModified: Date;
-  /** The languages the page has content in (feature 167); absent from an older backend. */
-  readonly languages?: readonly string[];
+  /** R24: every served language's own URL, built by the backend under its prefix (feature 167). */
+  readonly alternates: ReadonlyArray<{ readonly language: string; readonly url: string }>;
 }
 
 async function cmsPageEntries(ctx: Ctx): Promise<CmsSitemapEntry[]> {
@@ -253,12 +270,15 @@ async function cmsPageEntries(ctx: Ctx): Promise<CmsSitemapEntry[]> {
     const homeSlug = normalizeCmsUrlPath(homepage.cmsPageSlug ?? '');
     // R19D: a page's address is its public path; `?? page.slug` covers a
     // backend that predates the field.
+    // R24: a page in several languages is one entry per language URL, each
+    // naming the others as alternates; the `path` fallback covers a backend
+    // that predates the field.
     return index.pages
       .filter((page) => homeSlug === '' || normalizeCmsUrlPath(page.slug) !== homeSlug)
       .map((page) => ({
         path: `/${normalizeCmsUrlPath(page.path ?? page.slug)}`,
         lastModified: new Date(page.updatedAt),
-        ...(page.languages !== undefined ? { languages: page.languages } : {}),
+        alternates: page.alternates ?? [],
       }));
   } catch {
     return [];

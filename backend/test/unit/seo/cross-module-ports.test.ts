@@ -321,7 +321,12 @@ describe('seo — the sitemap reads memberships through the sanctioned bridge ac
           id === 'pg-off'
             ? pageRecord(id, { active: false })
             : // Feature 167 — the page exists in two of the channel's three languages.
-              pageRecord(id, { slug: 'live-page', languages: ['en-US', 'pl-PL'] }),
+              pageRecord(id, {
+                slug: 'live-page',
+                languages: ['en-US', 'pl-PL'],
+                // 163 R24: the page's own slug in Polish.
+                translations: { 'pl-PL': { slug: 'zywa-strona' } },
+              }),
         ),
     } as unknown as CmsPageReadPort;
 
@@ -365,7 +370,9 @@ describe('seo — the sitemap reads memberships through the sanctioned bridge ac
     // The CMS URL comes from `slug`, not from the entity's deprecated `path` — per
     // language the page has that the channel serves.
     expect(payload).toContain('https://shop.test/en/live-page');
-    expect(payload).toContain('https://shop.test/pl/live-page');
+    // R24: each language at its own slug.
+    expect(payload).toContain('https://shop.test/pl/zywa-strona');
+    expect(payload).not.toContain('https://shop.test/pl/live-page');
     expect(payload).not.toContain('https://shop.test/de/live-page');
     expect(payload).not.toContain('lang=');
     expect(payload).not.toContain('legacy-');

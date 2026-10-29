@@ -123,6 +123,7 @@ import { Migration20261022T163218CmsBrandTokens } from '@endora-commerce/mod-cms
 import { Migration20261023T052237CmsPageTreeAndShare } from '@endora-commerce/mod-cms/migrations';
 import { Migration20261027T165458CmsPageParentPathInUrl } from '@endora-commerce/mod-cms/migrations';
 import { Migration20261028T090524CmsPageBreadcrumbsOverlay } from '@endora-commerce/mod-cms/migrations';
+import { Migration20261029T131218CmsPageTranslations } from '@endora-commerce/mod-cms/migrations';
 
 // ── comparisons ─────────────────────────────────────────────────────────────
 import { Migration20260501T185834ComparisonsInit } from '@endora-commerce/mod-comparisons/migrations';
@@ -500,6 +501,7 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
   migration('cms', Migration20261023T052237CmsPageTreeAndShare),
   migration('cms', Migration20261027T165458CmsPageParentPathInUrl),
   migration('cms', Migration20261028T090524CmsPageBreadcrumbsOverlay),
+  migration('cms', Migration20261029T131218CmsPageTranslations),
 
   // ── comparisons ─────────────────────────────────────────────────────────────
   migration('comparisons', Migration20260501T185834ComparisonsInit),

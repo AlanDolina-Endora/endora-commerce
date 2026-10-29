@@ -93,6 +93,9 @@ reproducible without hand-written HTML.
 - Q: How are language alternates announced, given that one storefront URL serves every language?
   → A: Through `og:locale` and `og:locale:alternate` plus a correct document language.
   `hreflang` is deferred until language-prefixed URLs exist, as a separate feature.
+  **Amended 2026-10-29 (R24, issue #521):** a page has a slug per language, and a language other
+  than the channel default is addressed with `?lang=`, as a product is — so each language has its
+  own URL and the CMS route declares them as `hreflang` alternates (FR-034 amended, FR-034a).
 - Q: Must one decorative backdrop span a group of adjacent dark sections? → A: No. Each dark
   section paints the decorative layer itself, and adjacent dark sections still touch with no gap.
   **Superseded 2026-10-26 by the owner:** a Section group container paints one continuous
@@ -599,7 +602,18 @@ on desktop only if so configured, and never for visitors who prefer reduced moti
   default sharing image.
 - **FR-034**: A page published in several languages MUST announce its served language and its
   other languages through `og:locale` and `og:locale:alternate`, and MUST set the document
-  language. `hreflang` alternates are out of scope until the storefront has per-language URLs.
+  language. **Amended (R24):** a CMS page MUST also declare each language's URL as a `hreflang`
+  alternate, and the sitemap MUST list every language's URL; the CMS-backed home page `/` serves
+  every language at one URL and declares none.
+- **FR-034a** (R24, issue #521): A page MUST be able to set its name, slug and description per
+  language; an empty field MUST inherit the page's own. Each language MUST be served at its own
+  slug (and, for a nested page, its ancestors' slugs in that language), with `?lang=` when it is
+  not the channel's default language. An address MUST be unique within one channel and one
+  language. A request for the page under another language's address MUST redirect permanently to
+  the page's address in the served language.
+  **Superseded in part by `specs/167-storefront-locale-path/` (2026-10-29):** the language is the
+  address's path prefix (`/<prefix>/<slug in that language>`) instead of `?lang=`; the home page
+  has an address per language too (`/<prefix>`) and declares its alternates.
 - **FR-035**: The deployment MUST be able to publish organisation structured data: name, logo,
   address, contact details and social profiles.
 

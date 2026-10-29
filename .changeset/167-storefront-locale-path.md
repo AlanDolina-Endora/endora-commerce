@@ -41,8 +41,14 @@ starts with a channel language prefix can no longer be saved.
   channel language, answered 307); `productPagePathsSchema` requires `xDefault`.
 - Sales channel shapes carry `prefixDefaultLanguage` (create defaults to `true`); the public
   channel read answers `prefixDefaultLanguage`, `urlLanguages` and `urlLanguageAliases`.
-- `CmsPageRecord` and the storefront page-index entry gain an optional `languages`;
-  `cmsPageSummarySchema` gains an optional `shadowedByLanguagePrefix`.
+- `cmsPageUrl` (163 R24) takes the channel's URL facts and composes the prefixed path:
+  `cmsPageUrl({ path, languageCode, channelDefaultLanguage })` (`/about-us?lang=en-US`) becomes
+  `cmsPageUrl({ path, languageCode, channel })` (`/en/about-us`). The resolved CMS page's `url` and
+  `alternates`, and the storefront page index, therefore carry each language's own slug under its
+  prefix.
+- `CmsPageRecord` gains optional `languages` and `translations` (the `seo` sitemap lists each
+  language at its own slug); `cmsPageSummarySchema` gains an optional
+  `shadowedByLanguagePrefix` (any of the page's slugs, per-language ones included).
 
 Emitters (catalog, seo sitemap, product feeds, organizations, customers, newsletter, comparisons,
 mfa, invoices) compose prefixed storefront URLs; the product feed `link` uses the product's key in

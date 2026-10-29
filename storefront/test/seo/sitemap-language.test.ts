@@ -34,7 +34,26 @@ vi.mock('../../lib/api/cms', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/api/cms')>()),
   getCmsPageIndex: async () => ({
     pages: [
-      { slug: 'o-nas', path: 'o-nas', updatedAt: '2026-10-29T00:00:00.000Z', languages: ['pl-PL'] },
+      // 163 R24 + feature 167: the backend answers each served language's own URL.
+      {
+        slug: 'o-nas',
+        path: 'o-nas',
+        updatedAt: '2026-10-29T00:00:00.000Z',
+        url: '/pl/o-nas',
+        alternates: [
+          { language: 'pl-PL', url: '/pl/o-nas' },
+          { language: 'en-US', url: '/en/about-us' },
+        ],
+      },
+      // Only in Polish.
+      {
+        slug: 'regulamin',
+        path: 'regulamin',
+        updatedAt: '2026-10-29T00:00:00.000Z',
+        url: '/pl/regulamin',
+        alternates: [{ language: 'pl-PL', url: '/pl/regulamin' }],
+      },
+      // An index from a backend that predates the URLs: every channel language.
       { slug: 'faq', path: 'faq', updatedAt: '2026-10-29T00:00:00.000Z' },
     ],
   }),
@@ -60,9 +79,10 @@ describe('the storefront sitemap per language', () => {
     expect(list).toEqual(expect.arrayContaining(['/pl/p/wiertarka', '/en/p/drill']));
     expect(list).not.toContain('/en/p/wiertarka');
     expect(list).toEqual(expect.arrayContaining(['/pl/c/narzedzia', '/en/c/narzedzia']));
-    // A CMS page only in the languages it has content in; one that names none in every one.
-    expect(list).toContain('/pl/o-nas');
+    // A CMS page at each language's own slug, only in the languages it is served in.
+    expect(list).toEqual(expect.arrayContaining(['/pl/o-nas', '/en/about-us', '/pl/regulamin']));
     expect(list).not.toContain('/en/o-nas');
+    expect(list).not.toContain('/en/regulamin');
     expect(list).toEqual(expect.arrayContaining(['/pl/faq', '/en/faq']));
     expect(list.filter((url) => url.includes('lang='))).toEqual([]);
   });

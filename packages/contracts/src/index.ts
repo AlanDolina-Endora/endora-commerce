@@ -122,6 +122,15 @@ export {
   CMS_PAGE_PATH_MAX_LEVELS,
   cmsPagePublicPaths,
   type CmsPagePathNode,
+  // R24 (feature 163, issue #521) — name, slug and description per language.
+  cmsPageTranslationSchema,
+  cmsPageTranslationsSchema,
+  cmsLocalizedPage,
+  cmsPageUrl,
+  type CmsPageTranslation,
+  type CmsPageTranslations,
+  type CmsLocalizablePage,
+  type CmsPageUrlInput,
   // Feature 151 — the Page Builder translation: the per-block declaration and
   // the two admin routes' shapes.
   translatablePathRe,

@@ -400,3 +400,29 @@ dictionary validator already refuses an inactive language when a channel's list 
 
 **Alternative rejected**: the intersection with the platform's active list (a dictionary edit would
 silently remove a prefix and its URLs from a live channel).
+
+## R-18 — Merged with 163 R24: a CMS page has a slug per language (2026-10-29)
+
+163 R24 (`specs/163-page-builder-marketing-pages/` FR-034a) landed on `master` while this feature
+was in flight: a CMS page can set its name, slug and description per language, and R24 addressed a
+non-default language with `?lang=` through a new `cmsPageUrl`, the CMS twin of `productPath`. The
+merge keeps R24's data and replaces its URL shape with this feature's:
+
+- `cmsPageUrl` takes the channel's `ChannelUrlFacts` and composes `/<prefix>/<slug in L>` through
+  `storefrontPagePath`; `?lang=` is never emitted (OR-7). The resolved page's `url`/`alternates`
+  and the storefront page index carry those URLs; a language the channel does not serve gets none
+  (FR-005).
+- The CMS route reads no `?lang=` override (OR-4); its canonical is the backend's `url`, its
+  alternates every served language's URL plus `x-default` (the default language's URL without its
+  prefix). A one-language page lists that language and `x-default` (FR-030) rather than R24's
+  "none". R24's permanent redirect from another language's slug stays, now prefixed.
+- The language switcher needs nothing new: it reads the page's `hreflang` alternates, so on a CMS
+  page it lands on the other language's slug.
+- The storefront sitemap lists the index's per-language URLs; the `seo` sitemap uses
+  `cmsLocalizedPage` (via `translations` on `CmsPageRecord`). The index-entry `languages` field
+  this feature had added is dropped — R24's `alternates` carry the same fact.
+- CMS prefix reservation (FR-040): R24 already passes every per-language slug through
+  `assertSlugNotReserved`, so every slug is reserved; the list's shadow marker looks at every slug.
+- Resolved CMS pages are cached for five minutes; the cache key's channel segment now includes the
+  channel's URL facts (`CmsCache.pageChannel`), so flipping the setting or the language list misses
+  stale URLs.

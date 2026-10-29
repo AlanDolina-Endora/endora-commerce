@@ -9,9 +9,10 @@ import type { CmsResolvedPage } from '@endora-commerce/contracts';
  * - The image is `share.imageUrl`, which the backend has already resolved —
  *   the page's own image, else the deployment default for the channel.
  * - `og:locale` is the served language and `og:locale:alternate` the page's
- *   other languages. There is no `hreflang`: one storefront URL serves every
- *   language, and alternates all pointing at it are an error to a search engine
- *   (R-19, ruling Q1). `<html lang>` is set by the root layout.
+ *   other languages. `<html lang>` is set by the root layout. Since R24 each
+ *   language has its own URL, so the CMS route also declares them as
+ *   `hreflang` alternates; the home page `/` still serves every language at
+ *   one URL and declares none (R-19, ruling Q1).
  *
  * Shared by the CMS route and the CMS-backed home page, so `/` announces the
  * same card as the page it renders.

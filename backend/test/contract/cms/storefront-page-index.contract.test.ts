@@ -123,8 +123,8 @@ describe('storefront CMS page index contract (feature 105, FR-021)', () => {
     const entry = parsed.pages.find((page) => page.slug === slug);
     expect(entry).toBeDefined();
     expect(Number.isNaN(Date.parse(entry?.updatedAt ?? ''))).toBe(false);
-    // Feature 167 — the page's own languages, so a sitemap lists it under those prefixes only.
-    expect(Array.isArray(entry?.languages)).toBe(true);
+    // 163 R24 + feature 167 — every served language's own URL, under its prefix.
+    expect(entry?.alternates?.every((alternate) => /^\/[a-z]{2,3}(-[a-z0-9]+)?\//.test(alternate.url))).toBe(true);
   });
 
   it('names only pages of the requested channel', async () => {

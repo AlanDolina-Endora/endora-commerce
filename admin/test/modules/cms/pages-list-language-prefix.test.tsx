@@ -26,6 +26,7 @@ const page = (over: Partial<CmsPageSummary>): CmsPageSummary => ({
   updatedAt: '2026-10-29T00:00:00.000Z',
   parentPageId: null,
   parentPathInUrl: false,
+  translations: {},
   ...over,
 });
 

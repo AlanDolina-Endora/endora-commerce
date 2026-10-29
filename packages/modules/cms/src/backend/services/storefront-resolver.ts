@@ -1,15 +1,25 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type {
-  CmsAssetEmbedResolution,
-  CmsPageIndexEntry,
-  CmsResolvedBlock,
-  CmsResolvedHook,
-  CmsResolvedPage,
-  CmsResolvedTemplate,
+import {
+  cmsLocalizedPage,
+  cmsPageUrl,
+  type ChannelUrlFacts,
+  type CmsAssetEmbedResolution,
+  type CmsPageIndexEntry,
+  type CmsPageTranslations,
+  type CmsResolvedBlock,
+  type CmsResolvedHook,
+  type CmsResolvedPage,
+  type CmsResolvedTemplate,
 } from '@endora-commerce/contracts';
 import { rewritePageLinkSlugs, walkAssetIds, walkBlockEmbeds, walkTemplateEmbeds } from './content-tree-walker.js';
-import { channelPaths, loadChannelPageNodes, type ChannelPageNode } from './page-paths.js';
-import type { CmsCache } from './cms-cache.js';
+import {
+  channelLanguages,
+  channelPaths,
+  languageSlug,
+  loadChannelPageNodes,
+  type ChannelPageNode,
+} from './page-paths.js';
+import { CmsCache } from './cms-cache.js';
 
 export type CmsAssetResolver = (assetId: string) => Promise<CmsAssetEmbedResolution | null>;
 
@@ -38,6 +48,9 @@ type PageRow = {
   id: string;
   name: string;
   slug: string;
+  description: string | null;
+  /** R24; optional for a row read before the column existed. */
+  translations?: CmsPageTranslations | null;
   meta_title: Record<string, string> | null;
   meta_description: Record<string, string> | null;
   meta_keywords: Record<string, string> | null;
@@ -75,7 +88,30 @@ export type ResolvedChannel = {
   id: string;
   code: string;
   defaultLanguage: string;
+  /**
+   * Feature 167 — the channel's languages and *prefix the default language* setting,
+   * for the language prefix on every CMS URL answered. Optional for callers that
+   * predate them: the default language alone, prefixed (the column default).
+   */
+  languages?: readonly string[];
+  prefixDefaultLanguage?: boolean;
 };
+
+/** The URL-language facts of a resolved channel (feature 167). */
+function channelUrlFactsOf(channel: ResolvedChannel): ChannelUrlFacts {
+  return {
+    languages: channel.languages && channel.languages.length > 0 ? channel.languages : [channel.defaultLanguage],
+    defaultLanguage: channel.defaultLanguage,
+    prefixDefaultLanguage: channel.prefixDefaultLanguage ?? true,
+  };
+}
+
+/** Whether the channel serves `language` — only those get a URL (feature 167, FR-005). */
+function servesLanguage(facts: ChannelUrlFacts, language: string): boolean {
+  return (
+    facts.defaultLanguage === language || facts.languages.some((l) => l.toLowerCase() === language.toLowerCase())
+  );
+}
 
 function toChannelRow(channel: ResolvedChannel): ChannelRow {
   return { id: channel.id, code: channel.code, default_language: channel.defaultLanguage };
@@ -187,8 +223,13 @@ export class StorefrontResolver {
     const channel = toChannelRow(input.resolvedChannel);
 
     const cacheLanguage = input.language ?? channel.default_language;
+    // Feature 167 — the answer carries URLs under the channel's language prefixes, so
+    // the cache entry is keyed by the facts they are derived from too: a flipped
+    // *prefix the default language* or a changed language list misses it.
+    const urlFacts = channelUrlFactsOf(input.resolvedChannel);
+    const cacheChannel = CmsCache.pageChannel(channel.code, urlFacts);
     if (this.cache) {
-      const cached = await this.cache.getPage(input.slug, channel.code, cacheLanguage);
+      const cached = await this.cache.getPage(input.slug, cacheChannel, cacheLanguage);
       if (cached) return this.withDefaultShareImage(cached, channel);
     }
 
@@ -199,11 +240,7 @@ export class StorefrontResolver {
     // redirect to. With no nested page in the channel both are the slug match
     // this read has always been.
     const nodes = await loadChannelPageNodes(em, [channel.id]);
-    const paths = channelPaths(nodes, channel.id);
-    const servable = nodes.filter((node) => node.status === 'published' && node.active);
-    const match =
-      servable.find((node) => paths.get(node.id) === input.slug) ??
-      servable.find((node) => node.slug === input.slug);
+    const match = findPageByAddress(nodes, channel, input.slug, input.language);
     if (!match) return null;
 
     const rows = (await em.execute('select p.* from cms_pages p where p.id = ? limit 1', [match.id])) as PageRow[];
@@ -213,9 +250,17 @@ export class StorefrontResolver {
     const language = this.resolveLanguage(page, input.language, channel.default_language);
     if (!language) return null;
 
+    // R24: the tree of the served language — its slugs, and so its paths. The
+    // `path` answered is the page's address in it, which is how a reader who
+    // switched language is sent to the page's slug in the new one.
+    const paths = channelPaths(nodes, channel.id, language);
+    const localized = cmsLocalizedPage(localizable(page), language);
+    const path = paths.get(page.id) ?? localized.slug;
+
     // A link of kind `page` stores its target's flat slug; it is rewritten to
-    // the path the target is served at here, so it needs no redirect (T283).
-    const linkPaths = nestedLinkPaths(nodes, paths);
+    // the path the target is served at here, so it needs no redirect (T283) —
+    // in the served language (R24).
+    const linkPaths = languageLinkPaths(nodes, paths, language);
     const data = rewritePageLinkSlugs(page.content.languages?.[language] ?? {}, linkPaths);
     const embeds = rewriteEmbedLinks(await this.inlineEmbeds(em, channel, language, data), linkPaths);
     const embedTrees = [
@@ -224,12 +269,30 @@ export class StorefrontResolver {
       ...Object.values(embeds.templates).map((t) => t.content.data),
     ];
     const assets = await this.resolveAssetsForTrees(embedTrees);
+    const languages = this.servableLanguages(page, language);
+    // Feature 167 — every URL under the language's path prefix; a language the
+    // channel does not serve has no URL there, so it is not an alternate, and a page
+    // served in one is addressed in the channel default language.
+    const urlIn = (lang: string, langPath: string): string =>
+      cmsPageUrl({
+        path: langPath,
+        languageCode: servesLanguage(urlFacts, lang) ? lang : urlFacts.defaultLanguage,
+        channel: urlFacts,
+      });
 
     const resolved: CmsResolvedPage = {
       id: page.id,
       slug: page.slug,
-      path: paths.get(page.id) ?? match.slug,
-      name: page.name,
+      path,
+      url: urlIn(language, path),
+      alternates: languages.filter((lang) => servesLanguage(urlFacts, lang)).map((lang) => ({
+        language: lang,
+        url: urlIn(
+          lang,
+          channelPaths(nodes, channel.id, lang).get(page.id) ?? cmsLocalizedPage(localizable(page), lang).slug,
+        ),
+      })),
+      name: localized.name,
       language,
       meta: {
         title: page.meta_title?.[language] ?? null,
@@ -246,13 +309,13 @@ export class StorefrontResolver {
         scheme: page.breadcrumbs_scheme,
         // R21H (T355): only when on, so a page with the band answers as before.
         ...(page.breadcrumbs_overlay === true ? { overlay: true } : {}),
-        trail: await this.resolveTrail(em, channel, page, paths),
+        trail: await this.resolveTrail(em, channel, page, paths, language),
       },
       share: { imageUrl: await this.shareImageUrl(page.share_image_asset_id) },
-      languages: this.servableLanguages(page, language),
+      languages,
     };
     if (this.cache) {
-      await this.cache.setPage(input.slug, channel.code, cacheLanguage, resolved);
+      await this.cache.setPage(input.slug, cacheChannel, cacheLanguage, resolved);
     }
     return this.withDefaultShareImage(resolved, channel);
   }
@@ -289,6 +352,7 @@ export class StorefrontResolver {
     channel: ChannelRow,
     page: Pick<PageRow, 'id' | 'parent_page_id'>,
     paths: ReadonlyMap<string, string>,
+    language: string,
   ): Promise<BreadcrumbTrail> {
     if (!page.parent_page_id) return [];
     const rows = (await em.execute(
@@ -299,7 +363,7 @@ export class StorefrontResolver {
          from cms_pages p join chain c on p.id = c.parent_page_id
          where c.depth < ?
        )
-       select c.id::text as id, c.depth, p.name,
+       select c.id::text as id, c.depth, p.name, p.languages, p.translations,
               case when p.status = 'published' and p.active = true then cpsc.slug end as slug
        from chain c
        join cms_pages p on p.id = c.id
@@ -311,6 +375,8 @@ export class StorefrontResolver {
       id: string;
       depth: number;
       name: string;
+      languages: string[] | null;
+      translations?: CmsPageTranslations | null;
       slug: string | null;
     }>;
     // A stored loop through the page itself would otherwise repeat it.
@@ -319,9 +385,14 @@ export class StorefrontResolver {
     for (const row of rows) {
       if (seen.has(row.id)) continue;
       seen.add(row.id);
-      const slug = row.slug ?? null;
+      // R24: the ancestor's name and slug in the served language.
+      const localized = cmsLocalizedPage(
+        { name: row.name, slug: row.slug ?? '', languages: row.languages ?? [], translations: row.translations ?? {} },
+        language,
+      );
+      const slug = row.slug === null ? null : localized.slug;
       trail.push({
-        name: row.name,
+        name: localized.name,
         slug,
         // R19D (T282): the link is the ancestor's public path in this channel.
         path: slug === null ? null : (paths.get(row.id) ?? slug),
@@ -355,8 +426,16 @@ export class StorefrontResolver {
     resolvedChannel: ResolvedChannel;
   }): Promise<CmsPageIndexEntry[]> {
     const em = this.emFactory();
+    const channel = input.resolvedChannel;
+    // R24: the languages each page can be served in — declared and carrying
+    // content, as `servableLanguages` reads them — so every one gets its URL.
     const rows = (await em.execute(
-      `select p.id::text as id, cpsc.slug as slug, p.updated_at as updated_at, p.languages as languages
+      `select p.id::text as id, cpsc.slug as slug, p.updated_at as updated_at,
+              coalesce(
+                (select jsonb_agg(l.value) from jsonb_array_elements_text(p.languages) as l(value)
+                 where jsonb_exists(coalesce(p.content -> 'languages', '{}'::jsonb), l.value)),
+                '[]'::jsonb
+              ) as servable_languages
        from cms_pages p
        join cms_page_sales_channels cpsc on cpsc.page_id = p.id
        where cpsc.sales_channel_id = ?
@@ -364,21 +443,47 @@ export class StorefrontResolver {
          and p.active = true
        order by cpsc.slug asc
        limit ${PAGE_INDEX_LIMIT}`,
-      [input.resolvedChannel.id],
-    )) as Array<{ id: string; slug: string; updated_at: Date | string; languages: unknown }>;
+      [channel.id],
+    )) as Array<{ id: string; slug: string; updated_at: Date | string; servable_languages: string[] | null }>;
 
-    // R19D (T282): the address a crawler is given is the page's public path.
-    const paths = channelPaths(
-      await loadChannelPageNodes(em, [input.resolvedChannel.id]),
-      input.resolvedChannel.id,
-    );
-    return rows.map((row) => ({
-      slug: row.slug,
-      path: paths.get(row.id) ?? row.slug,
-      updatedAt: new Date(row.updated_at).toISOString(),
-      // Feature 167 — the sitemap lists the page under each of its languages' prefixes.
-      languages: Array.isArray(row.languages) ? row.languages.filter((l): l is string => typeof l === 'string') : [],
-    }));
+    // R19D (T282): the address a crawler is given is the page's public path —
+    // R24: in each language the page is served in, its default first.
+    const nodes = await loadChannelPageNodes(em, [channel.id]);
+    const pathsByLanguage = new Map<string | undefined, Map<string, string>>();
+    const pathIn = (pageId: string, language: string | undefined): string | undefined => {
+      let paths = pathsByLanguage.get(language);
+      if (!paths) {
+        paths = channelPaths(nodes, channel.id, language);
+        pathsByLanguage.set(language, paths);
+      }
+      return paths.get(pageId);
+    };
+    const urlFacts = channelUrlFactsOf(channel);
+    return rows.map((row) => {
+      // Feature 167 — only the languages the channel serves have a URL here.
+      const languages = (row.servable_languages ?? []).filter((language) => servesLanguage(urlFacts, language));
+      const primary = languages.includes(channel.defaultLanguage) ? channel.defaultLanguage : languages[0];
+      const urlIn = (language: string) =>
+        cmsPageUrl({
+          path: pathIn(row.id, language) ?? row.slug,
+          languageCode: language,
+          channel: urlFacts,
+        });
+      return {
+        slug: row.slug,
+        path: (primary !== undefined ? pathIn(row.id, primary) : pathIn(row.id, undefined)) ?? row.slug,
+        ...(primary !== undefined
+          ? {
+              url: urlIn(primary),
+              alternates: [primary, ...languages.filter((language) => language !== primary)].map((language) => ({
+                language,
+                url: urlIn(language),
+              })),
+            }
+          : {}),
+        updatedAt: new Date(row.updated_at).toISOString(),
+      };
+    });
   }
 
   async resolveBlockByCode(input: {
@@ -645,17 +750,81 @@ export class StorefrontResolver {
   }
 }
 
+/** What `cmsLocalizedPage` reads of a stored page row. */
+function localizable(page: Pick<PageRow, 'name' | 'slug' | 'description' | 'languages' | 'translations'>) {
+  return {
+    name: page.name,
+    slug: page.slug,
+    description: page.description,
+    languages: page.languages,
+    translations: page.translations ?? {},
+  };
+}
+
+function flatSlug(slug: string): string {
+  return slug.split('/').filter((segment) => segment.length > 0).join('/');
+}
+
 /**
- * The flat slug → public path of every page in the channel whose path is not
- * its slug — the links `rewritePageLinkSlugs` moves. Empty in a channel with no
- * nested page, which makes the rewrite a no-op returning the stored tree.
+ * The page an address names in one channel (R19D; R24), among the published
+ * and active ones, or `null`.
+ *
+ * An address is unique within one channel and one language, so the requested
+ * language's tree is asked first — its whole paths, then its flat slugs — then
+ * the channel default's, then every other language the channel's pages
+ * declare. A reader who switched language therefore still finds the page by
+ * the slug of the language they left. The page's own slug, the identity a
+ * stored link, the home-page setting and the mega menu name a page by, answers
+ * last, so it still resolves when every language overrides it.
  */
-function nestedLinkPaths(nodes: readonly ChannelPageNode[], paths: ReadonlyMap<string, string>): Map<string, string> {
+function findPageByAddress(
+  nodes: readonly ChannelPageNode[],
+  channel: ChannelRow,
+  address: string,
+  requested: string | undefined,
+): ChannelPageNode | null {
+  const servable = nodes.filter((node) => node.status === 'published' && node.active);
+  const languages = [
+    ...new Set([requested, channel.default_language, ...channelLanguages(nodes, channel.id)].filter(
+      (language): language is string => language !== undefined,
+    )),
+  ];
+  for (const language of [...languages, undefined]) {
+    const paths = channelPaths(nodes, channel.id, language);
+    const slugOf = (node: ChannelPageNode) => (language === undefined ? node.slug : languageSlug(node, language));
+    const match =
+      servable.find((node) => paths.get(node.id) === address) ??
+      servable.find((node) => slugOf(node) === address);
+    if (match) return match;
+  }
+  return null;
+}
+
+/**
+ * The slug → public path in one language of every page whose path is not that
+ * slug — the links `rewritePageLinkSlugs` moves (T283). A link stores its
+ * target's own slug; R24 keys the target's slug in the language too, so a
+ * link typed with it is moved as well. Empty when no page of the channel is
+ * nested or translated, which makes the rewrite a no-op returning the stored
+ * tree.
+ */
+function languageLinkPaths(
+  nodes: readonly ChannelPageNode[],
+  paths: ReadonlyMap<string, string>,
+  language: string,
+): Map<string, string> {
   const out = new Map<string, string>();
-  for (const node of nodes) {
-    const key = node.slug.split('/').filter((segment) => segment.length > 0).join('/').toLowerCase();
-    const path = paths.get(node.id);
-    if (path !== undefined && path !== key) out.set(key, path);
+  const keyed = new Set<string>();
+  // The own slugs first: a link names its target by it, so it wins a key a
+  // language slug of another page happens to share.
+  for (const slugOf of [(node: ChannelPageNode) => node.slug, (node: ChannelPageNode) => languageSlug(node, language)]) {
+    for (const node of nodes) {
+      const path = paths.get(node.id);
+      const key = flatSlug(slugOf(node)).toLowerCase();
+      if (path === undefined || keyed.has(key)) continue;
+      keyed.add(key);
+      if (path !== key) out.set(key, path);
+    }
   }
   return out;
 }
