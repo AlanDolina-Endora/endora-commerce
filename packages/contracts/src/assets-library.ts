@@ -505,6 +505,56 @@ export interface AssetBytes {
 }
 
 /**
+ * One reference as a descriptor reports it. `assetId` is the asset the
+ * reference points at — what lets the library answer for many assets in one
+ * call (`specs/166-asset-reference-visibility/` research R-6).
+ *
+ * Required of a descriptor that declares `readerRestriction`, and set by every
+ * descriptor in this repository. A descriptor that omits it is still answered
+ * correctly: the registry asks it one asset at a time. Never sent to a client:
+ * `AssetDetail.references` carries {@link AssetReference}, and the library
+ * strips the field.
+ */
+export type AssetReferenceHit = AssetReference & { readonly assetId?: string };
+
+/**
+ * The reader-restriction half of a descriptor (feature 166, FR-002/FR-003):
+ * a reader who may see none of the records referencing an asset does not see
+ * the asset in the library.
+ *
+ * **Every method answers for the ambient caller** — the administrator the
+ * request's TenantContext names, with their Organization reach — exactly as
+ * the owner's own screens do, **including the owner's read permission** (a
+ * caller without `tasks:read` sees no Task). The caller is never a parameter:
+ * it is the `TaskContextDescriptor` precedent.
+ *
+ * The library asks only while the owner is **effectively present**, and never
+ * for the system actor or a holder of the platform wildcard, whom it answers
+ * itself. Each method is a bounded number of statements, independent of the
+ * size of its input (FR-014). Never catch `ModuleDisabledError` inside one
+ * (`check:port-catches`).
+ */
+export interface AssetReferenceReaderRestriction {
+  /** Of these record ids of this descriptor's kind, the ones the caller may see. Unknown ids are simply absent. */
+  visibleEntityIds(entityIds: readonly string[]): Promise<ReadonlySet<string>>;
+  /**
+   * Every asset id that at least one record of this kind the caller may
+   * **not** see points at. The exact complement of `visibleEntityIds` over
+   * this descriptor's references — written NULL-safe (`(<visible>) is not
+   * true`), so a row the predicate cannot decide is hidden, never shown.
+   */
+  assetIdsWithHiddenReferences(): Promise<readonly string[]>;
+  /**
+   * Every asset id any record of this kind points at, whoever asks. Asked
+   * while the owner is **switched off**, when no record of it is visible to a
+   * restricted reader. Plain SQL over the owner's own tables, like
+   * `findReferences`, because it runs while the owner is off: it resolves no
+   * port.
+   */
+  allReferencedAssetIds(): Promise<readonly string[]>;
+}
+
+/**
  * One contributed "who points at this asset" scanner.
  *
  * `ownerModuleId` is required and is the whole mechanism (D-39): without it the
@@ -515,10 +565,22 @@ export interface AssetReferenceDescriptor {
   ownerModuleId: string;
   /**
    * Given a list of asset ids, return every reference that points at any of
-   * them. MUST issue a single batched query, one per descriptor regardless of
-   * batch size.
+   * them, each tagged with the `assetId` it points at. MUST issue a single
+   * batched query, one per descriptor regardless of batch size.
+   *
+   * A descriptor returning plain {@link AssetReference}s still compiles and is
+   * still answered correctly — the registry asks it one asset at a time
+   * wherever it needs to attribute a batch.
    */
-  findReferences(assetIds: string[]): Promise<AssetReference[]>;
+  findReferences(assetIds: string[]): Promise<AssetReferenceHit[]>;
+  /**
+   * Present ⇔ these references are **reader-restricted**: a reader who may see
+   * none of the records referencing an asset does not see the asset (feature
+   * 166, FR-001). Absent ⇔ the references never hide an asset (catalog, cms,
+   * blog, megamenu). An optional **data property**, not an optional method
+   * (`check:port-shape`).
+   */
+  readonly readerRestriction?: AssetReferenceReaderRestriction;
 }
 
 /**
@@ -539,6 +601,12 @@ export interface AssetReferenceDescriptor {
  * `skip` is right for surface-like contributions, where a switched-off module
  * must contribute nothing a user can see. Nobody sees these; they exist to
  * refuse a delete. Publishing the shape must not change that classification.
+ *
+ * **Enumeration is not visibility** (feature 166). Which assets a library
+ * reader may see is the library's own evaluation, which reads the same
+ * descriptors and decides a switched-off owner's references as **hidden**
+ * (fail closed). The two policies answer different questions: this port's
+ * methods answer "does anything still use this file", for whoever asks.
  */
 export interface AssetReferenceRegistryPort {
   register(descriptor: AssetReferenceDescriptor): void;
