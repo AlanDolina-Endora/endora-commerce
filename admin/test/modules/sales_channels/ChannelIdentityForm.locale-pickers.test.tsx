@@ -463,6 +463,7 @@ describe('the submitted value', () => {
         defaultCurrency: 'PLN',
         active: true,
         anonymousAccess: true,
+        prefixDefaultLanguage: true,
       },
     ]);
   });
