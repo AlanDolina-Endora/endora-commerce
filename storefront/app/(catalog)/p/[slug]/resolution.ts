@@ -1,4 +1,4 @@
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound, permanentRedirect, redirect } from 'next/navigation';
 import type { ProductDetail, ProductPagePaths } from '@endora-commerce/contracts';
 import { getProductBySlug, resolveProductKey } from '../../../../lib/api/catalog';
 import { StorefrontApiError, type RequestContext } from '../../../../lib/api/client';
@@ -12,13 +12,15 @@ import { StorefrontApiError, type RequestContext } from '../../../../lib/api/cli
  * backend which product the key names at this request's channel and language, and
  * then reads that product **by id**. Every product URL this answers with — the
  * redirect target, the canonical, the alternates — was built by the backend with
- * `productPath()`: the storefront does not know the channel's default language, so
- * it composes none of its own.
+ * `productPath()`, under the language's path prefix (feature 167): the storefront
+ * composes none of its own.
  */
 
 /**
- * The id of the product `key` names here. A redirect key answers a permanent
- * redirect to the backend's path; a key of no product, or of a product this
+ * The id of the product `key` names here. A redirect answers the backend's path:
+ * permanently (308) for a former key, temporarily (307) for a current key of the
+ * product in another channel language (feature 167, FR-024 — the mapping depends on
+ * key data that can change hands); a key of no product, or of a product this
  * request may not see, answers the page's not-found. So does an archived
  * product's `410 PRODUCT_ARCHIVED` (T155 finding B4): rethrown, it rendered the
  * error page as an HTTP 500; the shopper is shown the ordinary not-found page,
@@ -43,7 +45,10 @@ export async function productIdForKey(key: string, ctx: RequestContext): Promise
     // a path the backend did not build as `/p/<key>` (protocol-relative, absolute,
     // backslash or another route) is answered as a key of no product.
     if (!isProductPagePath(resolution.path)) notFound();
-    permanentRedirect(resolution.path);
+    if (resolution.permanent) permanentRedirect(resolution.path);
+    // The backend built this path for this request's language; it already carries
+    // the prefix, so it is not localized again.
+    redirect(resolution.path);
   }
   return resolution.productId;
 }
@@ -62,27 +67,24 @@ export async function productById(productId: string, ctx: RequestContext): Promi
   }
 }
 
-/** `/p/<one segment>`, optionally with a query — never `//…`, a scheme or a backslash. */
+/**
+ * `/p/<one segment>` under an optional lower-case language prefix (feature 167),
+ * optionally with a query — never `//…`, a scheme or a backslash.
+ */
 function isProductPagePath(path: string): boolean {
-  return /^\/p\/[^/\\?#]+(\?[^\\#]*)?$/.test(path);
+  return /^(\/[a-z]{2,3}(-[a-z0-9]{1,8})*)?\/p\/[^/\\?#]+(\?[^\\#]*)?$/.test(path);
 }
 
 /**
  * The page's `hreflang` links: one per language the product is available in to
- * anonymous visitors, each the path the backend built (FR-074) — `undefined` when
- * there is none. The canonical is `paths.canonical`, written into the metadata
+ * anonymous visitors, each the path the backend built (FR-074), plus `x-default` —
+ * the unprefixed URL (feature 167, url-shape §8) — or `undefined` when there is none. The canonical is `paths.canonical`, written into the metadata
  * literal by the page itself so the indexability check can read it.
  */
 export function alternateLanguages(paths: ProductPagePaths): Record<string, string> | undefined {
   if (paths.alternates.length === 0) return undefined;
-  return Object.fromEntries(paths.alternates.map((alternate) => [alternate.languageCode, alternate.path]));
-}
-
-/**
- * The language a product link asked for (`?lang=<L>`, FR-071): a non-default
- * language travels with every URL the platform emits. Only a well-formed BCP-47
- * tag is passed on; the backend resolves it against the channel's languages.
- */
-export function requestedLanguage(lang: string | string[] | undefined): string | null {
-  return typeof lang === 'string' && /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i.test(lang) ? lang : null;
+  return {
+    ...Object.fromEntries(paths.alternates.map((alternate) => [alternate.languageCode, alternate.path])),
+    'x-default': paths.xDefault,
+  };
 }

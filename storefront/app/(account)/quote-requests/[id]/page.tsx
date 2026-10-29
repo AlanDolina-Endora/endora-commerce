@@ -1,6 +1,4 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import {
   acceptRevision,
   convertRfqToOrder,
@@ -21,6 +19,8 @@ import { lineAmountHalfUp, unitPriceDisplayText } from '@endora-commerce/contrac
 import { GroupedLineRows, quoteSectionTotals } from '../../../../components/line-groups/GroupedLineRows';
 import { describeRfqDiff } from '../../../../lib/quote-requests/describe-diff';
 import type { Metadata } from 'next';
+import { localeRedirect } from '../../../../lib/i18n/navigation';
+import { LocalizedLink } from '../../../../lib/i18n/localized-link';
 
 /**
  * Not indexed (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010): an
@@ -61,7 +61,7 @@ export default async function QuoteRequestDetailPage({
 }): Promise<ReactNode> {
   const session = await getSessionCookie();
   const { id } = await params;
-  if (!session) redirect(`/login?next=/quote-requests/${id}`);
+  if (!session) return await localeRedirect(`/login?next=/quote-requests/${id}`);
 
   let rfq: RfqDetail;
   try {
@@ -71,9 +71,9 @@ export default async function QuoteRequestDetailPage({
       return (
         <div className="mx-auto max-w-[1360px] px-[24px]" style={{ paddingTop: 24, paddingBottom: 48 }}>
           <p className="muted">Nie znaleziono zapytania ofertowego.</p>
-          <Link href="/quote-requests" className="btn btn--outline btn--sm">
+          <LocalizedLink href="/quote-requests" className="btn btn--outline btn--sm">
             ← Lista zapytań
-          </Link>
+          </LocalizedLink>
         </div>
       );
     }
@@ -105,9 +105,9 @@ export default async function QuoteRequestDetailPage({
 
   return (
     <div className="mx-auto max-w-[1360px] px-[24px]" style={{ paddingTop: 24, paddingBottom: 48 }}>
-      <Link href="/quote-requests" className="btn btn--ghost btn--sm" style={{ marginBottom: 8 }}>
+      <LocalizedLink href="/quote-requests" className="btn btn--ghost btn--sm" style={{ marginBottom: 8 }}>
         ← Lista zapytań
-      </Link>
+      </LocalizedLink>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
         <h1>Zapytanie #{rfq.businessId}</h1>
@@ -397,14 +397,14 @@ async function acceptAction(formData: FormData): Promise<void> {
   const rfqId = formData.get('rfqId') as string;
   const expectedRevisionNumber = Number(formData.get('expectedRevisionNumber'));
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   try {
     await acceptRevision(session, rfqId, expectedRevisionNumber);
   } catch (err) {
     const msg = err instanceof StorefrontApiError ? err.detail : 'Nie udało się zaakceptować zmian.';
-    redirect(`/quote-requests/${rfqId}?error=${encodeURIComponent(msg)}`);
+    return await localeRedirect(`/quote-requests/${rfqId}?error=${encodeURIComponent(msg)}`);
   }
-  redirect(`/quote-requests/${rfqId}`);
+  return await localeRedirect(`/quote-requests/${rfqId}`);
 }
 
 async function rejectAction(formData: FormData): Promise<void> {
@@ -413,27 +413,27 @@ async function rejectAction(formData: FormData): Promise<void> {
   const expectedRevisionNumber = Number(formData.get('expectedRevisionNumber'));
   const reason = (formData.get('reason') as string | null) ?? undefined;
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   try {
     await rejectRevision(session, rfqId, expectedRevisionNumber, reason || undefined);
   } catch (err) {
     const msg = err instanceof StorefrontApiError ? err.detail : 'Nie udało się odrzucić zmian.';
-    redirect(`/quote-requests/${rfqId}?error=${encodeURIComponent(msg)}`);
+    return await localeRedirect(`/quote-requests/${rfqId}?error=${encodeURIComponent(msg)}`);
   }
-  redirect(`/quote-requests/${rfqId}`);
+  return await localeRedirect(`/quote-requests/${rfqId}`);
 }
 
 async function convertAction(formData: FormData): Promise<void> {
   'use server';
   const rfqId = formData.get('rfqId') as string;
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   try {
     const { checkoutUrl } = await convertRfqToOrder(session, rfqId);
-    redirect(checkoutUrl);
+    return await localeRedirect(checkoutUrl);
   } catch (err) {
     if (err instanceof StorefrontApiError) {
-      redirect(`/quote-requests/${rfqId}?error=${encodeURIComponent(err.detail)}`);
+      return await localeRedirect(`/quote-requests/${rfqId}?error=${encodeURIComponent(err.detail)}`);
     }
     throw err;
   }
@@ -443,12 +443,12 @@ async function resubmitAction(formData: FormData): Promise<void> {
   'use server';
   const rfqId = formData.get('rfqId') as string;
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   try {
     const created = await resubmitRfq(session, rfqId);
-    redirect(`/quote-requests/${created.id}`);
+    return await localeRedirect(`/quote-requests/${created.id}`);
   } catch (err) {
     const msg = err instanceof StorefrontApiError ? err.detail : 'Nie udało się złożyć ponownie.';
-    redirect(`/quote-requests/${rfqId}?error=${encodeURIComponent(msg)}`);
+    return await localeRedirect(`/quote-requests/${rfqId}?error=${encodeURIComponent(msg)}`);
   }
 }

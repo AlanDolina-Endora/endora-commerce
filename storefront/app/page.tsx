@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { listProducts, getCategoryTree } from '../lib/api/catalog';
 import { getCmsPageBySlug } from '../lib/api/cms';
@@ -13,6 +12,7 @@ import { OrganizationJsonLd } from '../components/seo/OrganizationJsonLd';
 import { cmsSocialMetadata } from '../lib/seo/cms-share-metadata';
 import { cmsRenderLocation, type PageSearchParams } from '../lib/page-builder/render-location';
 import { seo } from './seo';
+import { LocalizedLink } from '../lib/i18n/localized-link';
 
 /**
  * Indexable (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010/FR-012). The
@@ -147,12 +147,12 @@ export default async function HomePage({
               miejscu.
             </p>
             <div className="mb-10 flex flex-wrap gap-3">
-              <Link href="/catalog" className="btn btn--dark btn--lg">
+              <LocalizedLink href="/catalog" className="btn btn--dark btn--lg">
                 Przeglądaj katalog <ArrowRightIcon />
-              </Link>
-              <Link href="/quick-order" className="btn btn--outline btn--lg">
+              </LocalizedLink>
+              <LocalizedLink href="/quick-order" className="btn btn--outline btn--lg">
                 <LightningIcon /> Quick Order z CSV
-              </Link>
+              </LocalizedLink>
             </div>
             <div className="grid grid-cols-4 gap-[24px] max-[720px]:grid-cols-2">
               {[
@@ -227,15 +227,15 @@ export default async function HomePage({
               szukasz.
             </p>
           </div>
-          <Link href="/catalog" className="btn btn--ghost">
+          <LocalizedLink href="/catalog" className="btn btn--ghost">
             Zobacz wszystkie <ArrowRightIcon />
-          </Link>
+          </LocalizedLink>
         </div>
         <div className="grid grid-cols-6 gap-[16px] max-[1100px]:grid-cols-3 max-[600px]:grid-cols-2">
           {categoryTiles.map((c, i) => {
             const glyph = GLYPH_KEYS[i % GLYPH_KEYS.length] as keyof typeof GLYPHS;
             return (
-              <Link
+              <LocalizedLink
                 key={c.href}
                 href={c.href}
                 className="relative block rounded-lg border border-line bg-surface p-[22px] transition hover:-translate-y-[2px] hover:border-[var(--ink-700)]"
@@ -250,7 +250,7 @@ export default async function HomePage({
                 <span className="absolute right-[22px] top-[22px] text-line-strong">
                   <ArrowUpRightIcon />
                 </span>
-              </Link>
+              </LocalizedLink>
             );
           })}
         </div>
@@ -305,9 +305,9 @@ export default async function HomePage({
               <h2>Najczęściej zamawiane w tym tygodniu</h2>
               <p>Gotowe do wysyłki, sprawdzone w utrzymaniu ruchu.</p>
             </div>
-            <Link href="/catalog" className="btn btn--ghost">
+            <LocalizedLink href="/catalog" className="btn btn--ghost">
               Cały bestseller <ArrowRightIcon />
-            </Link>
+            </LocalizedLink>
           </div>
           <ul className="m-0 grid list-none grid-cols-4 gap-[16px] p-0 max-[1100px]:grid-cols-2">
             {products.data.map((p) => (

@@ -1,6 +1,4 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import {
   buildQuickOrder,
   importQuickOrderCsv,
@@ -24,6 +22,8 @@ import { StorefrontApiError } from '../../../lib/api/client';
 import { FileDropzone } from '../../../components/FileDropzone';
 import { summarizeQuickOrderPreview } from '../../../lib/quick-order-preview';
 import type { Metadata } from 'next';
+import { localeRedirect } from '../../../lib/i18n/navigation';
+import { LocalizedLink, LocalizedAnchor } from '../../../lib/i18n/localized-link';
 
 /**
  * Not indexed (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010): an
@@ -77,7 +77,7 @@ export default async function QuickOrderPage({
   }>;
 }): Promise<ReactNode> {
   const session = await getSessionCookie();
-  if (!session) redirect('/login?next=/account/quick-order');
+  if (!session) return await localeRedirect('/login?next=/account/quick-order');
   const sp = await searchParams;
 
   const preview = sp.preview ? decodePreview(sp.preview) : null;
@@ -105,9 +105,9 @@ export default async function QuickOrderPage({
         {t('quickOrder.page.introPrefix')}
         <code>sku,quantity</code>
         {t('quickOrder.page.introSuffix')}{' '}
-        <a href="/quick-order-template.csv" download>
+        <LocalizedAnchor href="/quick-order-template.csv" download>
           {t('quickOrder.page.template')}
-        </a>
+        </LocalizedAnchor>
         .
       </p>
 
@@ -115,8 +115,8 @@ export default async function QuickOrderPage({
       {problemKey ? <p className="b2b-auth__error">{t(problemKey)}</p> : null}
       {sp.built === 'cart' && notAdded.length === 0 ? (
         <p className="b2b-auth__success">
-          {t('quickOrder.built.cart')} <Link href="/cart">{t('quickOrder.build.openCart')}</Link> ·{' '}
-          <Link href="/checkout">{t('quickOrder.built.goToCheckout')}</Link>.
+          {t('quickOrder.built.cart')} <LocalizedLink href="/cart">{t('quickOrder.build.openCart')}</LocalizedLink> ·{' '}
+          <LocalizedLink href="/checkout">{t('quickOrder.built.goToCheckout')}</LocalizedLink>.
         </p>
       ) : null}
       {notAdded.length > 0 ? (
@@ -138,14 +138,14 @@ export default async function QuickOrderPage({
             ))}
             {notAddedReport.more > 0 ? <li>{reportMoreText(notAddedReport.more, locale)}</li> : null}
           </ul>
-          {sentCount > notAddedCount ? <Link href="/cart">{t('quickOrder.build.openCart')}</Link> : null}
+          {sentCount > notAddedCount ? <LocalizedLink href="/cart">{t('quickOrder.build.openCart')}</LocalizedLink> : null}
         </section>
       ) : null}
       {sp.built === 'quote' ? (
         <p className="b2b-auth__success">
           {t('quickOrder.built.quote')}
           {sp.rfq ? ` (#${sp.rfq})` : ''}.{' '}
-          <Link href="/quote-requests">{t('quickOrder.built.viewQuotes')}</Link>.
+          <LocalizedLink href="/quote-requests">{t('quickOrder.built.viewQuotes')}</LocalizedLink>.
         </p>
       ) : null}
 
@@ -395,13 +395,13 @@ async function searchAction(formData: FormData): Promise<void> {
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (previewBlob) params.set('preview', previewBlob);
-  redirect(`/quick-order?${params.toString()}`);
+  return await localeRedirect(`/quick-order?${params.toString()}`);
 }
 
 async function addSearchResultAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
 
   const productId = (formData.get('productId') as string) ?? '';
   const sku = (formData.get('sku') as string) ?? '';
@@ -427,7 +427,7 @@ async function addSearchResultAction(formData: FormData): Promise<void> {
   const params = new URLSearchParams();
   params.set('preview', encodePreview(preview));
   if (q) params.set('q', q);
-  redirect(`/quick-order?${params.toString()}`);
+  return await localeRedirect(`/quick-order?${params.toString()}`);
 }
 
 async function updateQuantityAction(formData: FormData): Promise<void> {
@@ -435,34 +435,34 @@ async function updateQuantityAction(formData: FormData): Promise<void> {
   const preview = decodePreview((formData.get('preview') as string) ?? '');
   const line = Number.parseInt((formData.get('line') as string) ?? '', 10);
   const quantity = Math.max(1, Number.parseInt((formData.get('quantity') as string) ?? '1', 10) || 1);
-  if (!preview) redirect('/quick-order?problem=nothing_to_update');
+  if (!preview) return await localeRedirect('/quick-order?problem=nothing_to_update');
 
   const row = preview!.recognized.find((r) => r.line === line);
   if (row) row.quantity = quantity;
-  redirect(`/quick-order?preview=${encodePreview(preview!)}`);
+  return await localeRedirect(`/quick-order?preview=${encodePreview(preview!)}`);
 }
 
 async function removeRecognizedAction(formData: FormData): Promise<void> {
   'use server';
   const preview = decodePreview((formData.get('preview') as string) ?? '');
   const line = Number.parseInt((formData.get('line') as string) ?? '', 10);
-  if (!preview) redirect('/quick-order?problem=nothing_to_remove');
+  if (!preview) return await localeRedirect('/quick-order?problem=nothing_to_remove');
 
   preview!.recognized = preview!.recognized.filter((r) => r.line !== line);
   preview!.summary = { ...preview!.summary, recognizedCount: preview!.recognized.length };
-  redirect(`/quick-order?preview=${encodePreview(preview!)}`);
+  return await localeRedirect(`/quick-order?preview=${encodePreview(preview!)}`);
 }
 
 async function importAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
 
   const csv = ((formData.get('csv') as string) ?? '').trim();
   const filename = ((formData.get('quickOrderFilename') as string) ?? '').trim();
   const fileContent = ((formData.get('quickOrderFileContent') as string) ?? '').trim();
 
-  if (!csv && !fileContent) redirect('/quick-order?problem=no_input');
+  if (!csv && !fileContent) return await localeRedirect('/quick-order?problem=no_input');
 
   let preview: QuickOrderImportResponse;
   try {
@@ -470,24 +470,24 @@ async function importAction(formData: FormData): Promise<void> {
       ? await importQuickOrderFile(session, filename || 'upload.csv', fileContent)
       : await importQuickOrderCsv(session, csv);
   } catch (err) {
-    redirect(
+    return await localeRedirect(
       err instanceof StorefrontApiError
         ? `/quick-order?error=${encodeURIComponent(err.detail)}`
         : '/quick-order?problem=import_failed',
     );
   }
-  redirect(`/quick-order?preview=${encodePreview(preview!)}`);
+  return await localeRedirect(`/quick-order?preview=${encodePreview(preview!)}`);
 }
 
 async function confirmAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
 
   const target = (formData.get('target') as string) === 'quote_request' ? 'quote_request' : 'cart';
   const preview = decodePreview((formData.get('preview') as string) ?? '');
   if (!preview || preview.recognized.length === 0) {
-    redirect('/quick-order?problem=nothing_to_build');
+    return await localeRedirect('/quick-order?problem=nothing_to_build');
   }
 
   let rfqRef: string | undefined;
@@ -506,14 +506,14 @@ async function confirmAction(formData: FormData): Promise<void> {
     rfqRef = result.quoteRequestBusinessId ?? result.quoteRequestId;
     rejected = result.rejected ?? [];
   } catch (err) {
-    redirect(
+    return await localeRedirect(
       err instanceof StorefrontApiError
         ? `/quick-order?error=${encodeURIComponent(err.detail)}`
         : '/quick-order?problem=build_failed',
     );
   }
   if (target === 'quote_request') {
-    redirect(`/quick-order?built=quote${rfqRef ? `&rfq=${encodeURIComponent(rfqRef)}` : ''}`);
+    return await localeRedirect(`/quick-order?built=quote${rfqRef ? `&rfq=${encodeURIComponent(rfqRef)}` : ''}`);
   }
   if (rejected.length > 0) {
     // Feature 155 (FR-011 (b)) — the build added the valid lines; the rest travel to the page
@@ -523,9 +523,9 @@ async function confirmAction(formData: FormData): Promise<void> {
       sent: String(preview!.recognized.length),
       notAdded: encodeBuildRejections(rejected),
     });
-    redirect(`/quick-order?${params.toString()}`);
+    return await localeRedirect(`/quick-order?${params.toString()}`);
   }
-  redirect('/quick-order?built=cart');
+  return await localeRedirect('/quick-order?built=cart');
 }
 
 /**

@@ -1,8 +1,8 @@
 'use server';
 
-import { redirect } from 'next/navigation';
 import { logoutCustomer } from '../api/auth';
 import { clearSessionCookie, getSessionCookie } from '../session';
+import { localeRedirect } from '../i18n/navigation';
 
 /**
  * Ends the buyer's session and sends them to the sign-in page.
@@ -15,5 +15,5 @@ export async function signOutAction(): Promise<void> {
   const session = await getSessionCookie();
   await logoutCustomer(session);
   await clearSessionCookie();
-  redirect('/login');
+  return await localeRedirect('/login');
 }

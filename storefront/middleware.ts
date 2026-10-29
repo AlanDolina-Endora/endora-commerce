@@ -14,6 +14,16 @@ import { readChannelIdentity, type ChannelIdentity } from './lib/channel/channel
 import { SALES_CHANNEL_REQUEST_HEADER } from './lib/channel/channel-header';
 import { closedStoreRedirect } from './lib/channel/closed-store';
 import {
+  LANGUAGE_PREFIX_REQUEST_HEADER,
+  LANGUAGE_REQUEST_HEADER,
+  isLanguageNeutral,
+  localizePath,
+  parseLocalePath,
+  stripLocalePrefix,
+  type LocaleParse,
+  type UrlLanguageState,
+} from './lib/i18n/locale-path';
+import {
   forwardRobotsDefault,
   isDocumentPath,
   robotsDirective,
@@ -105,9 +115,15 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     const directive = robotsDirective(policy);
     forwardRobotsDefault(requestHeaders, directive);
     stampChannel(requestHeaders, channelCode, identity);
+    // Feature 167 — files carry no language; a client's value is never forwarded.
+    requestHeaders.delete(LANGUAGE_REQUEST_HEADER);
+    requestHeaders.delete(LANGUAGE_PREFIX_REQUEST_HEADER);
     return withRobots(NextResponse.next({ request: { headers: requestHeaders } }), directive);
   }
 
+  // Feature 167 — never trust a language header a client sent (FR-018).
+  requestHeaders.delete(LANGUAGE_REQUEST_HEADER);
+  requestHeaders.delete(LANGUAGE_PREFIX_REQUEST_HEADER);
   requestHeaders.set('x-pathname', pathname);
 
   const decision = gateDecision({
@@ -127,23 +143,136 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   forwardRobotsDefault(requestHeaders, directive);
   stampChannel(requestHeaders, channelCode, identity);
 
+  const urlLanguages = identity?.urlLanguages ?? [];
+  const languageAware = urlLanguages.length > 0 && !isLanguageNeutral(pathname);
+  const parsed: LocaleParse | null = languageAware
+    ? parseLocalePath({
+        pathname,
+        search: request.nextUrl.search,
+        acceptLanguage: request.headers.get('accept-language'),
+        langCookie: request.cookies.get(LANG_COOKIE)?.value ?? null,
+        languages: urlLanguages,
+        aliases: identity?.urlLanguageAliases ?? [],
+      })
+    : null;
+
   if (decision === 'unavailable' || reachability === 'unreachable') {
+    // The outage notice is answered at the requested URL — never after a language
+    // redirect (FR-017) — in the path's language when the prefix parses.
+    if (parsed?.kind === 'render') requestHeaders.set(LANGUAGE_REQUEST_HEADER, parsed.languageCode);
     // The outage notice is a document of this channel like any other: it
     // carries the directive whenever one is known.
     return withRobots(unavailable(request, requestHeaders), directive);
   }
 
-  const signIn = closedStoreRedirect({
-    pathname,
-    search: request.nextUrl.search,
-    hasSession: Boolean(request.cookies.get(SESSION_COOKIE)?.value),
-    anonymousAccess: identity?.anonymousAccess ?? null,
-  });
-  if (signIn !== null) {
-    return withRobots(NextResponse.redirect(new URL(signIn, request.url), 307), directive);
+  if (parsed === null) {
+    // No URL languages known, or a language-neutral path: as before this feature.
+    const signIn = closedStoreRedirect({
+      pathname,
+      search: request.nextUrl.search,
+      hasSession: Boolean(request.cookies.get(SESSION_COOKIE)?.value),
+      anonymousAccess: identity?.anonymousAccess ?? null,
+    });
+    if (signIn !== null) {
+      return withRobots(NextResponse.redirect(new URL(signIn, request.url), 307), directive);
+    }
+    return withRobots(NextResponse.next({ request: { headers: requestHeaders } }), directive);
   }
 
-  return withRobots(NextResponse.next({ request: { headers: requestHeaders } }), directive);
+  // Where the visitor is going, in language terms: the redirect's target, or this
+  // URL when it renders. The closed-store check runs on its logical path, so a
+  // closed store answers the prefixed sign-in page in one hop.
+  const state = (current: string): UrlLanguageState => ({
+    languages: urlLanguages,
+    aliases: identity?.urlLanguageAliases ?? [],
+    current,
+  });
+  const target =
+    parsed.kind === 'render'
+      ? {
+          language: parsed.languageCode,
+          logicalPath: parsed.logicalPath,
+          search: request.nextUrl.search,
+          browserUrl: `${pathname}${request.nextUrl.search}`,
+        }
+      : targetOf(parsed.location, urlLanguages, identity?.urlLanguageAliases ?? []);
+  if (target !== null) {
+    const signIn = closedStoreRedirect({
+      pathname: target.logicalPath,
+      search: target.search,
+      next: target.browserUrl,
+      hasSession: Boolean(request.cookies.get(SESSION_COOKIE)?.value),
+      anonymousAccess: identity?.anonymousAccess ?? null,
+    });
+    if (signIn !== null) {
+      const localized = localizePath(signIn, state(target.language));
+      return withRobots(noStore(NextResponse.redirect(new URL(localized, request.url), 307)), directive);
+    }
+  }
+
+  if (parsed.kind === 'redirect') {
+    return withRobots(languageRedirect(request, parsed), directive);
+  }
+
+  requestHeaders.set(LANGUAGE_REQUEST_HEADER, parsed.languageCode);
+  requestHeaders.set(LANGUAGE_PREFIX_REQUEST_HEADER, parsed.prefix);
+  requestHeaders.set('x-pathname', parsed.logicalPath);
+  if (parsed.prefix === '') {
+    return withRobots(NextResponse.next({ request: { headers: requestHeaders } }), directive);
+  }
+  const rewritten = request.nextUrl.clone();
+  rewritten.pathname = parsed.logicalPath;
+  return withRobots(NextResponse.rewrite(rewritten, { request: { headers: requestHeaders } }), directive);
+}
+
+/** The cookie the language switcher writes; read only to choose a 307's target (OR-11). */
+const LANG_COOKIE = 'lang';
+
+/**
+ * A language redirect with the headers of `url-shape.md` §3: a 307 depends on the
+ * visitor, so it varies on what chose it and is never stored by a shared cache; a
+ * 308 is a property of the URL, cached for a bounded hour because the channel
+ * setting can be flipped (research R-5).
+ */
+function languageRedirect(request: NextRequest, parsed: Extract<LocaleParse, { kind: 'redirect' }>): NextResponse {
+  const response = NextResponse.redirect(new URL(parsed.location, request.url), parsed.status);
+  if (parsed.varyOnLanguageInputs) {
+    response.headers.set('Vary', 'Accept-Language, Cookie');
+    response.headers.set('Cache-Control', 'private, no-store');
+  } else {
+    response.headers.set('Cache-Control', 'public, max-age=3600');
+  }
+  return response;
+}
+
+function noStore(response: NextResponse): NextResponse {
+  response.headers.set('Vary', 'Accept-Language, Cookie');
+  response.headers.set('Cache-Control', 'private, no-store');
+  return response;
+}
+
+/** The language, logical path and browser URL of a redirect's target, or `null`. */
+function targetOf(
+  location: string,
+  languages: UrlLanguageState['languages'],
+  aliases: UrlLanguageState['aliases'],
+): { language: string; logicalPath: string; search: string; browserUrl: string } | null {
+  const url = new URL(location, 'http://local.invalid');
+  const reparsed = parseLocalePath({
+    pathname: url.pathname,
+    search: url.search,
+    acceptLanguage: null,
+    langCookie: null,
+    languages,
+    aliases,
+  });
+  if (reparsed.kind !== 'render') return null;
+  return {
+    language: reparsed.languageCode,
+    logicalPath: stripLocalePrefix(url.pathname, { languages, aliases }),
+    search: url.search,
+    browserUrl: `${url.pathname}${url.search}`,
+  };
 }
 
 /** The cookie a signed-in customer's session rides in (`lib/session.ts`). */

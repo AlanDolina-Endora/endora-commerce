@@ -65,6 +65,12 @@ export interface ClosedStoreInput {
   readonly pathname: string;
   /** The query string, with its `?`, or `''`. */
   readonly search: string;
+  /**
+   * The address to come back to after signing in, when it differs from
+   * `pathname + search` — the browser's (language-prefixed) URL while `pathname`
+   * is the logical path (feature 167). Defaults to `pathname + search`.
+   */
+  readonly next?: string;
   /** Whether the request carries a `b2b_session` cookie. */
   readonly hasSession: boolean;
   /**
@@ -75,11 +81,17 @@ export interface ClosedStoreInput {
   readonly anonymousAccess: boolean | null;
 }
 
-/** The sign-in address to redirect to, or `null` when the request goes through. */
+/**
+ * The sign-in address to redirect to, or `null` when the request goes through.
+ *
+ * The answer is a **logical** path (`/login?…`): the middleware puts the request's
+ * language prefix on it (feature 167), so the visitor reaches the prefixed sign-in
+ * page in one hop.
+ */
 export function closedStoreRedirect(input: ClosedStoreInput): string | null {
   if (input.anonymousAccess !== false) return null;
   if (input.hasSession) return null;
   if (isOpenOnClosedStore(input.pathname)) return null;
-  const next = `${input.pathname}${input.search}`;
+  const next = input.next ?? `${input.pathname}${input.search}`;
   return `/login?next=${encodeURIComponent(next)}&reason=${SIGN_IN_REQUIRED_REASON}`;
 }

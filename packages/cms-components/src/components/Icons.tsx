@@ -22,7 +22,7 @@ import { createIconPickerField } from './IconPickerField.js';
 import { resolveCmsIcon } from './icon-catalog.js';
 import { iconColorProps } from '../utils/color-value.js';
 import { BUTTON_SPEC_OBJECT_FIELDS } from './Button.js';
-import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
+import { useCmsRenderAssets, useCmsRenderMediaBaseUrl, useCmsRenderLocalizePath } from './render-context.js';
 import { blockLink, blockLinkTarget, carriedBlockLink } from '../utils/link-href.js';
 
 function IconsBody({
@@ -40,8 +40,10 @@ function IconsBody({
   const alignAttrs = textAlignDataAttrs(align, 'left');
   const assets = useCmsRenderAssets();
   const mediaBaseUrl = useCmsRenderMediaBaseUrl();
+  // Feature 167 — an internal link takes the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
   // R17 (T212): any kind of link; a URL stored before (`href`, `linkTarget`) renders as it always did.
-  const link = blockLinkTarget(blockLink(storedLink, href, linkTarget), { assets, ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}) });
+  const link = blockLinkTarget(blockLink(storedLink, href, linkTarget), { assets, ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}), localizePath });
 
   const iconNode = Icon ? (
     <Icon size={size} {...iconColorProps(color)} strokeWidth={strokeWidth} aria-hidden={!link} />

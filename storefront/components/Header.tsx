@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { I18nConfigResponse, ResolvedMegamenu } from '@endora-commerce/contracts';
 import type { MeResult } from '../lib/api/account';
@@ -13,6 +12,7 @@ import { ShoppingListHeartBadge } from './ShoppingListHeartBadge';
 import { SearchAutocomplete } from './SearchAutocomplete';
 import { CurrencySwitcher, LocaleSwitcher } from './HeaderPreferenceSwitchers';
 import { publicApiBaseUrl } from '../lib/env.mjs';
+import { LocalizedLink, LocalizedAnchor, LocalizedForm } from '../lib/i18n/localized-link';
 
 /**
  * Industria-themed storefront header. Three rows:
@@ -89,9 +89,9 @@ export function Header(props: {
             </span>
             <CurrencySwitcher currency={props.currency} />
             <span className="industria-topbar__sep" aria-hidden="true" />
-            <a href="/help" className="industria-topbar__item">
+            <LocalizedAnchor href="/help" className="industria-topbar__item">
               <HelpIcon /> Wsparcie B2B
-            </a>
+            </LocalizedAnchor>
             {props.config.languages.length > 1 ? (
               <LocaleSwitcher locale={props.locale} />
             ) : null}
@@ -101,14 +101,14 @@ export function Header(props: {
 
       <header className="industria-header">
         <div className="mx-auto max-w-[1360px] px-[24px] industria-header__inner hidden min-[877px]:grid">
-          <Link href="/" className="industria-header__brand">
+          <LocalizedLink href="/" className="industria-header__brand">
             <span className="industria-header__mark">IN</span>
             <span className="industria-header__brand__name">
               Industria
               <small>B2B · Komponenty przemysłowe</small>
             </span>
-          </Link>
-          <form
+          </LocalizedLink>
+          <LocalizedForm
             action="/search"
             method="GET"
             className="industria-search b2b-header__search"
@@ -130,7 +130,7 @@ export function Header(props: {
               showKeyboardHint
               salesChannelCode={props.salesChannelCode}
             />
-          </form>
+          </LocalizedForm>
           <div className="industria-header__actions">
             <ShoppingListHeartBadge
               apiBase={apiBaseUrl}
@@ -167,11 +167,11 @@ export function Header(props: {
             {props.megamenu ? (
               <MegamenuMobileDrawer megamenu={props.megamenu} account={drawerAccount} />
             ) : (
-              <Link href="/catalog" className="icon-btn" aria-label={t('nav.catalog')}>
+              <LocalizedLink href="/catalog" className="icon-btn" aria-label={t('nav.catalog')}>
                 <MenuIcon />
-              </Link>
+              </LocalizedLink>
             )}
-            <Link href="/" className="mr-auto inline-flex items-center gap-[8px]">
+            <LocalizedLink href="/" className="mr-auto inline-flex items-center gap-[8px]">
               <span className="industria-header__mark">IN</span>
               <span className="flex flex-col leading-none">
                 <span className="text-[15px] font-bold text-fg">Industria</span>
@@ -179,7 +179,7 @@ export function Header(props: {
                   Komponenty B2B
                 </small>
               </span>
-            </Link>
+            </LocalizedLink>
             <CompareCounterLink
               href="/compare"
               ariaLabel="Porównaj produkty"
@@ -212,12 +212,12 @@ export function Header(props: {
               the hardcoded per-category links. */}
           <CategoriesMega megamenu={props.megamenu ?? null} />
           <div className="industria-nav__right">
-            <Link
+            <LocalizedLink
               href="/quick-order"
               className="industria-nav__btn industria-nav__btn--primary"
             >
               <LightningIcon /> Quick Order
-            </Link>
+            </LocalizedLink>
           </div>
         </div>
       </nav>
@@ -248,14 +248,14 @@ function UserPill({
 }): ReactNode {
   if (!user) {
     return (
-      <Link href="/login" className="industria-header__user">
+      <LocalizedLink href="/login" className="industria-header__user">
         <span className="industria-header__user__avatar" aria-hidden="true">
           <UserIcon />
         </span>
         <span className="industria-header__user__name">
           <strong>{loginLabel}</strong>
         </span>
-      </Link>
+      </LocalizedLink>
     );
   }
 
@@ -264,14 +264,14 @@ function UserPill({
   const subtitle = user.organization?.name ?? email;
 
   return (
-    <Link href="/account" className="industria-header__user">
+    <LocalizedLink href="/account" className="industria-header__user">
       <span className="industria-header__user__avatar">{initials(user)}</span>
       <span className="industria-header__user__name">
         <strong>{fullName}</strong>
         <em>{subtitle}</em>
       </span>
       <ChevDownIcon />
-    </Link>
+    </LocalizedLink>
   );
 }
 

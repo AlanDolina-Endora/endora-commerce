@@ -1,6 +1,4 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import {
   addOrderComment,
   cancelMyOrder,
@@ -27,6 +25,8 @@ import { OrderItemRows } from '../../../../components/orders/OrderItemRows';
 import { PurchaseTracker } from '../../../../components/analytics/EcommerceTrackers';
 import { purchaseTrackingPayload } from '../../../../lib/analytics/purchase-eligibility';
 import type { Metadata } from 'next';
+import { localeRedirect } from '../../../../lib/i18n/navigation';
+import { LocalizedLink } from '../../../../lib/i18n/localized-link';
 
 /**
  * Not indexed (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010): an
@@ -64,7 +64,7 @@ export default async function OrderConfirmationPage({
   const session = await getSessionCookie();
   const { id } = await params;
   const { payment: paymentReturn, error: actionError } = (await searchParams) ?? {};
-  if (!session) redirect(`/login?next=/orders/${id}`);
+  if (!session) return await localeRedirect(`/login?next=/orders/${id}`);
 
   let order;
   try {
@@ -212,9 +212,9 @@ export default async function OrderConfirmationPage({
           </button>
         </form>
         {returnAction ? (
-          <Link href={returnAction.href} className="btn btn--outline btn--sm">
+          <LocalizedLink href={returnAction.href} className="btn btn--outline btn--sm">
             {returnAction.label}
-          </Link>
+          </LocalizedLink>
         ) : null}
         {(invoices ?? []).map((inv) => (
           <a
@@ -227,9 +227,9 @@ export default async function OrderConfirmationPage({
             Download invoice {inv.number}
           </a>
         ))}
-        <Link href="/orders" className="btn btn--ghost btn--sm">
+        <LocalizedLink href="/orders" className="btn btn--ghost btn--sm">
           See all orders
-        </Link>
+        </LocalizedLink>
       </div>
 
       <h2 className="mt-10">Status</h2>
@@ -360,7 +360,7 @@ export default async function OrderConfirmationPage({
 async function addCommentAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const id = (formData.get('id') as string) ?? '';
   const body = ((formData.get('body') as string) ?? '').trim();
   if (body) {
@@ -368,16 +368,16 @@ async function addCommentAction(formData: FormData): Promise<void> {
       await addOrderComment(session, id, body);
     } catch (err) {
       const message = err instanceof StorefrontApiError ? err.detail : 'Could not add comment.';
-      redirect(`/orders/${id}?error=${encodeURIComponent(message)}`);
+      return await localeRedirect(`/orders/${id}?error=${encodeURIComponent(message)}`);
     }
   }
-  redirect(`/orders/${id}`);
+  return await localeRedirect(`/orders/${id}`);
 }
 
 async function reorderAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const id = (formData.get('id') as string) ?? '';
   let target = '/cart';
   try {
@@ -385,9 +385,9 @@ async function reorderAction(formData: FormData): Promise<void> {
     target = result.checkoutUrl || '/cart';
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : 'Could not reorder.';
-    redirect(`/orders/${id}?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/orders/${id}?error=${encodeURIComponent(message)}`);
   }
-  redirect(target);
+  return await localeRedirect(target);
 }
 
 /**
@@ -400,7 +400,7 @@ async function reorderAction(formData: FormData): Promise<void> {
 async function retryPaymentAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const id = (formData.get('id') as string) ?? '';
   const { locale } = await getServerContext();
   const t = tForLocale(locale);
@@ -418,7 +418,7 @@ async function retryPaymentAction(formData: FormData): Promise<void> {
       err instanceof StorefrontApiError ? err.detail : t('order.payment.retry.failed');
     target = `/orders/${id}?error=${encodeURIComponent(message)}`;
   }
-  redirect(target);
+  return await localeRedirect(target);
 }
 
 /**
@@ -433,7 +433,7 @@ async function retryPaymentAction(formData: FormData): Promise<void> {
 async function cancelOrderAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const id = (formData.get('id') as string) ?? '';
   const { locale } = await getServerContext();
   const t = tForLocale(locale);
@@ -441,22 +441,22 @@ async function cancelOrderAction(formData: FormData): Promise<void> {
     await cancelMyOrder(session, id);
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : t('order.cancel.failed');
-    redirect(`/orders/${id}?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/orders/${id}?error=${encodeURIComponent(message)}`);
   }
-  redirect(`/orders/${id}`);
+  return await localeRedirect(`/orders/${id}`);
 }
 
 async function reorderToQuoteAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const id = (formData.get('id') as string) ?? '';
   try {
     const { ctx } = await getServerContext();
     await cloneOrderToQuote(session, id, ctx);
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : 'Could not create quote request.';
-    redirect(`/orders/${id}?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/orders/${id}?error=${encodeURIComponent(message)}`);
   }
-  redirect('/quote-requests');
+  return await localeRedirect('/quote-requests');
 }

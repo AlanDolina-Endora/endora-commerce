@@ -10,10 +10,10 @@ import { StorefrontApiError } from '../../lib/api/client';
  * (`specs/163-product-data-scopes/contracts/url-keys-and-redirects.md` §4, §6;
  * FR-071, FR-074).
  *
- * - `kind: 'redirect'` answers a permanent redirect to the resolve answer's
- *   `path`, verbatim: the backend built it with `productPath()`, and the
- *   storefront — which does not know the channel's default language — composes
- *   no product URL of its own;
+ * - `kind: 'redirect'` answers a redirect to the resolve answer's `path`,
+ *   verbatim — permanent (308) for a former key, temporary (307) for a key of
+ *   another channel language (feature 167, FR-024): the backend built it with
+ *   `productPath()`, and the storefront composes no product URL of its own;
  * - `kind: 'product'` reads the product **by id**, so the page shows the product
  *   the key resolved to and never a second lookup by key;
  * - not-found from the resolve answers the page's not-found;
@@ -31,8 +31,15 @@ class RedirectSignal extends Error {
 }
 class NotFoundSignal extends Error {}
 
+class TemporaryRedirectSignal extends Error {
+  constructor(readonly path: string) {
+    super(`temporary redirect ${path}`);
+  }
+}
+
 const navigation = vi.hoisted(() => ({
   permanentRedirect: vi.fn(),
+  redirect: vi.fn(),
   notFound: vi.fn(),
 }));
 vi.mock('next/navigation', () => navigation);
@@ -43,13 +50,16 @@ const catalogApi = vi.hoisted(() => ({
 }));
 vi.mock('../../lib/api/catalog', () => catalogApi);
 
-const { productIdForKey, productById, alternateLanguages, requestedLanguage } = await import('../../app/(catalog)/p/[slug]/resolution');
+const { productIdForKey, productById, alternateLanguages } = await import('../../app/(catalog)/p/[slug]/resolution');
 
 const ctx = { salesChannelCode: 'b2b', locale: 'pl-PL' };
 
 beforeEach(() => {
   navigation.permanentRedirect.mockReset().mockImplementation((path: string) => {
     throw new RedirectSignal(path);
+  });
+  navigation.redirect.mockReset().mockImplementation((path: string) => {
+    throw new TemporaryRedirectSignal(path);
   });
   navigation.notFound.mockReset().mockImplementation(() => {
     throw new NotFoundSignal();
@@ -59,24 +69,55 @@ beforeEach(() => {
 });
 
 describe('productIdForKey', () => {
-  it('redirects permanently to the path the backend built, verbatim', async () => {
+  it('redirects permanently (308) to the path the backend built for a former key, verbatim', async () => {
     const answer: ProductKeyResolution = {
       kind: 'redirect',
       key: 'wiertarka',
       languageCode: 'pl-PL',
-      path: '/p/wiertarka?lang=pl-PL',
+      path: '/pl/p/wiertarka',
+      permanent: true,
     };
     catalogApi.resolveProductKey.mockResolvedValue(answer);
 
-    await expect(productIdForKey('drill', ctx)).rejects.toEqual(new RedirectSignal('/p/wiertarka?lang=pl-PL'));
+    await expect(productIdForKey('drill', ctx)).rejects.toEqual(new RedirectSignal('/pl/p/wiertarka'));
     expect(catalogApi.resolveProductKey).toHaveBeenCalledWith('drill', ctx);
-    expect(navigation.permanentRedirect).toHaveBeenCalledWith('/p/wiertarka?lang=pl-PL');
+    expect(navigation.permanentRedirect).toHaveBeenCalledWith('/pl/p/wiertarka');
+    expect(navigation.redirect).not.toHaveBeenCalled();
   });
 
-  it.each(['//evil.example/p/x', 'https://evil.example/p/x', '/\\evil.example', '/cart', 'p/x', '/p//evil.example'])(
+  it('redirects temporarily (307) to the language\'s own key for a key of another channel language (FR-024)', async () => {
+    catalogApi.resolveProductKey.mockResolvedValue({
+      kind: 'redirect',
+      key: 'drill',
+      languageCode: 'en-US',
+      path: '/en/p/drill',
+      permanent: false,
+    } satisfies ProductKeyResolution);
+
+    await expect(productIdForKey('wiertarka', ctx)).rejects.toEqual(new TemporaryRedirectSignal('/en/p/drill'));
+    expect(navigation.permanentRedirect).not.toHaveBeenCalled();
+  });
+
+  it.each(['/p/drill', '/en/p/drill', '/en-gb/p/drill?variant=A'])('accepts the product path %s', async (path) => {
+    catalogApi.resolveProductKey.mockResolvedValue({ kind: 'redirect', key: 'drill', languageCode: 'en-US', path, permanent: true });
+    await expect(productIdForKey('x', ctx)).rejects.toEqual(new RedirectSignal(path));
+  });
+
+  it.each([
+    '//evil.example/p/x',
+    'https://evil.example/p/x',
+    '/\\evil.example',
+    '/cart',
+    'p/x',
+    '/p//evil.example',
+    '/en/cart',
+    '//en/p/x',
+    '/EN/p/x',
+    '/en/p/x/y',
+  ])(
     'never redirects off the product pages: %s is not-found (checkpoint E security review, I3)',
     async (path) => {
-      catalogApi.resolveProductKey.mockResolvedValue({ kind: 'redirect', key: 'k', languageCode: 'pl-PL', path });
+      catalogApi.resolveProductKey.mockResolvedValue({ kind: 'redirect', key: 'k', languageCode: 'pl-PL', path, permanent: true });
       await expect(productIdForKey('drill', ctx)).rejects.toBeInstanceOf(NotFoundSignal);
       expect(navigation.permanentRedirect).not.toHaveBeenCalled();
     },
@@ -136,30 +177,21 @@ describe('productById (T155, B4)', () => {
 });
 
 describe('alternateLanguages', () => {
-  it('maps each alternate the backend sent to its language, verbatim', () => {
+  it('maps each alternate the backend sent to its language, verbatim, plus x-default (feature 167)', () => {
     expect(
       alternateLanguages({
-        canonical: '/p/wiertarka?lang=pl-PL',
+        canonical: '/pl/p/wiertarka',
         alternates: [
-          { languageCode: 'en-US', path: '/p/drill' },
-          { languageCode: 'pl-PL', path: '/p/wiertarka?lang=pl-PL' },
+          { languageCode: 'en-US', path: '/en/p/drill' },
+          { languageCode: 'pl-PL', path: '/pl/p/wiertarka' },
         ],
+        xDefault: '/p/wiertarka',
       }),
-    ).toEqual({ 'en-US': '/p/drill', 'pl-PL': '/p/wiertarka?lang=pl-PL' });
+    ).toEqual({ 'en-US': '/en/p/drill', 'pl-PL': '/pl/p/wiertarka', 'x-default': '/p/wiertarka' });
   });
 
   it('lists no alternates when the product has none for the anonymous audience', () => {
-    expect(alternateLanguages({ canonical: '/p/drill', alternates: [] })).toBeUndefined();
-  });
-});
-
-describe('requestedLanguage', () => {
-  it('passes a well-formed `?lang` on and drops anything else', () => {
-    expect(requestedLanguage('pl-PL')).toBe('pl-PL');
-    expect(requestedLanguage('de')).toBe('de');
-    expect(requestedLanguage(undefined)).toBeNull();
-    expect(requestedLanguage(['pl-PL', 'en-US'])).toBeNull();
-    expect(requestedLanguage('pl-PL\r\nx: y')).toBeNull();
+    expect(alternateLanguages({ canonical: '/p/drill', alternates: [], xDefault: '/p/drill' })).toBeUndefined();
   });
 });
 
@@ -185,30 +217,19 @@ describe('the product page composes no product URL of its own', () => {
 });
 
 /**
- * Final QA review Q-M7 (L-1) — the product page alone lets `?lang=` choose the request's
- * language: both its metadata and its body hand `requestedLanguage(search.lang)` to the
- * server context, and no other caller passes a language override.
+ * Feature 167 — the path decides the page language (OR-4): the product page no longer
+ * reads `?lang=` and no storefront source passes a language override to the server
+ * context (163's interim `langOverride`, Q-M7, is gone).
  */
-describe('only the product page passes the `?lang` override to the server context (Q-M7, L-1)', () => {
+describe('no `?lang` override is left (feature 167, OR-4)', () => {
   const root = resolve(import.meta.dirname, '../..');
-  const pagePath = resolve(root, 'app/(catalog)/p/[slug]/page.tsx');
-  const page = readFileSync(pagePath, 'utf8');
-  const OVERRIDE = 'getServerContext({ langOverride: requestedLanguage(search.lang) })';
+  const page = readFileSync(resolve(root, 'app/(catalog)/p/[slug]/page.tsx'), 'utf8');
 
-  function body(source: string, signature: RegExp): string {
-    const start = source.search(signature);
-    expect(start).toBeGreaterThanOrEqual(0);
-    const next = source.slice(start + 1).search(/\nexport (default )?async function /);
-    return next < 0 ? source.slice(start) : source.slice(start, start + 1 + next);
-  }
-
-  it('generateMetadata and the page both pass requestedLanguage(search.lang)', () => {
-    expect(body(page, /export async function generateMetadata\(/)).toContain(OVERRIDE);
-    expect(body(page, /export default async function ProductPage\(/)).toContain(OVERRIDE);
-    expect(page.split('langOverride').length - 1).toBe(2);
+  it('the product page reads no `lang` search parameter', () => {
+    expect(page).not.toMatch(/search\.lang|requestedLanguage/);
   });
 
-  it('no other storefront source passes langOverride', () => {
+  it('no storefront source passes langOverride', () => {
     const skip = new Set(['node_modules', '.next', 'test', 'dist', 'coverage', 'public']);
     const offenders: string[] = [];
     const walk = (dir: string): void => {
@@ -217,36 +238,22 @@ describe('only the product page passes the `?lang` override to the server contex
         const full = resolve(dir, entry.name);
         if (entry.isDirectory()) walk(full);
         else if (/\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) {
-          if (full === pagePath) continue;
-          const text = readFileSync(full, 'utf8');
-          // A call passes it as `langOverride: …` or as the shorthand `{ langOverride }`;
-          // the declaration in `lib/server-context.ts` (`langOverride?:`) passes nothing.
-          if (/[{,]\s*langOverride\s*[:,}]/.test(text)) offenders.push(relative(root, full));
+          if (/langOverride/.test(readFileSync(full, 'utf8'))) offenders.push(relative(root, full));
         }
       }
     };
     walk(root);
     expect(offenders).toEqual([]);
   });
-});
 
-/**
- * T155 finding §1.5 (B3) — with `?lang=` the product page is written in the
- * override's language while the root layout, which cannot read the query and
- * by L-1 must not take the override, stamps `<html lang>` in the cookie's or the
- * header's. The page marks its own content's language instead (WCAG 2.2 SC 3.1.2,
- * Language of Parts): its outermost element carries `lang={locale}`, the
- * language the page resolved with the override.
- */
-describe('the product page marks the language its content is written in (T155, B3)', () => {
-  const page = readFileSync(resolve(import.meta.dirname, '../../app/(catalog)/p/[slug]/page.tsx'), 'utf8');
-
-  // Source-level, as the rest of this file: rendering `ProductPage` means standing up
-  // every read it makes (resolve, product, stock, price, quote settings, one-click, the
-  // session) for one attribute, and the page's own suites already read its source.
-  it('its outermost element carries the resolved locale as `lang`', () => {
+  /**
+   * T155 finding §1.5 (B3) marked the page's own content with `lang={locale}` because
+   * `<html lang>` could disagree with a `?lang=` page. With the language in the path,
+   * `<html lang>` is the page language, so the workaround is gone.
+   */
+  it('the outermost element no longer repeats the language', () => {
     const body = page.slice(page.search(/export default async function ProductPage\(/));
     const outermost = body.slice(body.indexOf('return (')).match(/return \(\s*<div([^>]*)>/);
-    expect(outermost?.[1]).toContain('lang={locale}');
+    expect(outermost?.[1] ?? '').not.toContain('lang={locale}');
   });
 });

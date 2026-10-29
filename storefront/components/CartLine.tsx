@@ -10,6 +10,7 @@ import {
   type CartLineEditError,
 } from '../lib/cartMinimum';
 import { formatCount } from '../lib/orderMinimum';
+import { LocalizedAnchor } from '../lib/i18n/localized-link';
 
 /**
  * CartLine — Industria-themed cart row (feature 027 US1).
@@ -162,12 +163,12 @@ export function CartLine({
           <span className="truncate font-mono text-[11px] uppercase text-muted">{line.sku}</span>
         ) : null}
         {line.productSlug ? (
-          <a
+          <LocalizedAnchor
             href={`/p/${encodeURIComponent(line.productSlug)}`}
             className="line-clamp-2 text-[14px] font-semibold leading-[1.3] text-fg no-underline hover:underline"
           >
             {line.productName}
-          </a>
+          </LocalizedAnchor>
         ) : (
           <span className="line-clamp-2 text-[14px] font-semibold leading-[1.3] text-fg">
             {line.productName}

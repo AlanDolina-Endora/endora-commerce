@@ -137,6 +137,22 @@ describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
     });
   }
 
+  async function expectCrossLanguageRedirect(
+    key: string,
+    channel: { code: string },
+    language: string,
+    to: string,
+  ): Promise<void> {
+    expect(await resolve(key, channel, language)).toEqual({
+      kind: 'redirect',
+      key: to,
+      languageCode: language,
+      path: productPath({ key: to, languageCode: language, channel: CHANNEL_URL_FACTS }),
+      // A current key of another language can change hands: answered 307.
+      permanent: false,
+    });
+  }
+
   /**
    * The body a key nobody holds answers at this channel, in this language, for this
    * caller — the message is localised to the request language, so the reference
@@ -188,8 +204,55 @@ describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
     // In pl-PL it became the product's redirect `(pl-PL, drill)` (US7 #8).
     await expectRedirect(k('drill'), c1, 'pl-PL', k('wiertarka'));
     await expectRedirect(k('drill'), c2, 'pl-PL', k('wiertarka'));
-    // A key the product holds only in pl-PL is not a key of en-US (K1).
-    await expectAbsent(k('wiertarka'), c1, 'en-US');
+    // A key the product holds only in pl-PL is not a key of en-US (K1): the page is
+    // never rendered under it — feature 167 (FR-024) answers a temporary redirect to
+    // the product's own en-US key instead.
+    await expectCrossLanguageRedirect(k('wiertarka'), c1, 'en-US', k('drill'));
+  });
+
+  // -- Feature 167 (FR-024, research R-9): a key of another channel language ----
+
+  it('redirects (not permanently) a current key of another channel language to the key of L', async () => {
+    const p = await insertProduct(k('grinder'));
+    await putKeys(p, {
+      languageKeys: [
+        { languageCode: 'pl-PL', key: k('szlifierka') },
+        { languageCode: 'en-US', key: k('angle-grinder') },
+      ],
+    });
+    await expectCrossLanguageRedirect(k('szlifierka'), c1, 'en-US', k('angle-grinder'));
+    await expectCrossLanguageRedirect(k('angle-grinder'), c2, 'pl-PL', k('szlifierka'));
+  });
+
+  it('answers not-found when the product is not reachable in L', async () => {
+    const p = await insertProduct(k('sander'));
+    await putKeys(p, { languageKeys: [{ languageCode: 'pl-PL', key: k('szlifierka-tasmowa') }] });
+    await sql(
+      `insert into product_channel_language_scopes (product_id, sales_channel_id, language_code, status, created_at, updated_at)
+       values (?, ?, 'en-US', 'inactive', now(), now())`,
+      [p, c1.id],
+    );
+    try {
+      await expectAbsent(k('szlifierka-tasmowa'), c1, 'en-US');
+    } finally {
+      await sql(`delete from product_channel_language_scopes where product_id = ?`, [p]);
+    }
+  });
+
+  it('does not consider a key of a language the channel does not serve (XII)', async () => {
+    const p = await insertProduct(k('planer'));
+    // Written directly: the test dictionary seeds no de-DE, and the point is a key row
+    // of a language outside the channel's list.
+    await sql(
+      `insert into product_url_keys (id, product_id, language_code, sales_channel_id, key, created_at, updated_at)
+       values (gen_random_uuid(), ?, 'de-DE', null, ?, now(), now())`,
+      [p, k('hobel')],
+    );
+    try {
+      await expectAbsent(k('hobel'), c1, 'en-US');
+    } finally {
+      await sql(`delete from product_url_keys where product_id = ? and language_code = 'de-DE'`, [p]);
+    }
   });
 
   it('redirects another current key of the product in L to its effective key at (C, L)', async () => {

@@ -13,6 +13,7 @@ import { useBlockData } from '../hooks/use-block-data.js';
 import { colorValueToCss } from '../utils/color-value.js';
 import { productCardDataRequest } from '../utils/block-data.js';
 import { useBlockRenderEnvironment } from '@endora-commerce/page-builder-core/contributions';
+import { useCmsRenderLocalizePath } from './render-context.js';
 
 /**
  * A product's price is a unit price: its significant places, up to four, at
@@ -110,6 +111,8 @@ export function CmsProductCardView({
   dividerColor?: string;
   previewTier?: BreakpointTier;
 }): React.ReactElement {
+  // Feature 167 — the product link takes the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
   // An explicit prop wins; otherwise the language the host renders this tree
   // in — on the storefront the request's locale, for every Page Builder tree
   // (issue #249). This was a hard-coded `pl-PL`, which `ProductGrid` and
@@ -150,7 +153,7 @@ export function CmsProductCardView({
   // Feature 163 (R-16, FR-027): the image on a neutral backdrop, the name, the
   // summary and a "more" link — no price, SKU or stock.
   if (variant === 'showcase') {
-    const href = `/p/${product.slug}`;
+    const href = localizePath(`/p/${product.slug}`);
     const moreLabel = ctaLabel?.trim() || 'More';
     return (
       <article className={`cmsc-pb-product-card cmsc-pb-product-card--showcase${lineClass}`} style={cardStyle}>
@@ -181,7 +184,7 @@ export function CmsProductCardView({
       style={cardStyle}
     >
       <a
-        href={`/p/${product.slug}`}
+        href={localizePath(`/p/${product.slug}`)}
         className={`cmsc-pb-product-card__media ${ratioClass}`}
         style={mediaStyle}
       >
@@ -198,7 +201,7 @@ export function CmsProductCardView({
       </a>
       <div className="cmsc-pb-product-card__body">
         {skuLine}
-        <a href={`/p/${product.slug}`} className="cmsc-pb-product-card__name" {...nameStyle}>
+        <a href={localizePath(`/p/${product.slug}`)} className="cmsc-pb-product-card__name" {...nameStyle}>
           {product.name}
         </a>
         {summaryLine}
@@ -207,7 +210,7 @@ export function CmsProductCardView({
         ) : null}
         {price ? <span className="cmsc-pb-product-card__price">{price}</span> : null}
         {ctaLabel ? (
-          <a href={`/p/${product.slug}`} className="cmsc-pb-product-card__cta">
+          <a href={localizePath(`/p/${product.slug}`)} className="cmsc-pb-product-card__cta">
             {ctaLabel}
           </a>
         ) : null}

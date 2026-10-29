@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { AddToRfqButton } from '../rfq/AddToRfqButton';
+import { LocalizedAnchor } from '../../lib/i18n/localized-link';
 
 /**
  * CTA replacement rendered when the resolved display mode is `none` (FR-041).
@@ -35,13 +36,13 @@ export function QuoteRequestCta(props: {
 
   if (variant === 'card') {
     return (
-      <a
+      <LocalizedAnchor
         href={`/p/${encodeURIComponent(productSlug)}#quote`}
         className="inline-block font-mono text-[12px] text-accent underline"
         data-product-id={productId}
       >
         {label ?? 'Cena na zapytanie'}
-      </a>
+      </LocalizedAnchor>
     );
   }
 

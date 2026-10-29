@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import type { CmsResolvedPage } from '@endora-commerce/contracts';
 import { Breadcrumbs, type BreadcrumbCrumb } from '../../../components/Breadcrumbs';
 import { CmsPageRenderer } from '../../../components/CmsPageRenderer';
@@ -13,6 +13,7 @@ import { cmsSocialMetadata } from '../../../lib/seo/cms-share-metadata';
 import { canonicalPath } from '../../../lib/seo/route-seo';
 import { cmsRenderLocation, type PageSearchParams } from '../../../lib/page-builder/render-location';
 import { seo } from './seo';
+import { localePermanentRedirect } from '../../../lib/i18n/navigation';
 
 interface PageProps {
   params: Promise<{ slug: string[] }>;
@@ -92,12 +93,12 @@ export default async function CmsContentPage({ params, searchParams }: PageProps
   const canonical = publicPath(page, path);
   const flatSlugs = page.path && page.path !== page.slug ? [normalizeCmsUrlPath(page.slug)] : [];
   if (cmsPageSlug !== null && [path, canonical, ...flatSlugs].includes(normalizeCmsUrlPath(cmsPageSlug))) {
-    permanentRedirect('/');
+    return await localePermanentRedirect('/');
   }
 
   // R19D (T285): one address per page. The flat slug of a page served under
   // its parent's path still resolves, and answers a permanent redirect to it.
-  if (canonical !== path) permanentRedirect(`/${canonical}`);
+  if (canonical !== path) return await localePermanentRedirect(`/${canonical}`);
 
   // Feature 163 (FR-030, FR-031): Home › the ancestors the backend resolved for
   // this channel › the page. An ancestor this channel does not serve arrives

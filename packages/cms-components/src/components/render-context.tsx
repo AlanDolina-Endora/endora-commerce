@@ -64,6 +64,11 @@ export interface CmsRenderContextValue {
   location?: CmsRenderLocation;
   /** The page language's carousel words; absent: English. */
   carouselLabels?: CmsCarouselLabelText;
+  /**
+   * Puts the page language's prefix on an internal storefront path (feature 167,
+   * FR-020); absent — in the editor — paths are rendered as they are.
+   */
+  localizePath?: (path: string) => string;
 }
 
 const emptyValue: CmsRenderContextValue = {
@@ -79,6 +84,7 @@ export function CmsRenderProvider({
   mediaBaseUrl,
   location,
   carouselLabels,
+  localizePath,
   children,
 }: {
   embeds: CmsRenderEmbeds;
@@ -86,6 +92,7 @@ export function CmsRenderProvider({
   mediaBaseUrl?: string;
   location?: CmsRenderLocation;
   carouselLabels?: CmsCarouselLabelText;
+  localizePath?: (path: string) => string;
   children: ReactNode;
 }) {
   return (
@@ -96,6 +103,7 @@ export function CmsRenderProvider({
         ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}),
         ...(location !== undefined ? { location } : {}),
         ...(carouselLabels !== undefined ? { carouselLabels } : {}),
+        ...(localizePath !== undefined ? { localizePath } : {}),
       }}
     >
       {children}
@@ -121,4 +129,11 @@ export function useCmsRenderLocation(): CmsRenderLocation | undefined {
 
 export function useCmsRenderCarouselLabels(): CmsCarouselLabelText | undefined {
   return useContext(CmsRenderContext).carouselLabels;
+}
+
+const identity = (path: string): string => path;
+
+/** The page language's path localizer (feature 167), or the identity where none was provided. */
+export function useCmsRenderLocalizePath(): (path: string) => string {
+  return useContext(CmsRenderContext).localizePath ?? identity;
 }
