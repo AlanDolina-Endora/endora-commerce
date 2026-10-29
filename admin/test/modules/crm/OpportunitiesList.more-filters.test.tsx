@@ -217,6 +217,29 @@ describe('OpportunitiesList — More filters disclosure (U1 A)', () => {
     expect(screen.getByLabelText('Partner')).toBe(partner);
   });
 
+  it('clears a filter cleared the moment it appears (#524)', async () => {
+    // The field appears when the offered fields load; clearing it in that very
+    // commit, before its passive effects run, is what a loaded host's
+    // `findByLabelText` did once — and the clear was lost.
+    const cleared = new Promise<HTMLInputElement>((resolve) => {
+      const observer = new MutationObserver(() => {
+        const input = document.getElementById('crm-opportunity-cf-field_5');
+        if (!(input instanceof HTMLInputElement)) return;
+        observer.disconnect();
+        installSteppedTimers();
+        fireEvent.change(input, { target: { value: '' } });
+        resolve(input);
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+    renderList('/crm/opportunities?cf.field_5.contains=acme');
+    const partner = await cleared;
+    await stepPastCommitPause();
+    await waitFor(() => expect(lastListQuery().get('fieldFilters')).toBeNull());
+    expect(partner).toHaveValue('');
+    expect(screen.getByLabelText('Partner')).toBe(partner);
+  });
+
   it('is a real button operable from the keyboard', async () => {
     const user = userEvent.setup();
     renderList();

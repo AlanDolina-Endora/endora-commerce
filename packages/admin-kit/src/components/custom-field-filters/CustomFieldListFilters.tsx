@@ -127,10 +127,18 @@ function FilterCell(props: ControlProps): ReactNode {
 
 /**
  * A local draft committed after {@link COMMIT_PAUSE_MS}. The draft adopts the
- * value from outside (a chip removed, a view loaded) whenever that value is no
- * longer what the draft would commit — and not while the operator types. A
- * commit still pending when an outside value is adopted is dropped: the
- * operator's half-typed draft must not land over the value they just chose.
+ * value from outside (a chip removed, a view loaded) whenever that value
+ * changes to one the draft would not commit — and not while the operator
+ * types. A commit still pending when an outside value is adopted is dropped:
+ * the operator's half-typed draft must not land over the value they just chose.
+ *
+ * Both rules hold from the moment the control is on screen, before its effects
+ * have run (issue #524): a control appears when the list's fields load, and an
+ * operator — or a test — may type into it in that commit's window. So adoption
+ * reacts to a *change* of the outside value, not to the effect's first run,
+ * which would take the value the control mounted with back over what was just
+ * typed; and the pending commit is not cleared by StrictMode's simulated
+ * unmount, only skipped once the control is really gone.
  */
 function usePausedDraft<T>(
   committed: T,
@@ -142,10 +150,16 @@ function usePausedDraft<T>(
   const [draft, setDraft] = useState<T>(committed);
   const draftRef = useRef(draft);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mounted = useRef(false);
   const commitRef = useRef(onCommit);
   commitRef.current = onCommit;
 
+  /** The outside value as of the last render that adopted it, or of the first. */
+  const committedKey = JSON.stringify(committed);
+  const adoptedKey = useRef(committedKey);
   useEffect(() => {
+    if (adoptedKey.current === committedKey) return;
+    adoptedKey.current = committedKey;
     if (same(draftRef.current, committed)) return;
     if (timer.current !== null) {
       clearTimeout(timer.current);
@@ -155,14 +169,14 @@ function usePausedDraft<T>(
     setDraft(committed);
     // `same` compares by value; `committed` is the only input that matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(committed)]);
+  }, [committedKey]);
 
-  useEffect(
-    () => () => {
-      if (timer.current !== null) clearTimeout(timer.current);
-    },
-    [],
-  );
+  useEffect(() => {
+    mounted.current = true;
+    return (): void => {
+      mounted.current = false;
+    };
+  }, []);
 
   const update = (next: T): void => {
     draftRef.current = next;
@@ -176,7 +190,10 @@ function usePausedDraft<T>(
       if (filter !== undefined) commitRef.current(filter);
     };
     if (pauseMs === 0) commit();
-    else timer.current = setTimeout(commit, pauseMs);
+    else
+      timer.current = setTimeout(() => {
+        if (mounted.current) commit();
+      }, pauseMs);
   };
   return [draft, update];
 }

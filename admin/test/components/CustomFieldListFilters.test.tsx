@@ -1,4 +1,4 @@
-import { StrictMode, useState, type ReactElement } from 'react';
+import { StrictMode, useEffect, useState, type ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -87,6 +87,65 @@ function renderFilters(language = 'en', initial?: CustomFieldFilters): { calls: 
 afterEach(() => {
   vi.useRealTimers();
 });
+
+/**
+ * A host whose fields arrive later, as a list page's do: the controls first
+ * commit outside `act`, so their passive effects run some time after they are
+ * on screen.
+ */
+function LateFieldsHost({ calls, initial }: { calls: Calls; initial: CustomFieldFilters }): ReactElement {
+  const [fields, setFields] = useState<CustomFieldListFilterField[] | null>(null);
+  const [value, setValue] = useState<CustomFieldFilters>(initial);
+  useEffect(() => {
+    let alive = true;
+    void Promise.resolve(FIELDS).then((loaded) => {
+      if (alive) setFields(loaded);
+    });
+    return (): void => {
+      alive = false;
+    };
+  }, []);
+  return (
+    <div className="grid">
+      <CustomFieldListFilters
+        idPrefix="t"
+        fields={fields ?? []}
+        status={fields === null ? 'loading' : 'ready'}
+        value={value}
+        language="en"
+        onChange={(key, filter): void => {
+          calls.push([key, filter]);
+          setValue((prev) => {
+            const next = Object.assign(Object.create(null) as CustomFieldFilters, prev);
+            if (filter === null) delete next[key];
+            else next[key] = filter;
+            return next;
+          });
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * Types `text` into the control `id` in the very microtask it first commits —
+ * before any passive effect of that commit has run, the earliest a person or a
+ * loaded test host's `findBy*` can reach it (issue #524). The commit pause is
+ * then on fake timers, so the test steps over it rather than waiting.
+ */
+function typeTheMomentItAppears(id: string, text: string): Promise<HTMLInputElement> {
+  return new Promise((resolve) => {
+    const observer = new MutationObserver(() => {
+      const input = document.getElementById(id);
+      if (!(input instanceof HTMLInputElement)) return;
+      observer.disconnect();
+      vi.useFakeTimers();
+      fireEvent.change(input, { target: { value: text } });
+      resolve(input);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+}
 
 describe('CustomFieldListFilters', () => {
   it('renders one control per field, labelled in the language, then the base language, then labelDefault', () => {
@@ -345,6 +404,24 @@ describe('CustomFieldListFilters', () => {
     expect(screen.getByRole('button', { name: 'Region' })).toHaveFocus();
     await user.keyboard('{Enter}');
     expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['in StrictMode', true],
+    ['outside StrictMode', false],
+  ])('commits what is typed the moment a control appears, %s (#524)', async (_, strict) => {
+    const calls: Calls = [];
+    const initial = Object.assign(Object.create(null) as CustomFieldFilters, { note: { contains: 'acme' } });
+    const typed = typeTheMomentItAppears('t-cf-note', '');
+    const host = <LateFieldsHost calls={calls} initial={initial} />;
+    renderWithI18n(strict ? <StrictMode>{host}</StrictMode> : host, EN_BUNDLE);
+    const note = await typed;
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(calls).toEqual([['note', null]]);
+    expect(note).toHaveValue('');
+    expect(screen.getByLabelText('Note')).toBe(note);
   });
 
   it('has no axe violations', async () => {
