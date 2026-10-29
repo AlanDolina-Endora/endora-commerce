@@ -116,10 +116,10 @@ US1 and US2 ship together: the middleware that makes the path win is the one tha
 - [X] T051 [US5] Implement `xDefault` in `catalog-query.service.ts` `#pagePaths`
 - [X] T052 [P] [US5] RED `storefront/test/seo/page-alternates.test.ts` — metadata of home, catalogue, category, search, CMS, blog, kontakt and product pages: prefixed canonical, one alternate per channel language, `x-default` unprefixed; cart/checkout/account emit none *(held by `localizedAlternates`' behaviour and each page's source; the metadata literal keeps a `canonical` property so `check:storefront-indexability` still reads it — findings=0)*
 - [X] T053 [US5] Implement `pageAlternates` use in each page's `generateMetadata` (`app/page.tsx`, `app/(catalog)/{catalog,c/[slug],search}/page.tsx`, `app/(content)/[...slug]/page.tsx`, `app/blog/[[...slug]]/page.tsx`, `app/kontakt/page.tsx`) and `x-default` on the PDP
-- [ ] T054 [P] [US5] RED `packages/modules/seo` sitemap test — products per language with the per-language key, categories and CMS pages per channel language (only the page's own languages for CMS), prefixed per setting, no `?lang=`
-- [ ] T055 [US5] Implement `packages/modules/seo/src/backend/services/sitemap-generator.service.ts`
-- [ ] T056 [P] [US5] RED storefront sitemap test (`storefront/test/seo/sitemap-language.test.ts`) — the same rules for `app/sitemap.ts`
-- [ ] T057 [US5] Implement `storefront/app/sitemap.ts`
+- [X] T054 [P] [US5] RED `packages/modules/seo` sitemap test — products per language with the per-language key, categories and CMS pages per channel language (only the page's own languages for CMS), prefixed per setting, no `?lang=`
+- [X] T055 [US5] Implement `packages/modules/seo/src/backend/services/sitemap-generator.service.ts` *(a CMS page's own languages were not on `CmsPageRecord` nor on the storefront page index: both gained an optional `languages`, filled by `cms`; absent means every channel language)*
+- [X] T056 [P] [US5] RED storefront sitemap test (`storefront/test/seo/sitemap-language.test.ts`) — the same rules for `app/sitemap.ts`
+- [X] T057 [US5] Implement `storefront/app/sitemap.ts`
 
 ---
 

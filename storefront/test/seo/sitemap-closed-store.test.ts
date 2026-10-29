@@ -18,6 +18,7 @@ const listProducts = vi.fn(async () => ({
 
 vi.mock('../../lib/server-context', () => ({
   getServerContext: async () => ({
+    urlState: { languages: [], aliases: [], current: 'en-US' },
     ctx: { locale: 'en-US', salesChannelCode: 'trade' },
     ...(state.anonymousAccess !== undefined ? { anonymousAccess: state.anonymousAccess } : {}),
   }),

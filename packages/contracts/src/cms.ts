@@ -664,6 +664,12 @@ export const cmsPageIndexEntrySchema = z.object({
    */
   path: z.string().optional(),
   updatedAt: isoDateTimeSchema,
+  /**
+   * The languages the page has content in (feature 167): a sitemap lists the page
+   * under the prefix of each of these the channel serves. Absent from an older
+   * backend — every channel language.
+   */
+  languages: z.array(z.string()).optional(),
 });
 export type CmsPageIndexEntry = z.infer<typeof cmsPageIndexEntrySchema>;
 
@@ -877,6 +883,12 @@ export interface CmsPageRecord {
   updatedAt: Date;
   /** The breadcrumb parent (feature 163). Never part of the page's URL. */
   parentPageId: string | null;
+  /**
+   * The languages the page has content in (feature 167): the sitemap lists the page
+   * under the prefix of each of these the channel serves. Absent — a record from a
+   * reader that predates it — every channel language.
+   */
+  languages?: readonly string[];
 }
 
 /**

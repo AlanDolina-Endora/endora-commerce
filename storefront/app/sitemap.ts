@@ -6,6 +6,7 @@ import { getCmsPageIndex, normalizeCmsUrlPath } from '../lib/api/cms';
 import { getHomepageConfig } from '../lib/api/homepage';
 import { getServerContext } from '../lib/server-context';
 import { absoluteUrl } from '../lib/seo/site-url';
+import { localizePath, type UrlLanguageState } from '../lib/i18n/locale-path';
 
 /**
  * What this storefront tells crawlers to fetch
@@ -95,8 +96,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // way, and a 500 on this path is a signal search engines act on.
   let ctx: Ctx;
   let anonymousAccess: boolean | undefined;
+  let urlState: UrlLanguageState;
   try {
-    ({ ctx, anonymousAccess } = await getServerContext());
+    ({ ctx, anonymousAccess, urlState } = await getServerContext());
   } catch {
     return entries;
   }
@@ -107,12 +109,48 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // redirects, so it advertises nothing and asks nothing.
   if (anonymousAccess === false) return [];
 
-  for (const url of await productUrls(ctx)) entries.push({ url, lastModified: now, priority: 0.8 });
-  for (const url of await categoryUrls(ctx)) entries.push({ url, lastModified: now, priority: 0.6 });
-  for (const url of await blogUrls(ctx)) entries.push({ url, lastModified: now, priority: 0.5 });
-  for (const entry of await cmsPageEntries(ctx)) entries.push({ ...entry, priority: 0.5 });
+  // Feature 167 (FR-032) — every page is listed under each channel language's path
+  // prefix (none for the unprefixed default). Without known URL languages (an older
+  // backend) the paths are listed as they are, in the request's language only.
+  const languages: readonly (string | undefined)[] =
+    urlState.languages.length > 0 ? urlState.languages.map((l) => l.languageCode) : [undefined];
+  const inLanguage = (path: string, languageCode: string | undefined): string =>
+    absoluteUrl(languageCode === undefined ? path : localizePath(path, urlState, languageCode));
 
-  return entries;
+  const localized: MetadataRoute.Sitemap = [];
+  for (const entry of entries) {
+    const path = new URL(entry.url).pathname;
+    for (const languageCode of languages) localized.push({ ...entry, url: inLanguage(path, languageCode) });
+  }
+
+  for (const languageCode of languages) {
+    // A product's key is per language (163): the listing is asked in each language.
+    const inThatLanguage = languageCode === undefined ? ctx : { ...ctx, locale: languageCode };
+    for (const path of await productPaths(inThatLanguage)) {
+      localized.push({ url: inLanguage(path, languageCode), lastModified: now, priority: 0.8 });
+    }
+  }
+  const categories = await categoryPaths(ctx);
+  const blog = await blogPaths(ctx);
+  for (const languageCode of languages) {
+    for (const path of categories) localized.push({ url: inLanguage(path, languageCode), lastModified: now, priority: 0.6 });
+    for (const path of blog) localized.push({ url: inLanguage(path, languageCode), lastModified: now, priority: 0.5 });
+  }
+  for (const entry of await cmsPageEntries(ctx)) {
+    // A page is listed in the languages it has content in; one that names none in every one.
+    const own = entry.languages ?? [];
+    for (const languageCode of languages) {
+      if (languageCode !== undefined && own.length > 0 && !own.some((l) => l.toLowerCase() === languageCode.toLowerCase())) continue;
+      localized.push({
+        url: inLanguage(entry.path, languageCode),
+        lastModified: entry.lastModified,
+        changeFrequency: 'monthly',
+        priority: 0.5,
+      });
+    }
+  }
+
+  return localized;
 }
 
 /**
@@ -142,7 +180,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
  * URLs are collected into a set: one product is advertised once, whatever the
  * pages overlap by.
  */
-async function productUrls(ctx: Ctx): Promise<string[]> {
+async function productPaths(ctx: Ctx): Promise<string[]> {
   const urls = new Set<string>();
   try {
     const asked = new Set<string>();
@@ -152,7 +190,7 @@ async function productUrls(ctx: Ctx): Promise<string[]> {
         { limit: PRODUCT_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
         ctx,
       );
-      for (const product of page.data) urls.add(absoluteUrl(`/p/${product.slug}`));
+      for (const product of page.data) urls.add(`/p/${product.slug}`);
       const next = page.pagination.cursor;
       if (!page.pagination.hasMore || !next || asked.has(next)) break;
       asked.add(next);
@@ -165,13 +203,13 @@ async function productUrls(ctx: Ctx): Promise<string[]> {
   return [...urls].slice(0, PRODUCT_URL_LIMIT);
 }
 
-async function categoryUrls(ctx: Ctx): Promise<string[]> {
+async function categoryPaths(ctx: Ctx): Promise<string[]> {
   try {
     const tree = await getCategoryTree(ctx);
     const urls: string[] = [];
     const walk = (nodes: readonly { slug: string; children?: unknown }[]): void => {
       for (const node of nodes) {
-        urls.push(absoluteUrl(`/c/${node.slug}`));
+        urls.push(`/c/${node.slug}`);
         const children = node.children;
         if (Array.isArray(children)) walk(children as { slug: string; children?: unknown }[]);
       }
@@ -198,7 +236,15 @@ async function categoryUrls(ctx: Ctx): Promise<string[]> {
  * thing §4.1 forbids. `/` is already in `SITEMAP_STATIC_ROUTES`, so the row is
  * *represented* by dropping its slug entry rather than by adding a second `/`.
  */
-async function cmsPageEntries(ctx: Ctx): Promise<MetadataRoute.Sitemap> {
+interface CmsSitemapEntry {
+  /** The page's logical path. */
+  readonly path: string;
+  readonly lastModified: Date;
+  /** The languages the page has content in (feature 167); absent from an older backend. */
+  readonly languages?: readonly string[];
+}
+
+async function cmsPageEntries(ctx: Ctx): Promise<CmsSitemapEntry[]> {
   try {
     const [index, homepage] = await Promise.all([getCmsPageIndex(ctx), getHomepageConfig(ctx)]);
     // A switched-off `cms` answers `null` (Principle XVII), exactly as `blog`
@@ -210,16 +256,16 @@ async function cmsPageEntries(ctx: Ctx): Promise<MetadataRoute.Sitemap> {
     return index.pages
       .filter((page) => homeSlug === '' || normalizeCmsUrlPath(page.slug) !== homeSlug)
       .map((page) => ({
-        url: absoluteUrl(`/${normalizeCmsUrlPath(page.path ?? page.slug)}`),
+        path: `/${normalizeCmsUrlPath(page.path ?? page.slug)}`,
         lastModified: new Date(page.updatedAt),
-        changeFrequency: 'monthly' as const,
+        ...(page.languages !== undefined ? { languages: page.languages } : {}),
       }));
   } catch {
     return [];
   }
 }
 
-async function blogUrls(ctx: Ctx): Promise<string[]> {
+async function blogPaths(ctx: Ctx): Promise<string[]> {
   try {
     const index = await getBlogIndex(ctx);
     // A switched-off `blog` answers `null` (Principle XVII): the module is
@@ -229,8 +275,8 @@ async function blogUrls(ctx: Ctx): Promise<string[]> {
     const prefix = index.urlPrefix.replace(/^\/+|\/+$/gu, '');
     const base = prefix.length > 0 ? `/${prefix}` : '/blog';
     return [
-      ...index.topLevelCategories.map((category) => absoluteUrl(`${base}/${category.slug}`)),
-      ...index.latestPosts.map((post) => absoluteUrl(`${base}/${post.slug}`)),
+      ...index.topLevelCategories.map((category) => `${base}/${category.slug}`),
+      ...index.latestPosts.map((post) => `${base}/${post.slug}`),
     ];
   } catch {
     return [];

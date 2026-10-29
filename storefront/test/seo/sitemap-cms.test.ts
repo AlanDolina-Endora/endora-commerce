@@ -25,7 +25,8 @@ const getCmsPageIndex = vi.fn();
 const getHomepageConfig = vi.fn();
 
 vi.mock('../../lib/server-context', () => ({
-  getServerContext: async () => ({ ctx: { locale: 'en-US' } }),
+  // Feature 167 — no URL languages known: paths are listed as they are.
+  getServerContext: async () => ({ ctx: { locale: 'en-US' }, urlState: { languages: [], aliases: [], current: 'en-US' } }),
 }));
 vi.mock('../../lib/api/catalog', () => ({
   listProducts: (...args: unknown[]) => listProducts(...args),

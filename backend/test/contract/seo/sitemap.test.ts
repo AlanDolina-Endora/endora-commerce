@@ -57,7 +57,8 @@ describe('GET /api/v1/catalog/sitemap.xml', () => {
     expect(res.body).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?>/);
     expect(res.body).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
     // Seeded category slug "widgets" + at least one seeded product slug.
-    expect(res.body).toContain('http://test.local/c/widgets');
+    // Feature 167 — under the default language's prefix (the channel prefixes it).
+    expect(res.body).toMatch(/http:\/\/test\.local\/[a-z]{2,3}\/c\/widgets</);
     expect(res.body).toMatch(/http:\/\/test\.local\/[a-z]{2,3}\/p\/[a-z0-9-]+/);
     expect(res.body).toContain('</urlset>');
   });

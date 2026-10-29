@@ -356,7 +356,7 @@ export class StorefrontResolver {
   }): Promise<CmsPageIndexEntry[]> {
     const em = this.emFactory();
     const rows = (await em.execute(
-      `select p.id::text as id, cpsc.slug as slug, p.updated_at as updated_at
+      `select p.id::text as id, cpsc.slug as slug, p.updated_at as updated_at, p.languages as languages
        from cms_pages p
        join cms_page_sales_channels cpsc on cpsc.page_id = p.id
        where cpsc.sales_channel_id = ?
@@ -365,7 +365,7 @@ export class StorefrontResolver {
        order by cpsc.slug asc
        limit ${PAGE_INDEX_LIMIT}`,
       [input.resolvedChannel.id],
-    )) as Array<{ id: string; slug: string; updated_at: Date | string }>;
+    )) as Array<{ id: string; slug: string; updated_at: Date | string; languages: unknown }>;
 
     // R19D (T282): the address a crawler is given is the page's public path.
     const paths = channelPaths(
@@ -376,6 +376,8 @@ export class StorefrontResolver {
       slug: row.slug,
       path: paths.get(row.id) ?? row.slug,
       updatedAt: new Date(row.updated_at).toISOString(),
+      // Feature 167 — the sitemap lists the page under each of its languages' prefixes.
+      languages: Array.isArray(row.languages) ? row.languages.filter((l): l is string => typeof l === 'string') : [],
     }));
   }
 
