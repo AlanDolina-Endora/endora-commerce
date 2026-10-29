@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { RawQueryFragment } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { ERROR_CODES } from '@endora-commerce/contracts';
 import { AssetsLibraryService, type AssetsLibraryServiceDeps } from './assets-library.service.js';
@@ -19,10 +20,32 @@ const HIDDEN = 'aaaaaaaa-0000-4000-8000-000000000002';
 
 type Where = Record<string, unknown>;
 
+/** The ids an `idNotAmong` clause leaves out, read back from its raw fragment; `null` when `clause` is not one. */
+function excludedIds(clause: Where): string[] | null {
+  const [key] = Object.keys(clause);
+  const fragment = key === undefined ? undefined : RawQueryFragment.getKnownFragment(key, false);
+  if (!fragment || !fragment.sql.includes('<> all(?::uuid[])')) return null;
+  return String(fragment.params[0]).replace(/[{}]/g, '').split(',');
+}
+
 function fakeEm(rows: Array<{ id: string; folderId?: string | null }>) {
   const finds: Array<{ where: Where; options: Record<string, unknown> | undefined }> = [];
+  /** The scoping reads, issued through the query builder (ids only, nothing hydrated). */
+  const scopes: Array<{ select?: unknown; where?: Where; andWhere?: unknown[]; mapResults?: boolean }> = [];
   const em = {
     finds,
+    scopes,
+    createQueryBuilder: vi.fn(() => {
+      const scope: (typeof scopes)[number] = {};
+      scopes.push(scope);
+      const qb = {
+        select: (fields: unknown) => ((scope.select = fields), qb),
+        where: (where: Where) => ((scope.where = where), qb),
+        andWhere: (...args: unknown[]) => ((scope.andWhere = args), qb),
+        execute: async (_mode: string, mapResults: boolean) => ((scope.mapResults = mapResults), []),
+      };
+      return qb;
+    }),
     find: vi.fn(async (_entity: unknown, where: Where, options?: Record<string, unknown>) => {
       finds.push({ where, options });
       return options?.['fields'] ? rows.map(({ id }) => ({ id })) : rows;
@@ -66,20 +89,28 @@ describe('AssetsLibraryService.listAssets — hidden assets are left out in SQL 
     await service(em, { exclusionFor, hiddenAmong: async () => new Set() }).listAssets({ folderId: null, q: 'brief' });
 
     expect(exclusionFor).toHaveBeenCalledTimes(1);
-    const [scoping, listing] = em.finds;
-    const scoped = (scoping?.where['$and'] as Where[]) ?? [];
+    // The scoping read: the list's own clauses, the candidates as one uuid-array
+    // parameter, ids only and nothing hydrated (T049).
+    const [scoping] = em.scopes;
+    const scoped = (scoping?.where?.['$and'] as Where[]) ?? [];
     expect(scoped).toContainEqual({ folderId: null });
     expect(scoped).toContainEqual({ deletedAt: null });
-    expect(scoped).toContainEqual({ id: { $in: [HIDDEN, VISIBLE] } });
     expect(scoped.some((c) => '$or' in c)).toBe(true);
-    expect(scoping?.options).toMatchObject({ fields: ['id'] });
-    expect(listing?.where['$and']).toContainEqual({ id: { $nin: [HIDDEN] } });
+    expect(scoping?.select).toBe('a.id');
+    expect(scoping?.andWhere).toEqual(['a.id = any(?::uuid[])', [`{${HIDDEN},${VISIBLE}}`]]);
+    expect(scoping?.mapResults).toBe(false);
+    // The page: the exclusion as one parameter, beside the list's clauses.
+    const [listing] = em.finds;
+    const clauses = (listing?.where['$and'] as Where[]) ?? [];
+    expect(clauses.map(excludedIds).filter((ids) => ids !== null)).toEqual([[HIDDEN]]);
+    expect(clauses).toContainEqual({ folderId: null });
   });
 
   it('runs today’s query unchanged when nothing is hidden', async () => {
     const em = fakeEm([]);
     await service(em, { exclusionFor: async () => [], hiddenAmong: async () => new Set() }).listAssets({ folderId: null });
     expect(em.finds).toHaveLength(1);
+    expect(em.scopes).toHaveLength(0);
     expect(em.finds[0]?.where).toEqual({ $and: [{ folderId: null }, { deletedAt: null }] });
   });
 });

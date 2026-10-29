@@ -19,6 +19,7 @@ import {
 } from '../entities/asset-permalink-release.entity.js';
 import { HttpError } from '@endora-commerce/platform/http';
 import { assetNotFound, type AssetVisibility } from './asset-visibility.js';
+import { assetIdsAmong, idNotAmong } from './asset-id-sets.js';
 import type { AdapterRegistry } from './storage/adapter-registry.js';
 import type { AssetReferenceRegistry } from './reference-registry.js';
 import { UploadPipeline, type UploadInput, type UploadPolicy } from './upload-pipeline.js';
@@ -385,15 +386,11 @@ export class AssetsLibraryService {
     // the cursor never lands on a hidden row. The candidates are scoped by this
     // list's own clauses first: only rows this list could return are evaluated.
     // An unrestricted caller gets an empty set without a read.
-    const hidden = await this.deps.visibility.exclusionFor(async (candidates) => {
-      const rows = await em.fork().find(
-        Asset,
-        { $and: [...clauses, { id: { $in: [...candidates] } }] },
-        { fields: ['id'] },
-      );
-      return rows.map((row) => row.id);
-    });
-    if (hidden.length > 0) clauses.push({ id: { $nin: hidden } });
+    // Both sets travel as one uuid-array parameter each (T049).
+    const hidden = await this.deps.visibility.exclusionFor((candidates) =>
+      assetIdsAmong(em.fork(), clauses.length > 0 ? { $and: clauses } : {}, candidates),
+    );
+    if (hidden.length > 0) clauses.push(idNotAmong(hidden));
 
     const where: Record<string, unknown> = clauses.length > 0 ? { $and: clauses } : {};
 

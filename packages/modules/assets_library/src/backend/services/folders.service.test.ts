@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { RawQueryFragment } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { ERROR_CODES } from '@endora-commerce/contracts';
 import { FoldersService } from './folders.service.js';
@@ -106,8 +107,13 @@ describe('FoldersService.countPermalinkedAssets — the reader’s files only (R
   it('leaves out what the evaluator excludes', async () => {
     const em = fakeEm([]);
     await folders(em, [HIDDEN_1]).countPermalinkedAssets(FOLDER);
-    const [, where] = em.count.mock.calls[0] as unknown as [unknown, Record<string, unknown>];
-    expect(where).toMatchObject({ id: { $nin: [HIDDEN_1] } });
+    const [, where] = em.count.mock.calls[0] as unknown as [unknown, { $and: Array<Record<string, unknown>> }];
+    const [own, exclusion] = where.$and;
+    expect(own).toMatchObject({ deletedAt: null, permalink: { $ne: null } });
+    // The exclusion travels as one uuid-array parameter (T049).
+    const fragment = RawQueryFragment.getKnownFragment(Object.keys(exclusion ?? {})[0] ?? '', false);
+    expect(fragment?.sql).toContain('<> all(?::uuid[])');
+    expect(fragment?.params).toEqual([`{${HIDDEN_1}}`]);
   });
 
   it('runs today’s count unchanged when nothing is hidden', async () => {

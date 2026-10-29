@@ -120,15 +120,39 @@ export class AssetVisibility {
   async hiddenAmong(ids: readonly string[]): Promise<Set<string>> {
     const caller = await this.caller();
     if (caller.kind === 'unrestricted') return new Set();
-    const asked = [...new Set(ids)];
+    return this.#hiddenAmong(caller, [...new Set(ids)], 'pending');
+  }
+
+  /**
+   * `hiddenAmong`'s steps. `rescue` says which ids step 4 asks about:
+   * - `'pending'` — only the ids steps 1–3 left pending, after they answered;
+   * - `'all'` — every asked id, **while** steps 1–2 run. For a list's
+   *   candidates, which all have a hidden restricted reference by construction,
+   *   the two sets differ only by the few with a visible one too, and not
+   *   waiting for the owners is what keeps the restricted reader's list within
+   *   SC-004 (T049). The statements are the same, one per descriptor.
+   */
+  async #hiddenAmong(caller: AssetCaller, asked: readonly string[], rescue: 'pending' | 'all'): Promise<Set<string>> {
     if (asked.length === 0) return new Set();
     const { restricted, unrestricted } = this.deps.registry.partition();
+    const rescueAmong = async (assetIds: readonly string[]): Promise<Set<string>> => {
+      const rescued = new Set<string>();
+      if (assetIds.length === 0) return rescued;
+      await Promise.all(
+        unrestricted.map(async (descriptor) => {
+          const byAsset = await this.deps.registry.referencesOf(descriptor, [...assetIds]);
+          for (const [assetId, list] of byAsset) if (list.length > 0) rescued.add(assetId);
+        }),
+      );
+      return rescued;
+    };
+    const eagerRescue = rescue === 'all' ? rescueAmong(asked) : undefined;
 
     const withRestricted = new Set<string>();
     const visible = new Set<string>();
     await Promise.all(
       restricted.map(async (descriptor) => {
-        const byAsset = await this.deps.registry.referencesOf(descriptor, asked);
+        const byAsset = await this.deps.registry.referencesOf(descriptor, [...asked]);
         const hits = [...byAsset.entries()].filter(([, list]) => list.length > 0);
         if (hits.length === 0) return;
         for (const [assetId] of hits) withRestricted.add(assetId);
@@ -142,14 +166,7 @@ export class AssetVisibility {
     );
 
     const pending = [...withRestricted].filter((id) => !visible.has(id));
-    if (pending.length === 0) return new Set();
-    const rescued = new Set<string>();
-    await Promise.all(
-      unrestricted.map(async (descriptor) => {
-        const byAsset = await this.deps.registry.referencesOf(descriptor, pending);
-        for (const [assetId, list] of byAsset) if (list.length > 0) rescued.add(assetId);
-      }),
-    );
+    const rescued = await (eagerRescue ?? rescueAmong(pending));
     return new Set(pending.filter((id) => !rescued.has(id)));
   }
 
@@ -158,7 +175,9 @@ export class AssetVisibility {
    * `scope` narrows the candidates to the rows the list itself could return —
    * its own folder and filters — in one library statement, so only those are
    * evaluated. Each restricted descriptor is asked once, in parallel; nothing
-   * is scoped or evaluated when no descriptor names a candidate.
+   * is scoped or evaluated when no descriptor names a candidate. The
+   * unrestricted descriptors are asked about every scoped candidate alongside
+   * the owners rather than after them (T049).
    */
   async exclusionFor(scope: (candidates: readonly string[]) => Promise<readonly string[]>): Promise<string[]> {
     const caller = await this.caller();
@@ -175,7 +194,7 @@ export class AssetVisibility {
     if (candidates.length === 0) return [];
     const scoped = await scope(candidates);
     if (scoped.length === 0) return [];
-    return [...(await this.hiddenAmong(scoped))];
+    return [...(await this.#hiddenAmong(caller, [...new Set(scoped)], 'all'))];
   }
 
   /**

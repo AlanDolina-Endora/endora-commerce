@@ -340,6 +340,39 @@ describe('AssetVisibility.exclusionFor (R-5)', () => {
     expect([...tasks.calls.findReferences[0]!].sort()).toEqual([A1, A2]);
   });
 
+  it('asks each unrestricted descriptor once, for every scoped candidate, while the owners are still answering (T049)', async () => {
+    // Every candidate has a hidden restricted reference by construction, so the
+    // rescue question does not wait for the owners' answer (R-5, SC-004).
+    let rescueAsked!: () => void;
+    const rescueStarted = new Promise<void>((resolve) => (rescueAsked = resolve));
+    let ownerSawRescueFirst = false;
+    const tasks = restricted('tasks', 'task_attachment', { [A1]: ['t1'], [A2]: ['t2'], [A3]: ['t3', 't4'] }, ['t4']);
+    const answer = tasks.readerRestriction!.visibleEntityIds.bind(tasks.readerRestriction);
+    (tasks.readerRestriction as { visibleEntityIds: typeof answer }).visibleEntityIds = async (entityIds) => {
+      ownerSawRescueFirst = await Promise.race([
+        rescueStarted.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 200)),
+      ]);
+      return answer(entityIds);
+    };
+    const catalog = unrestricted('catalog', 'product_gallery', { [A2]: ['g'] });
+    const find = catalog.findReferences.bind(catalog);
+    catalog.findReferences = async (assetIds) => {
+      rescueAsked();
+      return find(assetIds);
+    };
+    const h = harness([tasks, catalog]);
+
+    const out = await h.visibility.exclusionFor(async (candidates) => candidates);
+
+    expect(out).toEqual([A1]);
+    expect(ownerSawRescueFirst).toBe(true);
+    expect(catalog.calls.findReferences).toHaveLength(1);
+    expect([...catalog.calls.findReferences[0]!].sort()).toEqual([A1, A2, A3]);
+    expect(tasks.calls.findReferences).toHaveLength(1);
+    expect(tasks.calls.visibleEntityIds).toHaveLength(1);
+  });
+
   it('returns nothing, and scopes nothing, without a candidate', async () => {
     const tasks = restricted('tasks', 'task_attachment', { [A1]: ['t1'] }, ['t1']);
     const h = harness([tasks]);

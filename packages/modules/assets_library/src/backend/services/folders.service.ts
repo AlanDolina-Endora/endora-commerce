@@ -13,6 +13,7 @@ import { recordAuditFromContext } from '@endora-commerce/platform/commands';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { AssetReferenceRegistry } from './reference-registry.js';
 import type { AssetVisibility } from './asset-visibility.js';
+import { assetIdsAmong, idNotAmong } from './asset-id-sets.js';
 
 export class FoldersService {
   constructor(
@@ -274,11 +275,8 @@ export class FoldersService {
     // A file the caller may not see is not counted
     // (`specs/166-asset-reference-visibility/` R-10): the list's exclusion,
     // scoped to the files this count could include.
-    const hidden = await this.visibility.exclusionFor(async (candidates) => {
-      const rows = await em.fork().find(Asset, { ...where, id: { $in: [...candidates] } }, { fields: ['id'] });
-      return rows.map((row) => row.id);
-    });
-    return em.count(Asset, hidden.length > 0 ? { ...where, id: { $nin: hidden } } : where);
+    const hidden = await this.visibility.exclusionFor((candidates) => assetIdsAmong(em.fork(), where, candidates));
+    return em.count(Asset, hidden.length > 0 ? { $and: [where, idNotAmong(hidden)] } : where);
   }
 
   private async collectSubtreeFolderIds(em: EntityManager, rootId: string): Promise<string[]> {
