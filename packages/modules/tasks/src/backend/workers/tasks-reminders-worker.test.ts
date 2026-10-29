@@ -3,6 +3,7 @@ import { ModuleDisabledError } from '@endora-commerce/platform/kernel';
 import { getTenantContext } from '@endora-commerce/platform/tenancy';
 import {
   createTasksRemindersJob,
+  runTasksRemindersJob,
   startTasksReminders,
   TASKS_DIGEST_EVERY_MS,
   TASKS_DIGEST_SCOPE_REASON,
@@ -62,7 +63,7 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
     const digest = pass(TASKS_DIGEST_SCOPE_REASON);
     const job = createTasksRemindersJob({ isPresent: () => false, reminders: reminders.value, digest: digest.value, log: log() });
 
-    await job(new Date('2032-01-01T08:00:00Z'));
+    await runTasksRemindersJob(job, new Date('2032-01-01T08:00:00Z'));
 
     for (const p of [reminders, digest]) {
       expect(p.probe).not.toHaveBeenCalled();
@@ -75,7 +76,7 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
     const digest = pass(TASKS_DIGEST_SCOPE_REASON, async () => true);
     const job = createTasksRemindersJob({ isPresent: () => true, reminders: reminders.value, digest: digest.value, log: log() });
 
-    await job(new Date('2032-01-01T08:00:00Z'));
+    await runTasksRemindersJob(job, new Date('2032-01-01T08:00:00Z'));
 
     expect(reminders.probe).toHaveBeenCalledTimes(1);
     expect(reminders.run).not.toHaveBeenCalled();
@@ -93,7 +94,7 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
       digest: pass(TASKS_DIGEST_SCOPE_REASON, async () => false).value,
       log: log(),
     });
-    await job(new Date('2032-01-01T08:00:00Z'));
+    await runTasksRemindersJob(job, new Date('2032-01-01T08:00:00Z'));
     expect(reminders.run).toHaveBeenCalledTimes(1);
   });
 
@@ -103,7 +104,7 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
     const job = createTasksRemindersJob({ isPresent: () => true, reminders: reminders.value, digest: digest.value, log: log() });
     const start = Date.parse('2032-01-01T08:00:00Z');
 
-    for (let minute = 0; minute <= 30; minute += 1) await job(new Date(start + minute * 60_000));
+    for (let minute = 0; minute <= 30; minute += 1) await runTasksRemindersJob(job, new Date(start + minute * 60_000));
 
     expect(reminders.run).toHaveBeenCalledTimes(31);
     expect(digest.run.mock.calls.map(([now]) => (now.getTime() - start) / 60_000)).toEqual([0, 15, 30]);
@@ -116,12 +117,12 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
     const logger = log();
     const job = createTasksRemindersJob({ isPresent: () => true, reminders: failing.value, digest: digest.value, log: logger });
 
-    await job(new Date('2032-01-01T08:00:00Z'));
+    await runTasksRemindersJob(job, new Date('2032-01-01T08:00:00Z'));
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(digest.run).toHaveBeenCalledTimes(1);
 
     failing.run.mockRejectedValueOnce(new ModuleDisabledError('tasks'));
-    await expect(job(new Date('2032-01-01T08:01:00Z'))).rejects.toBeInstanceOf(ModuleDisabledError);
+    await expect(runTasksRemindersJob(job, new Date('2032-01-01T08:01:00Z'))).rejects.toBeInstanceOf(ModuleDisabledError);
   });
 
   it.each([
@@ -130,7 +131,13 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
   ])('builds no consumer and installs no schedule where %s', async (_where, host) => {
     const attach = vi.fn();
     const onClose = vi.fn();
-    expect(await startTasksReminders({ job: async () => undefined, attach, onClose, ...host })).toBe(false);
+    const job = createTasksRemindersJob({
+      isPresent: () => true,
+      reminders: pass(TASKS_REMINDERS_SCOPE_REASON).value,
+      digest: pass(TASKS_DIGEST_SCOPE_REASON).value,
+      log: log(),
+    });
+    expect(await startTasksReminders({ job, attach, onClose, ...host })).toBe(false);
     expect(attach).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -140,7 +147,13 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
     bull.workers.length = 0;
     const attach = vi.fn();
     const closers: Array<() => Promise<void>> = [];
-    const job = vi.fn(async () => undefined);
+    const reminders = pass(TASKS_REMINDERS_SCOPE_REASON);
+    const job = createTasksRemindersJob({
+      isPresent: () => true,
+      reminders: reminders.value,
+      digest: pass(TASKS_DIGEST_SCOPE_REASON).value,
+      log: log(),
+    });
 
     const started = await startTasksReminders({
       job,
@@ -161,7 +174,7 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
       { name: 'sweep', data: {} },
     );
     await bull.workers[0]!.processor();
-    expect(job).toHaveBeenCalledTimes(1);
+    expect(reminders.run).toHaveBeenCalledTimes(1);
     await closers[0]!();
     expect(bull.queues[0]!.close).toHaveBeenCalled();
   });

@@ -53,9 +53,20 @@ export interface TasksRemindersJobDeps {
   readonly log: { warn(context: Record<string, unknown>, message: string): void };
 }
 
+/** What one tick runs, and the digest pass's cadence — one per process, shared by every tick of it. */
+export interface TasksRemindersJob {
+  readonly deps: TasksRemindersJobDeps;
+  /** When the digest pass last ran in this process — an in-memory stamp; `null` before the first. */
+  readonly cadence: { digestRanAt: number | null };
+}
+
+export function createTasksRemindersJob(deps: TasksRemindersJobDeps): TasksRemindersJob {
+  return { deps, cadence: { digestRanAt: null } };
+}
+
 /**
- * What one tick runs. For each pass: **presence first** (Constitution XVII —
- * a module that is off asks its tables nothing and tells nobody, and nothing
+ * One tick. For each pass: **presence first** (Constitution XVII — a module
+ * that is off asks its tables nothing and tells nobody, and nothing
  * accumulates: a reminder is then delivered on return only within its grace,
  * a digest only for the day it is), then the probe, outside any scope — a
  * question that cannot be answered counts as yes, since a failing probe may
@@ -63,13 +74,14 @@ export interface TasksRemindersJobDeps {
  * whose entry writes the `tenant.escape_hatch` audit row (issue #120): 1 440
  * idle ticks a day write none.
  *
- * A failed pass is logged and not re-thrown: the next tick is the retry. A
+ * The reminders run every tick; the digest when {@link TASKS_DIGEST_EVERY_MS}
+ * have passed since its last pass (a clock that went back runs it at once). A
+ * failed pass is logged and not re-thrown: the next tick is the retry. A
  * module switched off underneath a pass is the exception.
  */
-export function createTasksRemindersJob(deps: TasksRemindersJobDeps): (now?: Date) => Promise<void> {
-  let digestRanAt: number | null = null;
-
-  const run = async (pass: TaskSweepPass, now: Date): Promise<void> => {
+export async function runTasksRemindersJob(job: TasksRemindersJob, now: Date = new Date()): Promise<void> {
+  const { deps, cadence } = job;
+  const run = async (pass: TaskSweepPass): Promise<void> => {
     let hasWork = true;
     try {
       hasWork = await pass.hasWork(now);
@@ -90,15 +102,14 @@ export function createTasksRemindersJob(deps: TasksRemindersJobDeps): (now?: Dat
     }
   };
 
-  return async (now: Date = new Date()): Promise<void> => {
-    if (!deps.isPresent()) return;
-    await run(deps.reminders, now);
-    const at = now.getTime();
-    if (digestRanAt !== null && at >= digestRanAt && at - digestRanAt < TASKS_DIGEST_EVERY_MS) return;
-    if (!deps.isPresent()) return;
-    digestRanAt = at;
-    await run(deps.digest, now);
-  };
+  if (!deps.isPresent()) return;
+  await run(deps.reminders);
+  const at = now.getTime();
+  const last = cadence.digestRanAt;
+  if (last !== null && at >= last && at - last < TASKS_DIGEST_EVERY_MS) return;
+  if (!deps.isPresent()) return;
+  cadence.digestRanAt = at;
+  await run(deps.digest);
 }
 
 export function createTasksRemindersQueue(redis: Redis): Queue<TasksRemindersJobData> {
@@ -132,7 +143,7 @@ export async function ensureTasksRemindersSchedule(
  * consumer was started.
  */
 export async function startTasksReminders(input: {
-  readonly job: () => Promise<void>;
+  readonly job: TasksRemindersJob;
   readonly processRunsWorkers: boolean;
   readonly moduleQueueRedis: Redis | undefined;
   readonly attach: (worker: Worker<TasksRemindersJobData>) => void;
@@ -146,7 +157,7 @@ export async function startTasksReminders(input: {
   });
   input.attach(
     // One tick at a time per process: a second concurrent pass would only find the first's claims.
-    new Worker<TasksRemindersJobData>(TASKS_REMINDERS_QUEUE, () => input.job(), {
+    new Worker<TasksRemindersJobData>(TASKS_REMINDERS_QUEUE, () => runTasksRemindersJob(input.job), {
       connection: moduleQueueRedis,
       concurrency: 1,
     }),

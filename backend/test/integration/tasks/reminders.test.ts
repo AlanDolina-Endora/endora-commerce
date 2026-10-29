@@ -18,7 +18,11 @@ import { AdminNotification } from '../../helpers/package-entities.js';
 import { seedCrmAdmin } from '../../helpers/seed-crm.js';
 import { runWithoutTenantContext } from '../../../src/tenancy/tenant-context.js';
 import type { TaskReminderService } from '../../../../packages/modules/tasks/src/backend/services/reminder-service.js';
-import { TASKS_REMINDERS_SCOPE_REASON } from '../../../../packages/modules/tasks/src/backend/workers/tasks-reminders-worker.js';
+import {
+  TASKS_REMINDERS_SCOPE_REASON,
+  runTasksRemindersJob,
+  type TasksRemindersJob,
+} from '../../../../packages/modules/tasks/src/backend/workers/tasks-reminders-worker.js';
 
 /**
  * User Story 7 — reminders (`specs/165-task-management/` spec US7 scenarios
@@ -62,7 +66,7 @@ describe('tasks — reminders (US7)', () => {
   const sweep = (now: Date) => enterSystemScope('test: tasks reminders', () => composed().sweep(now));
   /** One tick as the consumer runs it — presence, the probe outside any scope, then the passes. */
   const job = (now: Date): Promise<void> =>
-    runWithoutTenantContext(() => (h.container.resolve('tasksRemindersJob') as (now: Date) => Promise<void>)(now));
+    runWithoutTenantContext(() => runTasksRemindersJob(h.container.resolve('tasksRemindersJob') as TasksRemindersJob, now));
 
   function call(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, payload?: unknown, cookies = admin) {
     return h.app.inject({

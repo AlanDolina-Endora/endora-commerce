@@ -102,6 +102,7 @@ import {
   startTasksReminders,
   TASKS_DIGEST_SCOPE_REASON,
   TASKS_REMINDERS_SCOPE_REASON,
+  type TasksRemindersJob,
 } from './workers/tasks-reminders-worker.js';
 
 /**
@@ -149,7 +150,7 @@ interface TasksCradle {
   readonly tasksEmail: TaskEmail;
   readonly tasksReminderService: TaskReminderService;
   readonly tasksDigestService: TaskDigestService;
-  readonly tasksRemindersJob: (now?: Date) => Promise<void>;
+  readonly tasksRemindersJob: TasksRemindersJob;
   /**
    * `transactional_emails`' late-bound sender, read per send. It answers
    * `undefined` until that module has announced it.
@@ -703,8 +704,9 @@ export function registerModule(ctx: ModuleContext): void {
         });
       })
       .singleton(),
-    // What one tick of the clock runs. Registered, so that what a test drives is
-    // what the consumer runs: presence, then each pass's probe, then its scope.
+    // What one tick of the clock runs, and the digest cadence. Registered, so that
+    // what a test drives (`runTasksRemindersJob`) is what the consumer runs:
+    // presence, then each pass's probe, then its scope.
     tasksRemindersJob: ctx
       .asFunction(({ tasksReminderService, tasksDigestService }: TasksCradle) =>
         createTasksRemindersJob({
@@ -752,7 +754,7 @@ export function registerModule(ctx: ModuleContext): void {
   ctx.routes(async (app) => {
     const cradle = ctx.cradle<TasksCradle>();
     await startTasksReminders({
-      job: () => cradle.tasksRemindersJob(),
+      job: cradle.tasksRemindersJob,
       processRunsWorkers: cradle.processRunsWorkers,
       moduleQueueRedis: cradle.moduleQueueRedis,
       attach: (worker) => ctx.worker(worker, { logger: app.log }),

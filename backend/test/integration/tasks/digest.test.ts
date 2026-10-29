@@ -15,6 +15,10 @@ import { AdminNotification } from '../../helpers/package-entities.js';
 import { seedCrmAdmin } from '../../helpers/seed-crm.js';
 import { runWithoutTenantContext } from '../../../src/tenancy/tenant-context.js';
 import type { TaskDigestService } from '../../../../packages/modules/tasks/src/backend/services/digest-service.js';
+import {
+  runTasksRemindersJob,
+  type TasksRemindersJob,
+} from '../../../../packages/modules/tasks/src/backend/workers/tasks-reminders-worker.js';
 
 /**
  * User Story 7 — the daily digest (`specs/165-task-management/` spec US7
@@ -58,7 +62,7 @@ describe('tasks — the daily digest (US7)', () => {
   const composed = () => h.container.resolve('tasksDigestService') as TaskDigestService;
   const pass = (now: Date) => enterSystemScope('test: tasks digest', () => composed().pass(now));
   const job = (now: Date): Promise<void> =>
-    runWithoutTenantContext(() => (h.container.resolve('tasksRemindersJob') as (now: Date) => Promise<void>)(now));
+    runWithoutTenantContext(() => runTasksRemindersJob(h.container.resolve('tasksRemindersJob') as TasksRemindersJob, now));
 
   function call(method: 'GET' | 'PUT' | 'DELETE' | 'PATCH', path: string, payload?: unknown, cookies = admin) {
     return h.app.inject({
