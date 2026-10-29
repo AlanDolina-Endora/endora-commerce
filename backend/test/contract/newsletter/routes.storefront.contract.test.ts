@@ -5,6 +5,9 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
+import { channelUrlLanguages } from '@endora-commerce/contracts';
+import { SalesChannel } from '@endora-commerce/platform/kernel';
+import { NewsletterSubscriber } from '../../../../packages/modules/newsletter/src/backend/entities/newsletter-subscriber.entity.js';
 import { NewsletterTokenHelper, clickDestinationHash } from '../../../../packages/modules/newsletter/src/backend/services/token.helper.js';
 
 /** The key the test harness pins newsletter links to (`newsletterTokenSecret` in `test-server.ts`). */
@@ -95,5 +98,34 @@ describe('Newsletter storefront routes (feature 048)', () => {
     const block = res.json().data as { code: string; content: { data: unknown } };
     expect(block.code).toBe('newsletter_consent');
     expect(JSON.stringify(block.content.data)).toContain('/privacy-policy');
+  });
+
+  // Feature 167 (US6, FR-034) — the storefront pages a confirm or unsubscribe link
+  // lands on carry the subscriber's channel language prefix (its default language:
+  // a subscriber records no language).
+  it('redirects confirm and unsubscribe to the prefixed storefront pages of the subscriber channel', async () => {
+    const email = `lang-path-${Date.now()}@example.com`;
+    await h.app.inject({ method: 'POST', url: '/api/v1/newsletter/subscribe', payload: { email, channelCode: 'default' } });
+    const subscriber = (await h.em().findOne(NewsletterSubscriber, { email }))!;
+    const channel = (await h.em().findOne(SalesChannel, { code: 'default' }))!;
+    const main = channelUrlLanguages(channel).find((l) => l.isDefault)!;
+    const prefix = main.prefixed ? `/${main.prefix}` : '';
+    const tokens = new NewsletterTokenHelper(HARNESS_NEWSLETTER_TOKEN_SECRET);
+
+    const confirm = await h.app.inject({
+      method: 'GET',
+      url: `/api/v1/newsletter/confirm?token=${encodeURIComponent(tokens.mint('confirm', { id: subscriber.id }, 3600))}`,
+    });
+    expect(new URL(confirm.headers.location as string).pathname).toBe(`${prefix}/newsletter/confirm`);
+
+    const unsubscribe = await h.app.inject({
+      method: 'GET',
+      url: `/api/v1/newsletter/unsubscribe?token=${encodeURIComponent(tokens.mint('unsubscribe', { id: subscriber.id }, 3600))}`,
+    });
+    expect(new URL(unsubscribe.headers.location as string).pathname).toBe(`${prefix}/newsletter/unsubscribe`);
+
+    // An invalid token names no subscriber, so no channel: the logical path.
+    const invalid = await h.app.inject({ method: 'GET', url: '/api/v1/newsletter/confirm?token=bad' });
+    expect(new URL(invalid.headers.location as string).pathname).toBe('/newsletter/confirm');
   });
 });

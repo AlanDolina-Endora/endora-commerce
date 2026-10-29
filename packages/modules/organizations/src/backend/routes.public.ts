@@ -24,6 +24,7 @@ import {
   type EmailMailerPort,
 } from '@endora-commerce/contracts';
 import { currentSalesChannel } from '@endora-commerce/platform/kernel';
+import { firstLanguageTag, storefrontPagePathFor } from '@endora-commerce/contracts';
 import type { RegistrationService } from './services/registration-service.js';
 import type { EmailVerificationService } from './services/email-verification-service.js';
 import { readCustomerKnownDevice, rememberCustomerKnownDevice } from './known-device-cookie.js';
@@ -104,6 +105,14 @@ export async function registerOrganizationsPublicRoutes(
           recipientEmail: result.customerAccount.email,
           organizationName: result.organization.name,
           storefrontBaseUrl: deps.storefrontBaseUrl,
+          // Feature 167 — under the language prefix of the language the visitor
+          // registered in (the request's), else the channel default.
+          pagePath: (path) =>
+            storefrontPagePathFor({
+              path,
+              channel: currentSalesChannel(),
+              requestedLanguage: firstLanguageTag(request.headers['accept-language']),
+            }),
         });
         const verifyUrl = (message.meta as { verifyUrl?: string } | undefined)?.verifyUrl ?? '';
         const sentViaTemplate = deps.templateEmail

@@ -26,6 +26,7 @@ describe('product feed price ports carry decimal strings', () => {
       catalogProducts: { findByIds: async () => [product as unknown as CatalogProductRecord], listVariantsByProductIds: async () => [] },
       catalogCategories: { listAssignmentsForProducts: async () => [], findByIds: async () => [] },
       catalogGallery: { listForProducts: async () => [] },
+      catalogUrlKeys: { effectiveKeys: async () => new Map() },
       resolvePublicImageUrls: async () => new Map(),
       resolveAvailability: async () => new Map(),
       resolveNamedListPrice: createNamedListPriceResolver(port).many,

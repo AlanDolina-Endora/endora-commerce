@@ -136,3 +136,27 @@ export function storefrontDefaultPath(path: string): string {
   assertLogicalPath(path);
   return path;
 }
+
+/**
+ * The storefront path of a page for a **message** (an e-mail link, a redirect a
+ * backend route answers) — feature 167, FR-034. The language is the one the message
+ * is rendered in when the channel serves it (exact tag, then primary subtag), else
+ * the channel's default language. With no channel known the logical path is answered
+ * unchanged: the storefront's redirects then choose the language.
+ */
+export function storefrontPagePathFor(input: {
+  path: string;
+  channel: ChannelUrlFacts | null | undefined;
+  requestedLanguage?: string | null | undefined;
+}): string {
+  assertLogicalPath(input.path);
+  if (!input.channel) return input.path;
+  const languages = channelUrlLanguages(input.channel);
+  const wanted = input.requestedLanguage?.trim().toLowerCase() ?? '';
+  const primary = wanted.split('-')[0];
+  const match =
+    (wanted === '' ? undefined : languages.find((l) => l.languageCode.toLowerCase() === wanted)) ??
+    (wanted === '' ? undefined : languages.find((l) => l.languageCode.split('-')[0]!.toLowerCase() === primary)) ??
+    languages.find((l) => l.isDefault)!;
+  return storefrontPagePath({ path: input.path, languageCode: match.languageCode, channel: input.channel });
+}

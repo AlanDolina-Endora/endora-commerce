@@ -255,6 +255,11 @@ export class TemplatePreviewService {
       pricePresentation,
       taxCountry,
       storefrontOrigin: await this.deps.storefrontOriginFor(channel.id),
+      channelUrl: {
+        languages: channel.languages,
+        defaultLanguage: channel.defaultLanguage,
+        prefixDefaultLanguage: channel.prefixDefaultLanguage,
+      },
       salesChannelId: channel.id,
       priceListId,
     };

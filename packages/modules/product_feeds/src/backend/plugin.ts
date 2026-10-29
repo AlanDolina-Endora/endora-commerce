@@ -8,6 +8,7 @@ import {
   PRODUCT_FEED_SETTING_CODES,
   type CatalogCategoryReadPort,
   type CatalogGalleryPort,
+  type CatalogProductUrlKeyReadPort,
   type CatalogProductFilterPort,
   type CatalogProductReadPort,
   type CatalogProductRecord,
@@ -361,6 +362,8 @@ export interface ProductFeedsModuleOptions {
    * the whole sellable catalogue.
    */
   catalogGallery: CatalogGalleryPort;
+  /** Feature 167 (FR-033) — effective URL keys per channel language, for the feed `link`. */
+  catalogUrlKeys: Pick<CatalogProductUrlKeyReadPort, 'effectiveKeys'>;
   /** Feed validation refuses a price list that no longer exists (FR-021). */
   priceLists: PriceListReadPort;
   resolveAvailability: FeedAvailabilityResolver;
@@ -683,6 +686,7 @@ export function productFeedsModule(
     catalogProducts: options.catalogProducts,
     catalogCategories: options.catalogCategories,
     catalogGallery: options.catalogGallery,
+    catalogUrlKeys: options.catalogUrlKeys,
     selection,
     runs,
     artefactStore,

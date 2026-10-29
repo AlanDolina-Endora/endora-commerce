@@ -304,6 +304,7 @@ targets are plausible and they differ in kind: (a) the storefront order page `/o
 a page URL that would take the language prefix like every other emitter; (b) the backend PDF URL on
 the API origin — not a storefront page, so not prefixed, and served only with the buyer's session
 cookie on that origin. The owner has to choose; T071/T072 wait for it.
+**Owner ruling (OR-14, 2026-10-29): option (a)** — the e-mail links `/<lang>/orders/<orderId>` through `storefrontPagePath`.
 
 Not storefront page URLs (unchanged): `crm`/`projects`/`tasks` `reference-service.ts` (admin
 routes), API URLs, asset URLs.

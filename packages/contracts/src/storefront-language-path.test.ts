@@ -5,6 +5,7 @@ import {
   channelUrlLanguages,
   storefrontDefaultPath,
   storefrontPagePath,
+  storefrontPagePathFor,
   type ChannelUrlFacts,
 } from './storefront-language-path.js';
 
@@ -131,5 +132,23 @@ describe('storefrontDefaultPath — the x-default target', () => {
   it('answers the logical path unchanged (unprefixed in both setting states)', () => {
     expect(storefrontDefaultPath('/c/narzedzia')).toBe('/c/narzedzia');
     expect(storefrontDefaultPath('/')).toBe('/');
+  });
+});
+
+describe('storefrontPagePathFor — the emitters\' composer (FR-034)', () => {
+  it('uses the message language when it is a channel language (exact, then primary subtag)', () => {
+    expect(storefrontPagePathFor({ path: '/verify?token=t', channel: plEn(true), requestedLanguage: 'en-US' })).toBe(
+      '/en/verify?token=t',
+    );
+    expect(storefrontPagePathFor({ path: '/verify', channel: plEn(true), requestedLanguage: 'en' })).toBe('/en/verify');
+  });
+
+  it('falls back to the channel default language', () => {
+    expect(storefrontPagePathFor({ path: '/verify', channel: plEn(true), requestedLanguage: 'de-DE' })).toBe('/pl/verify');
+    expect(storefrontPagePathFor({ path: '/verify', channel: plEn(false), requestedLanguage: null })).toBe('/verify');
+  });
+
+  it('answers the logical path when no channel is known', () => {
+    expect(storefrontPagePathFor({ path: '/verify', channel: null, requestedLanguage: 'en-US' })).toBe('/verify');
   });
 });

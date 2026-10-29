@@ -300,6 +300,11 @@ export function registerModule(ctx: ModuleContext): void {
             // "absent" and "present as undefined" different types, and these
             // two are genuinely absent on a deployment without social sign-in.
             customerChannelAccess,
+            // Feature 167 — the started-on channel, else the system default.
+            channelUrlFactsFor: async (salesChannelId) => {
+              const resolution = lazyPort<SalesChannelResolutionPort>(ctx, 'salesChannelResolutionPort');
+              return salesChannelId ? resolution.getById(salesChannelId) : resolution.getSystemDefault();
+            },
             ...(oauthProvider === undefined ? {} : { oauthProvider }),
             ...(socialAccountResolvers === undefined ? {} : { socialAccountResolvers }),
           });

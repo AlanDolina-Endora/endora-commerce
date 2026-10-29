@@ -69,6 +69,8 @@ function context(pricePresentation: 'gross' | 'net'): FeedResolutionContext {
     pricePresentation,
     taxCountry: 'PL',
     storefrontOrigin: 'https://shop.example.com',
+    // Feature 167 — the channel's URL-language facts: links carry the language prefix.
+    channelUrl: { languages: ['pl-PL', 'en-US'], defaultLanguage: 'pl-PL', prefixDefaultLanguage: true },
     salesChannelId: 'channel-1',
     priceListId: null,
   };
@@ -127,7 +129,7 @@ const GOLDEN: Record<string, string> = {
 <g:id>SKU-1</g:id>
 <g:title>Niebieski widget</g:title>
 <g:description>Opis</g:description>
-<g:link>https://shop.example.com/p/blue-widget?lang=pl-PL</g:link>
+<g:link>https://shop.example.com/pl/p/blue-widget</g:link>
 <g:image_link>https://cdn.example.com/a.jpg</g:image_link>
 <g:availability>in_stock</g:availability>
 <g:price>36.29 PLN</g:price>
@@ -142,7 +144,7 @@ const GOLDEN: Record<string, string> = {
 <g:id>SKU-2</g:id>
 <g:title>Niebieski widget</g:title>
 <g:description>Opis</g:description>
-<g:link>https://shop.example.com/p/blue-widget?lang=pl-PL</g:link>
+<g:link>https://shop.example.com/pl/p/blue-widget</g:link>
 <g:image_link>https://cdn.example.com/a.jpg</g:image_link>
 <g:availability>in_stock</g:availability>
 <g:price>123.00 PLN</g:price>
@@ -158,7 +160,7 @@ const GOLDEN: Record<string, string> = {
 <g:id>SKU-3</g:id>
 <g:title>Niebieski widget</g:title>
 <g:description>Opis</g:description>
-<g:link>https://shop.example.com/p/blue-widget?lang=pl-PL</g:link>
+<g:link>https://shop.example.com/pl/p/blue-widget</g:link>
 <g:image_link>https://cdn.example.com/a.jpg</g:image_link>
 <g:availability>in_stock</g:availability>
 <g:price>0.01 PLN</g:price>
@@ -182,7 +184,7 @@ const GOLDEN: Record<string, string> = {
 <g:id>SKU-1</g:id>
 <g:title>Niebieski widget</g:title>
 <g:description>Opis</g:description>
-<g:link>https://shop.example.com/p/blue-widget?lang=pl-PL</g:link>
+<g:link>https://shop.example.com/pl/p/blue-widget</g:link>
 <g:image_link>https://cdn.example.com/a.jpg</g:image_link>
 <g:availability>in_stock</g:availability>
 <g:price>29.50 PLN</g:price>
@@ -197,7 +199,7 @@ const GOLDEN: Record<string, string> = {
 <g:id>SKU-2</g:id>
 <g:title>Niebieski widget</g:title>
 <g:description>Opis</g:description>
-<g:link>https://shop.example.com/p/blue-widget?lang=pl-PL</g:link>
+<g:link>https://shop.example.com/pl/p/blue-widget</g:link>
 <g:image_link>https://cdn.example.com/a.jpg</g:image_link>
 <g:availability>in_stock</g:availability>
 <g:price>100.00 PLN</g:price>
@@ -213,7 +215,7 @@ const GOLDEN: Record<string, string> = {
 <g:id>SKU-3</g:id>
 <g:title>Niebieski widget</g:title>
 <g:description>Opis</g:description>
-<g:link>https://shop.example.com/p/blue-widget?lang=pl-PL</g:link>
+<g:link>https://shop.example.com/pl/p/blue-widget</g:link>
 <g:image_link>https://cdn.example.com/a.jpg</g:image_link>
 <g:availability>in_stock</g:availability>
 <g:price>0.01 PLN</g:price>
@@ -237,7 +239,7 @@ const GOLDEN: Record<string, string> = {
 <g:id>SKU-1</g:id>
 <g:title>Niebieski widget</g:title>
 <g:description>Opis</g:description>
-<g:link>https://shop.example.com/p/blue-widget?lang=pl-PL</g:link>
+<g:link>https://shop.example.com/pl/p/blue-widget</g:link>
 <g:image_link>https://cdn.example.com/a.jpg</g:image_link>
 <g:availability>in_stock</g:availability>
 <g:price>36.29 PLN</g:price>
@@ -251,7 +253,7 @@ const GOLDEN: Record<string, string> = {
 <g:id>SKU-2</g:id>
 <g:title>Niebieski widget</g:title>
 <g:description>Opis</g:description>
-<g:link>https://shop.example.com/p/blue-widget?lang=pl-PL</g:link>
+<g:link>https://shop.example.com/pl/p/blue-widget</g:link>
 <g:image_link>https://cdn.example.com/a.jpg</g:image_link>
 <g:availability>in_stock</g:availability>
 <g:price>123.00 PLN</g:price>
@@ -266,7 +268,7 @@ const GOLDEN: Record<string, string> = {
 <g:id>SKU-3</g:id>
 <g:title>Niebieski widget</g:title>
 <g:description>Opis</g:description>
-<g:link>https://shop.example.com/p/blue-widget?lang=pl-PL</g:link>
+<g:link>https://shop.example.com/pl/p/blue-widget</g:link>
 <g:image_link>https://cdn.example.com/a.jpg</g:image_link>
 <g:availability>in_stock</g:availability>
 <g:price>0.01 PLN</g:price>
@@ -280,18 +282,18 @@ const GOLDEN: Record<string, string> = {
 </rss>
 `,
   'amazon_flat_file_v1:gross': `sku\ttitle\tdescription\tprice\tavailability\tlink\timage_link\r
-SKU-1\tNiebieski widget\tOpis\t36.29 PLN\tin_stock\thttps://shop.example.com/p/blue-widget?lang=pl-PL\thttps://cdn.example.com/a.jpg\r
-SKU-2\tNiebieski widget\tOpis\t123.00 PLN\tin_stock\thttps://shop.example.com/p/blue-widget?lang=pl-PL\thttps://cdn.example.com/a.jpg\r
-SKU-3\tNiebieski widget\tOpis\t0.01 PLN\tin_stock\thttps://shop.example.com/p/blue-widget?lang=pl-PL\thttps://cdn.example.com/a.jpg\r
+SKU-1\tNiebieski widget\tOpis\t36.29 PLN\tin_stock\thttps://shop.example.com/pl/p/blue-widget\thttps://cdn.example.com/a.jpg\r
+SKU-2\tNiebieski widget\tOpis\t123.00 PLN\tin_stock\thttps://shop.example.com/pl/p/blue-widget\thttps://cdn.example.com/a.jpg\r
+SKU-3\tNiebieski widget\tOpis\t0.01 PLN\tin_stock\thttps://shop.example.com/pl/p/blue-widget\thttps://cdn.example.com/a.jpg\r
 `,
   'ebay_v1:net': `sku,title,description,price,availability,link,image_link\r
-SKU-1,Niebieski widget,Opis,29.50 PLN,in_stock,https://shop.example.com/p/blue-widget?lang=pl-PL,https://cdn.example.com/a.jpg\r
-SKU-2,Niebieski widget,Opis,100.00 PLN,in_stock,https://shop.example.com/p/blue-widget?lang=pl-PL,https://cdn.example.com/a.jpg\r
-SKU-3,Niebieski widget,Opis,0.01 PLN,in_stock,https://shop.example.com/p/blue-widget?lang=pl-PL,https://cdn.example.com/a.jpg\r
+SKU-1,Niebieski widget,Opis,29.50 PLN,in_stock,https://shop.example.com/pl/p/blue-widget,https://cdn.example.com/a.jpg\r
+SKU-2,Niebieski widget,Opis,100.00 PLN,in_stock,https://shop.example.com/pl/p/blue-widget,https://cdn.example.com/a.jpg\r
+SKU-3,Niebieski widget,Opis,0.01 PLN,in_stock,https://shop.example.com/pl/p/blue-widget,https://cdn.example.com/a.jpg\r
 `,
   'allegro_v1:gross': `sku,title,description,price,availability,link,image_link\r
-SKU-1,Niebieski widget,Opis,36.29 PLN,in_stock,https://shop.example.com/p/blue-widget?lang=pl-PL,https://cdn.example.com/a.jpg\r
-SKU-2,Niebieski widget,Opis,123.00 PLN,in_stock,https://shop.example.com/p/blue-widget?lang=pl-PL,https://cdn.example.com/a.jpg\r
-SKU-3,Niebieski widget,Opis,0.01 PLN,in_stock,https://shop.example.com/p/blue-widget?lang=pl-PL,https://cdn.example.com/a.jpg\r
+SKU-1,Niebieski widget,Opis,36.29 PLN,in_stock,https://shop.example.com/pl/p/blue-widget,https://cdn.example.com/a.jpg\r
+SKU-2,Niebieski widget,Opis,123.00 PLN,in_stock,https://shop.example.com/pl/p/blue-widget,https://cdn.example.com/a.jpg\r
+SKU-3,Niebieski widget,Opis,0.01 PLN,in_stock,https://shop.example.com/pl/p/blue-widget,https://cdn.example.com/a.jpg\r
 `,
 };

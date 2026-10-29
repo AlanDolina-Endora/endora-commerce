@@ -1,4 +1,11 @@
-import { grossAmountHalfUp, lineAmountHalfUp, roundAmountHalfUp } from '@endora-commerce/contracts';
+import {
+  channelUrlLanguages,
+  grossAmountHalfUp,
+  lineAmountHalfUp,
+  productPath,
+  roundAmountHalfUp,
+  type ChannelUrlFacts,
+} from '@endora-commerce/contracts';
 import type { FeedRunIssueReason } from '@endora-commerce/contracts';
 import { feedPackQuantity, MAX_FEED_PACK_QUANTITY, packCountMeasure } from './feed-pack.js';
 import type { FeedItemField } from './serializers/serializer.interface.js';
@@ -250,10 +257,11 @@ function resolveSource(
           ],
         };
       }
-      return {
-        value: `${origin}/p/${item.slug}?lang=${encodeURIComponent(context.languageCode)}`,
-        issues: [],
-      };
+      // Feature 167 (FR-033, FR-034) — the product's own key in the feed's link
+      // language, under that language's path prefix; `productPath` is the one
+      // product URL composer.
+      const path = productPath({ key: item.slug, languageCode: feedLinkLanguage(context), channel: context.channelUrl });
+      return { value: `${origin}${path}`, issues: [] };
     }
     case 'image_link': {
       const first = item.imageUrls[0];
@@ -338,6 +346,23 @@ function packFor(input: ResolveFeedItemInput): { quantity: number } | { skip: Re
     quantity = Math.max(quantity, needed);
   }
   return { quantity };
+}
+
+/**
+ * The language a feed's product links are in (feature 167, FR-034): the feed's
+ * language when the channel serves it (exact tag, then primary subtag), else the
+ * channel's default language — a feed may be written in a language the channel has
+ * no pages in. Without channel facts, the feed's language.
+ */
+export function feedLinkLanguage(context: { languageCode: string; channelUrl?: ChannelUrlFacts | undefined }): string {
+  if (!context.channelUrl) return context.languageCode;
+  const languages = channelUrlLanguages(context.channelUrl);
+  const wanted = context.languageCode.toLowerCase();
+  return (
+    languages.find((l) => l.languageCode.toLowerCase() === wanted) ??
+    languages.find((l) => l.languageCode.split('-')[0]!.toLowerCase() === wanted.split('-')[0]) ??
+    languages.find((l) => l.isDefault)!
+  ).languageCode;
 }
 
 export function resolveFeedItem(input: ResolveFeedItemInput): ResolvedFeedItem {

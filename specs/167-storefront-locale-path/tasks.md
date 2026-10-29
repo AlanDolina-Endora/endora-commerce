@@ -125,22 +125,22 @@ US1 and US2 ship together: the middleware that makes the path win is the one tha
 
 ## Phase 7: US6 — every emitter names its language (P3)
 
-- [ ] T058 [P] [US6] RED `packages/modules/product_feeds/src/backend/services/item-field-resolver.test.ts` — `link` = `<origin>` + `productPath(effective key in the feed language)`; no `?lang=`; global slug never used when a language key exists
-- [ ] T059 [US6] Implement `item-field-resolver.ts` and the feed context wiring (`feed-generation.service.ts`, `template-preview.service.ts`): channel `ChannelUrlFacts` and effective keys through `CatalogProductUrlKeyReadPort`
-- [ ] T060 [P] [US6] RED `packages/modules/organizations` tests — verification and invitation links prefixed for the e-mail's language and the channel's setting
-- [ ] T061 [US6] Implement `email-templates/verification.ts`, `email-templates/invitation.ts` and their callers (pass channel facts + language)
-- [ ] T062 [P] [US6] RED customers admin password-reset contract test — link targets the storefront's real reset route (`/password-reset/confirm?token=…`, verify against `storefront/app/(auth)/password-reset/`) under the right prefix
-- [ ] T063 [US6] Implement `packages/modules/customers/src/backend/routes.admin.ts` (path fix + prefix)
-- [ ] T064 [P] [US6] RED newsletter tests — confirm/unsubscribe redirects and e-mail links prefixed for the subscriber's language
-- [ ] T065 [US6] Implement `packages/modules/newsletter/src/backend/routes.storefront.ts` and the link builders
-- [ ] T066 [P] [US6] RED comparisons test — share URL prefixed for the document language
-- [ ] T067 [US6] Implement `packages/modules/comparisons/src/backend/document/comparison-document-data.ts`
-- [ ] T068 [P] [US6] RED mfa OAuth test — the transaction carries the starting page's language; `/login/mfa` and `/login?error=` returns prefixed; `next` passed through unchanged
-- [ ] T069 [US6] Implement `packages/modules/mfa/src/backend/routes.oauth.ts`
-- [ ] T070 [US6] Investigate the invoice e-mail link `/orders/:id/invoices/:id/pdf` (`packages/modules/invoices/src/backend/services/invoice-email-dispatch.ts:109`): no storefront route serves it. Find the intended target; if none can be established, record `[NEEDS CLARIFICATION]` in research.md R-10 and stop this task chain for the owner
-- [ ] T071 [P] [US6] RED invoices test — download link prefixed for `resolveLanguage(channelId)` (after T070)
-- [ ] T072 [US6] Implement the invoice link (after T070)
-- [ ] T073 [US6] SC-004 sweep: `command grep -rnE "lang=\\$\\{|\\?lang=" packages/modules/*/src packages/platform/src packages/contracts/src storefront/app storefront/lib storefront/components` returns no URL composition; fix any remaining
+- [X] T058 [P] [US6] RED `packages/modules/product_feeds/src/backend/services/item-field-resolver.test.ts` — `link` = `<origin>` + `productPath(effective key in the feed language)`; no `?lang=`; global slug never used when a language key exists *(a feed written in a language the channel does not serve links the channel default language's page and key — `feedLinkLanguage`, FR-034's fallback)*
+- [X] T059 [US6] Implement `item-field-resolver.ts` and the feed context wiring (`feed-generation.service.ts`, `template-preview.service.ts`): channel `ChannelUrlFacts` and effective keys through `CatalogProductUrlKeyReadPort`
+- [X] T060 [P] [US6] RED `packages/modules/organizations` tests *(every emitter composes through a new contracts helper, `storefrontPagePathFor({ path, channel, requestedLanguage })`: the message language when the channel serves it, else the default; the invitation and the admin password reset know no recipient language and use the channel default — the reset uses the system-default channel, a customer having none)* — verification and invitation links prefixed for the e-mail's language and the channel's setting
+- [X] T061 [US6] Implement `email-templates/verification.ts`, `email-templates/invitation.ts` and their callers (pass channel facts + language)
+- [X] T062 [P] [US6] RED customers admin password-reset contract test — link targets the storefront's real reset route (`/password-reset/confirm?token=…`, verify against `storefront/app/(auth)/password-reset/`) under the right prefix
+- [X] T063 [US6] Implement `packages/modules/customers/src/backend/routes.admin.ts` (path fix + prefix)
+- [X] T064 [P] [US6] RED newsletter tests — confirm/unsubscribe redirects and e-mail links prefixed for the subscriber's language
+- [X] T065 [US6] Implement `packages/modules/newsletter/src/backend/routes.storefront.ts` and the link builders
+- [X] T066 [P] [US6] RED comparisons test — share URL prefixed for the document language
+- [X] T067 [US6] Implement `packages/modules/comparisons/src/backend/document/comparison-document-data.ts`
+- [X] T068 [P] [US6] RED mfa OAuth test — the transaction carries the starting page's language; `/login/mfa` and `/login?error=` returns prefixed; `next` passed through unchanged
+- [X] T069 [US6] Implement `packages/modules/mfa/src/backend/routes.oauth.ts`
+- [X] T070 [US6] Investigate the invoice e-mail link `/orders/:id/invoices/:id/pdf` (`packages/modules/invoices/src/backend/services/invoice-email-dispatch.ts:109`): no storefront route serves it. Find the intended target; if none can be established, record `[NEEDS CLARIFICATION]` in research.md R-10 and stop this task chain for the owner
+- [X] T071 [P] [US6] RED invoices test — download link prefixed for `resolveLanguage(channelId)` (after T070)
+- [X] T072 [US6] Implement the invoice link (after T070)
+- [X] T073 [US6] SC-004 sweep: `command grep -rnE "lang=\\$\\{|\\?lang=" packages/modules/*/src packages/platform/src packages/contracts/src storefront/app storefront/lib storefront/components` returns no URL composition; fix any remaining
 
 ---
 

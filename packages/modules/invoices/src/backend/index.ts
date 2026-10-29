@@ -54,6 +54,7 @@ import { createNumberingPatternValidator } from './services/numbering-write-vali
 import {
   createAssetImageLoader,
   createChannelLanguageResolver,
+  createChannelUrlFactsResolver,
   createRecipientEmailResolver,
 } from './services/cross-module-context.js';
 import { INVOICE_ISSUED_DEFAULT } from './email-templates/invoice-issued.default.js';
@@ -238,6 +239,7 @@ export function registerModule(ctx: ModuleContext): void {
             lazyPort<CustomerAccountReadPort>(ctx, 'customerAccountReadPort'),
           ),
           resolveLanguage: createChannelLanguageResolver(emFactory),
+          channelUrlFactsFor: createChannelUrlFactsResolver(emFactory),
           loadAssetImage: createAssetImageLoader(lazyPort<AssetReadPort>(ctx, 'assetReadPort')),
           // `specs/152-compare-pdf-template/` — every invoice PDF is produced
           // by `document_templates`, which this manifest binds (owner answer N2).

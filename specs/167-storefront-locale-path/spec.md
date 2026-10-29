@@ -75,6 +75,12 @@ page in another language, and every URL the platform emits names its language.
   to the prefixed URL (`/en/p/x`); a short prefix keeps working after a channel adds a second
   variant (`/en` answers 307 to `en-US` or `en-GB`, FR-015).
 
+- **OR-14 — The invoice e-mail links the storefront order page** (T070, 2026-10-29). The invoice
+  e-mail's link is the storefront order page `/<lang>/orders/<orderId>`, composed through the same
+  prefixed-URL builder as every other emitter; that page already lists the order's invoices with a
+  PDF download. The former `/orders/<id>/invoices/<id>/pdf` storefront address, which no route
+  served, is retired.
+
 ## Clarifications
 
 ### Session 2026-10-29 (architect; decisions derived from the rulings — see `research.md`)
