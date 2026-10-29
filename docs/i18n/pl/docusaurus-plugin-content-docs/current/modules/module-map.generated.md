@@ -81,7 +81,7 @@ platformy, a nie tego, co akurat zostało opisane.
 | [Ustawienia](./settings/index.md) | Konfiguracja platformy deklarowana w manifestach, z wartościami dla poszczególnych kanałów sprzedaży i API odczytu z pamięcią podręczną | @endora-commerce/mod-settings |
 | [shipments](./shipments.md) | Rekord przesyłki z możliwością ponowienia i jego cykl życia — odpowiednik modułu payments po stronie dostawy | @endora-commerce/mod-shipments |
 | [shopping_lists](./shopping_lists.md) | Nazwane listy zakupów klienta, które można zamienić w koszyk lub zapytanie ofertowe | @endora-commerce/mod-shopping-lists |
-| [tasks](./tasks.md) | Zadania przypisane administratorom, z terminem i statusem, które inne moduły mogą przejmować przez kontekst zadania | @endora-commerce/mod-tasks |
+| [tasks](./tasks.md) | Zadania dla administratorów — wiele osób przypisanych, terminy, priorytety, etykiety, przebieg określony przez operatora, lista i tablica, komentarze, podzadania, powiązania, przypomnienia i dzienne podsumowanie — które inne moduły mogą przejmować przez kontekst zadania | @endora-commerce/mod-tasks |
 | [taxes](./taxes.md) | Wyznaczanie stawek podatkowych według kraju, typu produktu i statusu VAT | @endora-commerce/mod-taxes |
 | [transactional_emails](./transactional-emails.md) | E-maile transakcyjne edytowane w panelu administracyjnym — temat, treść i wygląd, globalnie i dla poszczególnych kanałów sprzedaży | @endora-commerce/mod-transactional-emails |
 | [webhooks](./webhooks.md) | Subskrypcje zdarzeń wychodzących podpisywanych HMAC | @endora-commerce/mod-webhooks |
