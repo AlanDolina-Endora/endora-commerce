@@ -15,11 +15,13 @@ import type { AuditPort } from '@endora-commerce/platform/kernel';
 import { randomUUID } from 'crypto';
 import { Task } from '../entities/task.entity.js';
 import { TaskAssignee } from '../entities/task-assignee.entity.js';
+import { TaskPriority } from '../entities/task-priority.entity.js';
 import { TaskRecordLink } from '../entities/task-record-link.entity.js';
 import { TaskReference } from '../entities/task-reference.entity.js';
 import { TaskTagAssignment } from '../entities/task-tag-assignment.entity.js';
 import { assertParentFits, lockHierarchy } from './hierarchy-service.js';
 import { newlyMentioned } from './mention-service.js';
+import { priorityUnknown } from './priority-service.js';
 import { dueMomentOf, followDueMoment } from './reminder-schedule.js';
 import { referenceRowsFor } from './reference-service.js';
 import { taskAlreadyPublished, taskAssigneeInvalid, taskNotFound } from './task-errors.js';
@@ -147,6 +149,20 @@ async function assigneesOf(em: EntityManager, taskId: string): Promise<string[]>
   return rows.map((row) => row.adminUserId);
 }
 
+/**
+ * Hold the priority a Task is being given **shared** until the Command commits
+ * (issue #507), as `task-transition-service.ts` holds a target status: a
+ * removal of it, which locks the row for update, waits for this Task's write
+ * and then moves it with the others; or it committed first and this answers 422
+ * `TASK_PRIORITY_UNKNOWN`. The caller's check before the Command only spares a
+ * transaction — this is the one that holds. `null` (no priority) needs none.
+ */
+async function holdPriority(em: EntityManager, code: string | null): Promise<void> {
+  if (code === null) return;
+  const priority = await em.findOne(TaskPriority, { code }, { lockMode: LockMode.PESSIMISTIC_READ });
+  if (!priority) throw priorityUnknown(code);
+}
+
 /** Replace the description's `task_references` rows with what `description` holds now. */
 async function rewriteDescriptionReferences(em: EntityManager, taskId: string, description: string): Promise<void> {
   await em.nativeDelete(TaskReference, { taskId, sourceKind: 'description' });
@@ -171,6 +187,7 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
       }
       const scoped = em as EntityManager;
       const now = new Date();
+      await holdPriority(scoped, input.priorityCode ?? null);
       const tagIds = [...new Set(input.tagIds ?? [])];
       const parentTaskId = input.parentTaskId ?? null;
       if (parentTaskId !== null) {
@@ -354,13 +371,19 @@ export function updateTaskCommand(
   };
 }
 
-/** `tasks.task.priority_change` — `false` when the Task already has it (nothing written, nothing audited). */
+/**
+ * `tasks.task.priority_change` — `false` when the Task already has it (nothing
+ * written, nothing audited). The priority is held before the Task is locked —
+ * the order a removal takes them in (the priority, then its Tasks) — so a
+ * removal naming this priority as the replacement cannot deadlock with it.
+ */
 export function changeTaskPriorityCommand(id: string, priorityCode: string | null): Command<boolean> {
   return {
     action: 'tasks.task.priority_change',
     objectType: 'task',
     objectId: id,
     run: async ({ em }) => {
+      await holdPriority(em as EntityManager, priorityCode);
       const task = await lockedTask(em as EntityManager, id);
       const current = task.priorityCode ?? null;
       if (current === priorityCode) return { result: false, skipAudit: true };

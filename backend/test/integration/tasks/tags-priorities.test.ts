@@ -331,6 +331,72 @@ describe('tasks — tags and priorities (US9)', () => {
       expect(removal).toMatchObject({ stateBefore: { priorityCode: fading }, stateAfter: { priorityCode: null } });
     });
 
+    /**
+     * Issue #507: a Task given a priority while that priority is being removed.
+     * A second connection holds the priority row as the removal does, and
+     * deletes it once the Task's write is seen waiting on it — so the code check
+     * made before the Task's Command has passed, and only a lock inside the
+     * Command can refuse. Without one the write commits the removed code.
+     */
+    describe('a priority removed while a Task is being given it (issue #507)', () => {
+      async function whileRemoving(priorityCode: string, write: () => Promise<Awaited<ReturnType<typeof call>>>) {
+        const holder = h.em().fork();
+        await holder.begin();
+        let finished = false;
+        try {
+          await holder.execute(`select "code" from "task_priorities" where "code" = ? for update`, [priorityCode]);
+          const pending = write().finally(() => {
+            finished = true;
+          });
+          // By observation, never by a sleep alone: the write is waiting on the
+          // priority row — or it finished without waiting, which is the defect.
+          const deadline = Date.now() + 10_000;
+          for (;;) {
+            const [waiting] = (await h
+              .em()
+              .getConnection()
+              .execute(
+                `select count(*)::int as n from pg_stat_activity
+                  where wait_event_type = 'Lock' and query ilike '%from "task_priorities"%for share%'`,
+              )) as Array<{ n: number }>;
+            if (Number(waiting?.n) > 0 || finished) break;
+            if (Date.now() > deadline) throw new Error('the Task write neither waited on the priority row nor finished');
+            await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+          await holder.execute(`delete from "task_priorities" where "code" = ?`, [priorityCode]);
+          await holder.commit();
+          return await pending;
+        } catch (error) {
+          await holder.rollback().catch(() => undefined);
+          throw error;
+        }
+      }
+
+      const priorityOf = async (id: string): Promise<string | null> => {
+        const [row] = (await h.em().getConnection().execute(`select "priority_code" from "tasks" where "id" = ?`, [
+          id,
+        ])) as Array<{ priority_code: string | null }>;
+        return row?.priority_code ?? null;
+      };
+
+      it('a priority change waits for the removal, then answers 422 TASK_PRIORITY_UNKNOWN and keeps the Task’s priority', async () => {
+        const going = await addPriority('going', 39);
+        const task = await create({ title: 'Raced priority change' });
+        const response = await whileRemoving(going, () => call('PATCH', `/${task.id}`, { priorityCode: going }));
+        refusal(response, 422, ERROR_CODES.TASK_PRIORITY_UNKNOWN);
+        expect(await priorityOf(task.id)).toBeNull();
+      });
+
+      it('a create waits for the removal, then answers 422 TASK_PRIORITY_UNKNOWN and creates nothing', async () => {
+        const gone = await addPriority('gone', 40);
+        const title = `Raced create ${suffix}`;
+        const response = await whileRemoving(gone, () => call('POST', '', { title, priorityCode: gone }));
+        refusal(response, 422, ERROR_CODES.TASK_PRIORITY_UNKNOWN);
+        const rows = (await h.em().getConnection().execute(`select "id" from "tasks" where "title" = ?`, [title])) as unknown[];
+        expect(rows).toEqual([]);
+      });
+    });
+
     it('a priority nobody holds is removed without a replacement', async () => {
       const unused = await addPriority('unused', 37);
       const after = await priorityList(await call('DELETE', `/priorities/${unused}`));
