@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
 import type { TaskBoardCardConfig, TaskBoardCardField } from '@endora-commerce/contracts';
 import { Alert, AlertDescription, Button } from '@endora-commerce/admin-kit/ui';
@@ -6,6 +6,14 @@ import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n'
 import { tasksApi } from '../api.js';
 import { errorMessage } from '../lib/labels.js';
 import { boardFieldLabel } from './TaskCard.js';
+
+type CardAction = 'up' | 'down' | 'remove' | 'add';
+
+/** Where focus goes after an edit: the first enabled of `actions` on `field`'s controls. */
+interface FocusIntent {
+  field: string;
+  actions: readonly CardAction[];
+}
 
 const sameOrder = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((ref, index) => ref === b[index]);
@@ -21,6 +29,12 @@ const sameOrder = (a: readonly string[], b: readonly string[]): boolean =>
  * a drag (WCAG 2.2 SC 2.5.7) — and the limit is said before it is reached:
  * once the card is full, *Add* is disabled and the count says why.
  *
+ * Focus stays with the field an operator is working on (WCAG 2.4.3, T092):
+ * after a move, on the moved row's control in that direction — or the other
+ * one where the row reached an end; after a removal, on the row that took its
+ * place, or on the field's own *Add* when none is left; after an add, on the
+ * next field offered in its group, or on the added row.
+ *
  * Nothing is stored until *Save*; the answer is the server's own, so a field
  * that stopped existing meanwhile is gone from both lists afterwards.
  */
@@ -34,6 +48,26 @@ export function BoardCardFieldsEditor(): ReactNode {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const focusIntent = useRef<FocusIntent | null>(null);
+
+  // After the edit's render: the control the intent names, if it is there and enabled.
+  useEffect(() => {
+    const intent = focusIntent.current;
+    if (intent === null) return;
+    focusIntent.current = null;
+    const controls = [...(rootRef.current?.querySelectorAll<HTMLButtonElement>('button[data-card-field]') ?? [])];
+    for (const action of intent.actions) {
+      const control = controls.find(
+        (candidate) =>
+          candidate.dataset['cardField'] === intent.field && candidate.dataset['cardAction'] === action && !candidate.disabled,
+      );
+      if (control) {
+        control.focus();
+        return;
+      }
+    }
+  });
 
   const accept = useCallback((loaded: TaskBoardCardConfig): void => {
     setConfig(loaded);
@@ -93,7 +127,26 @@ export function BoardCardFieldsEditor(): ReactNode {
     const [ref] = next.splice(index, 1);
     if (ref === undefined) return;
     next.splice(index + by, 0, ref);
+    focusIntent.current = { field: ref, actions: by < 0 ? ['up', 'down', 'remove'] : ['down', 'up', 'remove'] };
     edit(next);
+  };
+  const remove = (ref: string): void => {
+    const next = chosen.filter((candidate) => candidate !== ref);
+    const index = chosen.indexOf(ref);
+    const neighbour = next[index] ?? next[index - 1];
+    focusIntent.current = neighbour ? { field: neighbour, actions: ['remove'] } : { field: ref, actions: ['add'] };
+    edit(next);
+  };
+  const add = (field: TaskBoardCardField): void => {
+    const offered = addable.filter((candidate) => candidate.source === field.source);
+    const index = offered.findIndex((candidate) => candidate.ref === field.ref);
+    const neighbour = offered[index + 1] ?? offered[index - 1];
+    // A full card disables every *Add*: the added row is then the only place left.
+    focusIntent.current =
+      neighbour && chosen.length + 1 < config.maxFields
+        ? { field: neighbour.ref, actions: ['add'] }
+        : { field: field.ref, actions: ['up', 'down', 'remove'] };
+    edit([...chosen, field.ref]);
   };
 
   const save = async (): Promise<void> => {
@@ -132,7 +185,9 @@ export function BoardCardFieldsEditor(): ReactNode {
                   className="min-h-11 sm:min-h-8"
                   disabled={full || saving}
                   aria-label={t('boardCard.add', { field: name(field) })}
-                  onClick={(): void => edit([...chosen, field.ref])}
+                  data-card-field={field.ref}
+                  data-card-action="add"
+                  onClick={(): void => add(field)}
                 >
                   <Plus aria-hidden="true" />
                   {name(field)}
@@ -146,7 +201,7 @@ export function BoardCardFieldsEditor(): ReactNode {
   };
 
   return (
-    <div className="space-y-5">
+    <div ref={rootRef} className="space-y-5">
       <section aria-labelledby="tasks-board-card-shown" className="space-y-2">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h3 id="tasks-board-card-shown" className="text-sm font-semibold">
@@ -174,6 +229,8 @@ export function BoardCardFieldsEditor(): ReactNode {
                     className="min-h-11 min-w-11 sm:min-h-8 sm:min-w-8"
                     disabled={index === 0 || saving}
                     aria-label={t('boardCard.moveUp', { field: name(field) })}
+                    data-card-field={field.ref}
+                    data-card-action="up"
                     onClick={(): void => move(index, -1)}
                   >
                     <ArrowUp aria-hidden="true" />
@@ -184,6 +241,8 @@ export function BoardCardFieldsEditor(): ReactNode {
                     className="min-h-11 min-w-11 sm:min-h-8 sm:min-w-8"
                     disabled={index === shown.length - 1 || saving}
                     aria-label={t('boardCard.moveDown', { field: name(field) })}
+                    data-card-field={field.ref}
+                    data-card-action="down"
                     onClick={(): void => move(index, 1)}
                   >
                     <ArrowDown aria-hidden="true" />
@@ -194,7 +253,9 @@ export function BoardCardFieldsEditor(): ReactNode {
                     className="min-h-11 min-w-11 sm:min-h-8 sm:min-w-8"
                     disabled={saving}
                     aria-label={t('boardCard.remove', { field: name(field) })}
-                    onClick={(): void => edit(chosen.filter((ref) => ref !== field.ref))}
+                    data-card-field={field.ref}
+                    data-card-action="remove"
+                    onClick={(): void => remove(field.ref)}
                   >
                     <X aria-hidden="true" />
                   </Button>

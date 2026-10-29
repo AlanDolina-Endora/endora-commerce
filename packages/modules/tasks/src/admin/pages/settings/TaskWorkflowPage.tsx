@@ -177,12 +177,6 @@ export function TaskWorkflowPage(): ReactNode {
     <>
       {header}
 
-      {actionError ? (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{actionError}</AlertDescription>
-        </Alert>
-      ) : null}
-
       <Card className="mb-4">
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
           <div className="space-y-1.5">
@@ -204,21 +198,29 @@ export function TaskWorkflowPage(): ReactNode {
         </CardContent>
       </Card>
 
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle>{t('workflow.transitions.title')}</CardTitle>
-          <CardDescription>{t('workflow.transitions.description')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StatusTransitionGraph
-            statuses={graphStatuses}
-            transitions={graphTransitions}
-            statusLabel={graphLabel}
-            onAdd={(from, to): void => changeTransitions('add', from, to)}
-            onRemove={(from, to): void => changeTransitions('remove', from, to)}
-          />
-        </CardContent>
-      </Card>
+      <section aria-labelledby="tasks-workflow-transitions-title" className="mb-4">
+        <Card>
+          <CardHeader>
+            <CardTitle id="tasks-workflow-transitions-title">{t('workflow.transitions.title')}</CardTitle>
+            <CardDescription>{t('workflow.transitions.description')}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* A refused change of the moves is said beside the graph it is about. */}
+            {actionError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{actionError}</AlertDescription>
+              </Alert>
+            ) : null}
+            <StatusTransitionGraph
+              statuses={graphStatuses}
+              transitions={graphTransitions}
+              statusLabel={graphLabel}
+              onAdd={(from, to): void => changeTransitions('add', from, to)}
+              onRemove={(from, to): void => changeTransitions('remove', from, to)}
+            />
+          </CardContent>
+        </Card>
+      </section>
 
       <section id="board-card" aria-labelledby="tasks-board-card-title" className="mb-4">
         <Card>

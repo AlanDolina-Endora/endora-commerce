@@ -256,7 +256,9 @@ describe('TaskWorkflowPage — the moves', () => {
       chartHandlers.get('click')!({ dataType: 'edge', name: '', data: { source: 'todo', target: 'done' } });
     });
     await userEvent.click(await screen.findByRole('button', { name: core('orderStatusConfig.graph.removeTransition') }));
-    expect(await screen.findByText('A move names a status that does not exist.')).toBeInTheDocument();
+    // Said beside the graph it is about, not above the statuses table.
+    const moves = screen.getByRole('region', { name: en('workflow.transitions.title') });
+    expect(await within(moves).findByText('A move names a status that does not exist.')).toBeInTheDocument();
   });
 });
 
@@ -341,6 +343,35 @@ describe('TaskWorkflowPage — the board card (FR-022)', () => {
       expect(putSpy).toHaveBeenCalledWith(`${API}/board/card-fields`, { fields: ['custom:region', 'builtin:due'] }),
     );
     expect(await within(section).findByText(en('boardCard.saved'))).toBeInTheDocument();
+  });
+
+  it('keeps focus on the moved row, or its neighbour, as the two lists change (WCAG 2.4.3)', async () => {
+    await renderPage();
+    const section = await screen.findByRole('region', { name: en('boardCard.title') });
+    await within(section).findByRole('list', { name: en('boardCard.shown.title') });
+    const button = (key: string, field: string): HTMLElement => within(section).getByRole('button', { name: en(key, { field }) });
+    const number = en('board.field.number');
+    const due = en('board.field.due');
+    const priority = en('board.field.priority');
+
+    // Down into the last place, where Move down is disabled: the row's Move up.
+    await userEvent.click(button('boardCard.moveDown', number));
+    expect(button('boardCard.moveUp', number)).toHaveFocus();
+    // Up into the first place, where Move up is disabled: the row's Move down.
+    await userEvent.click(button('boardCard.moveUp', number));
+    expect(button('boardCard.moveDown', number)).toHaveFocus();
+    // A removed row: the row that took its place.
+    await userEvent.click(button('boardCard.remove', number));
+    expect(button('boardCard.remove', due)).toHaveFocus();
+    // The last row removed: the field's own Add, back in the offer.
+    await userEvent.click(button('boardCard.remove', due));
+    expect(button('boardCard.add', due)).toHaveFocus();
+    // An added field's chip goes: the next one offered in its group.
+    await userEvent.click(button('boardCard.add', due));
+    expect(button('boardCard.add', priority)).toHaveFocus();
+    // The last chip of its group: the added row.
+    await userEvent.click(button('boardCard.add', 'Region'));
+    expect(button('boardCard.moveUp', 'Region')).toHaveFocus();
   });
 });
 
