@@ -150,7 +150,8 @@ export class StageService {
    * `DELETE /projects/:id/stages/:stageId` — never the only Stage, never the
    * one the Project is in, never one holding Tasks. With Tasks off nothing can
    * be counted and the Stage goes; its Tasks then belong to no Stage the
-   * Project shows.
+   * Project shows, and the Tasks module's maintenance pass takes the Stage off
+   * them once it is back on (`existingContexts`, #450).
    */
   async delete(projectId: string, stageId: string): Promise<void> {
     const visible = await this.deps.access.loadVisible(projectId);

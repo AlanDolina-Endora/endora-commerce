@@ -47,9 +47,10 @@ const PROBES = [
   { module: 'price_lists', file: 'services/price-list-status-worker.ts', method: 'hasDueTransitions' },
   { module: 'quote_requests', file: 'services/rfq-expiry-worker.ts', method: 'hasExpirable' },
   { module: 'projects', file: 'services/stage-alert-service.ts', method: 'hasSweepWork' },
-  // One worker, two passes (`specs/165-task-management/` R-17, R-18): each pass has its own probe.
+  // One worker, three passes (`specs/165-task-management/` R-17 – R-19): each pass has its own probe.
   { module: 'tasks', file: 'services/reminder-service.ts', method: 'hasWork' },
   { module: 'tasks', file: 'services/digest-service.ts', method: 'hasWork' },
+  { module: 'tasks', file: 'services/maintenance-service.ts', method: 'hasWork' },
 ] as const;
 
 const HELPER = 'services/scheduled-work-probe.ts';

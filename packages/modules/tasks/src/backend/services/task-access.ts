@@ -97,6 +97,11 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
     'The daily digest pass, in the system scope (research R-18): for each claimed subscriber it reads the open ' +
     'Tasks assigned to them, due today or before, and asks the audience question — `tasks:read`, the ' +
     'draft/private rule, the context\'s `canSeeAs` — of each before it is listed.',
+  'services/maintenance-service.ts':
+    'The #450 clean-up, run in the system scope its worker enters (its probe answers one bit, outside any scope): it ' +
+    'walks the distinct context ids of each context type whose present owner can say which still exist, and reads ' +
+    'the ids of the Tasks of the contexts the owner says are gone, or whose group is — handing each to the delete or ' +
+    'ungroup Command, which re-reads it under the lock. Nothing read is shown or sent to anybody.',
   'services/task-write-port.ts':
     '`deleteInContext` lists the ids of one context for its owner — the module that registered the context type ' +
     'and is deleting its own record — and hands each to the delete Command. `createMany` looks up which of the ' +

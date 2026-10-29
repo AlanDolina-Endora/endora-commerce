@@ -112,7 +112,8 @@ export const PROJECT_ACCESS_READERS: Readonly<Record<string, string>> = {
     'valuable open Projects are summarised from the rows that statement returned.',
   'services/task-context-descriptor.ts':
     'The `project` Task context answers `allVisibleIds` / `visibleIds` and describes only the ids ' +
-    '`visibleIds` handed back; Projects and their Stages are read by those ids only.',
+    '`visibleIds` handed back; Projects and their Stages are read by those ids only.' +
+    ' Which Projects and Stages still exist (`existingContexts`) is `existingWithStages`, in this file.',
 };
 
 /** The permission that lifts the visibility rule — never the Organization rule (R-3). */
@@ -482,6 +483,41 @@ export class ProjectAccess {
       [uuidArray(candidates), ...(visible?.params ?? [])],
     )) as Array<{ id: string }>;
     return new Set(rows.map((row) => row.id));
+  }
+
+  /**
+   * Which of `ids` are Projects that exist, each with the ids of its Stages —
+   * **regardless of who may see them** (`specs/165-task-management/` R-19,
+   * issue #450). The Tasks module's maintenance pass asks it, through the
+   * `project` Task context, to tell a Project deleted while Tasks was off from
+   * one merely hidden. Answered only to the **system** — the pass runs in the
+   * system scope its worker enters — and refused to anybody else, for whom it
+   * would be an existence oracle past both rules. One statement, keyed by the
+   * ids asked; an id that is not a uuid is answered as existing, with no
+   * Stages taken from it: absence here deletes Tasks, so only an id this
+   * module can rule on is ever said to be gone.
+   */
+  async existingWithStages(ids: readonly string[]): Promise<Map<string, ReadonlySet<string>>> {
+    if (!isSystemActor()) {
+      throw new Error('projects: which Projects exist, whoever may see them, is answered to the system only.');
+    }
+    const out = new Map<string, Set<string>>();
+    const candidates = ids.filter(isUuid);
+    if (candidates.length > 0) {
+      const rows = (await this.deps.emFactory().execute(
+        `select p."id", s."id" as "stage_id" from "projects" p
+           left join "project_stages" s on s."project_id" = p."id"
+          where p."id" = any(?::uuid[])`,
+        [uuidArray(candidates)],
+      )) as Array<{ id: string; stage_id: string | null }>;
+      for (const row of rows) {
+        const stages = out.get(row.id) ?? new Set<string>();
+        if (row.stage_id !== null) stages.add(row.stage_id);
+        out.set(row.id, stages);
+      }
+    }
+    for (const id of ids) if (!isUuid(id) && !out.has(id)) out.set(id, new Set());
+    return out;
   }
 
   /** Every Project id the caller may see — the Task context's pre-filter (research R-9). */

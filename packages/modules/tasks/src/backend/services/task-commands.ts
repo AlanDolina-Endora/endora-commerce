@@ -400,6 +400,41 @@ export function changeTaskPriorityCommand(id: string, priorityCode: string | nul
   };
 }
 
+/**
+ * `tasks.task.update` with `reason: 'context_group_gone'` — the maintenance
+ * pass taking a group its context's owner no longer has off a Task (R-19): a
+ * Project's Stage deleted while Tasks was off. Re-read under the lock: a Task
+ * that left the group or the context meanwhile is left as it is (`false`, not
+ * audited). No event, as for any `tasks.task.update`.
+ */
+export function ungroupTaskCommand(
+  id: string,
+  from: { contextType: string; contextId: string; contextGroupId: string },
+): Command<boolean> {
+  return {
+    action: 'tasks.task.update',
+    objectType: 'task',
+    objectId: id,
+    run: async ({ em }) => {
+      const task = await (em as EntityManager).findOne(Task, { id }, { lockMode: LockMode.PESSIMISTIC_WRITE });
+      if (
+        !task ||
+        task.contextType !== from.contextType ||
+        task.contextId !== from.contextId ||
+        task.contextGroupId !== from.contextGroupId
+      ) {
+        return { result: false, skipAudit: true };
+      }
+      task.contextGroupId = null;
+      return {
+        result: true,
+        before: { contextGroupId: from.contextGroupId },
+        after: { contextGroupId: null, reason: 'context_group_gone' },
+      };
+    },
+  };
+}
+
 /** `tasks.task.tags_change` — the whole set replaced; `false` when it did not change. */
 export function changeTaskTagsCommand(id: string, tagIds: readonly string[]): Command<boolean> {
   return {
@@ -517,7 +552,22 @@ export interface TaskDeletion {
  * 'parent_deleted'`) on this Command's transaction through the kernel's audit
  * port — a former sub-task's history says why it has no parent any more.
  */
-export function deleteTaskCommand(id: string, auditLog: AuditPort): Command<TaskDeletion> {
+export function deleteTaskCommand(
+  id: string,
+  auditLog: AuditPort,
+  options: {
+    /**
+     * Why the Task went, when nobody asked for it: the maintenance pass's
+     * `context_gone` (R-19). Recorded as the audit row's `after`.
+     */
+    reason?: string;
+    /**
+     * Delete only while the Task is still in this context — re-read under the
+     * lock; a Task moved out meanwhile is left (`deleted: false`, not audited).
+     */
+    onlyIn?: TaskContext;
+  } = {},
+): Command<TaskDeletion> {
   let gone: { contextType: string | null; contextId: string | null; draft: boolean } | null = null;
   return {
     action: 'tasks.task.delete',
@@ -526,8 +576,12 @@ export function deleteTaskCommand(id: string, auditLog: AuditPort): Command<Task
     run: async ({ em }) => {
       const scoped = em as EntityManager;
       await lockHierarchy(scoped);
-      const task = await scoped.findOne(Task, { id });
+      const task = await scoped.findOne(Task, { id }, options.onlyIn ? { lockMode: LockMode.PESSIMISTIC_WRITE } : {});
       if (!task) return { result: { deleted: false, detachedIds: [] }, skipAudit: true };
+      const { onlyIn } = options;
+      if (onlyIn && (task.contextType !== onlyIn.contextType || task.contextId !== onlyIn.contextId)) {
+        return { result: { deleted: false, detachedIds: [] }, skipAudit: true };
+      }
       const before = auditSnapshot(task);
       gone = { contextType: task.contextType ?? null, contextId: task.contextId ?? null, draft: task.isDraft };
       // Keyed by the Task the caller loaded: its sub-tasks, whoever may see them.
@@ -547,7 +601,7 @@ export function deleteTaskCommand(id: string, auditLog: AuditPort): Command<Task
       return {
         result: { deleted: true, detachedIds: children.map((child) => child.id) },
         before,
-        after: null,
+        after: options.reason ? { reason: options.reason } : null,
       };
     },
     event: (result) => {

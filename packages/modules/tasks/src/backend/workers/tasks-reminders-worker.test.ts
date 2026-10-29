@@ -7,6 +7,8 @@ import {
   startTasksReminders,
   TASKS_DIGEST_EVERY_MS,
   TASKS_DIGEST_SCOPE_REASON,
+  TASKS_MAINTENANCE_EVERY_MS,
+  TASKS_MAINTENANCE_SCOPE_REASON,
   TASKS_REMINDERS_EVERY_MS,
   TASKS_REMINDERS_QUEUE,
   TASKS_REMINDERS_SCHEDULER_ID,
@@ -50,18 +52,49 @@ function pass(scopeReason: string, hasWork: () => Promise<boolean> = async () =>
   return { value, run, probe, scopes };
 }
 
-describe('the tasks-reminders worker (R-17, R-18)', () => {
+/** A maintenance pass with nothing to do — for the cases about the other two. */
+const idle = (): TaskSweepPass => pass(TASKS_MAINTENANCE_SCOPE_REASON, async () => false).value;
+
+describe('the tasks-reminders worker (R-17, R-18, R-19)', () => {
   it('names a queue BullMQ accepts, ticks every minute and runs the digest at most every fifteen', () => {
     expect(TASKS_REMINDERS_QUEUE).toBe('tasks-reminders');
     expect(TASKS_REMINDERS_SCHEDULER_ID).toBe(TASKS_REMINDERS_QUEUE);
     expect(TASKS_REMINDERS_EVERY_MS).toBe(60_000);
     expect(TASKS_DIGEST_EVERY_MS).toBe(15 * 60_000);
+    expect(TASKS_MAINTENANCE_EVERY_MS).toBe(15 * 60_000);
+  });
+
+  it('runs the maintenance pass at most every fifteen minutes, in the system scope, and not at all while Tasks is off (#450)', async () => {
+    const maintenance = pass(TASKS_MAINTENANCE_SCOPE_REASON);
+    let present = true;
+    const job = createTasksRemindersJob({
+      isPresent: () => present,
+      reminders: pass(TASKS_REMINDERS_SCOPE_REASON, async () => false).value,
+      digest: pass(TASKS_DIGEST_SCOPE_REASON, async () => false).value,
+      maintenance: maintenance.value,
+      log: log(),
+    });
+    const start = Date.parse('2032-01-01T08:00:00Z');
+    for (let minute = 0; minute <= 30; minute += 1) await runTasksRemindersJob(job, new Date(start + minute * 60_000));
+    expect(maintenance.run.mock.calls.map(([now]) => (now.getTime() - start) / 60_000)).toEqual([0, 15, 30]);
+    expect(maintenance.scopes).toEqual(['system', 'system', 'system']);
+
+    present = false;
+    await runTasksRemindersJob(job, new Date(start + 60 * 60_000));
+    expect(maintenance.probe).toHaveBeenCalledTimes(3);
+    expect(maintenance.run).toHaveBeenCalledTimes(3);
+
+    // A probe that finds nothing keeps the pass out of any scope.
+    present = true;
+    maintenance.probe.mockResolvedValueOnce(false);
+    await runTasksRemindersJob(job, new Date(start + 75 * 60_000));
+    expect(maintenance.run).toHaveBeenCalledTimes(3);
   });
 
   it('asks nothing, opens nothing and runs nothing while Tasks is off', async () => {
     const reminders = pass(TASKS_REMINDERS_SCOPE_REASON);
     const digest = pass(TASKS_DIGEST_SCOPE_REASON);
-    const job = createTasksRemindersJob({ isPresent: () => false, reminders: reminders.value, digest: digest.value, log: log() });
+    const job = createTasksRemindersJob({ isPresent: () => false, reminders: reminders.value, digest: digest.value, maintenance: idle(), log: log() });
 
     await runTasksRemindersJob(job, new Date('2032-01-01T08:00:00Z'));
 
@@ -74,7 +107,7 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
   it('runs a pass inside the system scope only when its probe says there is work', async () => {
     const reminders = pass(TASKS_REMINDERS_SCOPE_REASON, async () => false);
     const digest = pass(TASKS_DIGEST_SCOPE_REASON, async () => true);
-    const job = createTasksRemindersJob({ isPresent: () => true, reminders: reminders.value, digest: digest.value, log: log() });
+    const job = createTasksRemindersJob({ isPresent: () => true, reminders: reminders.value, digest: digest.value, maintenance: idle(), log: log() });
 
     await runTasksRemindersJob(job, new Date('2032-01-01T08:00:00Z'));
 
@@ -92,6 +125,7 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
       isPresent: () => true,
       reminders: reminders.value,
       digest: pass(TASKS_DIGEST_SCOPE_REASON, async () => false).value,
+      maintenance: idle(),
       log: log(),
     });
     await runTasksRemindersJob(job, new Date('2032-01-01T08:00:00Z'));
@@ -101,7 +135,7 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
   it('runs the reminders every tick and the digest when fifteen minutes have passed since its last pass', async () => {
     const reminders = pass(TASKS_REMINDERS_SCOPE_REASON);
     const digest = pass(TASKS_DIGEST_SCOPE_REASON);
-    const job = createTasksRemindersJob({ isPresent: () => true, reminders: reminders.value, digest: digest.value, log: log() });
+    const job = createTasksRemindersJob({ isPresent: () => true, reminders: reminders.value, digest: digest.value, maintenance: idle(), log: log() });
     const start = Date.parse('2032-01-01T08:00:00Z');
 
     for (let minute = 0; minute <= 30; minute += 1) await runTasksRemindersJob(job, new Date(start + minute * 60_000));
@@ -115,7 +149,7 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
     failing.run.mockRejectedValueOnce(new Error('boom'));
     const digest = pass(TASKS_DIGEST_SCOPE_REASON);
     const logger = log();
-    const job = createTasksRemindersJob({ isPresent: () => true, reminders: failing.value, digest: digest.value, log: logger });
+    const job = createTasksRemindersJob({ isPresent: () => true, reminders: failing.value, digest: digest.value, maintenance: idle(), log: logger });
 
     await runTasksRemindersJob(job, new Date('2032-01-01T08:00:00Z'));
     expect(logger.warn).toHaveBeenCalledTimes(1);
@@ -135,6 +169,7 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
       isPresent: () => true,
       reminders: pass(TASKS_REMINDERS_SCOPE_REASON).value,
       digest: pass(TASKS_DIGEST_SCOPE_REASON).value,
+      maintenance: idle(),
       log: log(),
     });
     expect(await startTasksReminders({ job, attach, onClose, ...host })).toBe(false);
@@ -152,6 +187,7 @@ describe('the tasks-reminders worker (R-17, R-18)', () => {
       isPresent: () => true,
       reminders: reminders.value,
       digest: pass(TASKS_DIGEST_SCOPE_REASON).value,
+      maintenance: idle(),
       log: log(),
     });
 

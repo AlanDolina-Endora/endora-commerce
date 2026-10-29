@@ -87,6 +87,7 @@ import { registerTaskAuditReferences } from './services/task-audit-references.js
 import { TaskContextRegistry } from './services/task-context-registry.js';
 import { createTaskEmail, type TaskEmail } from './services/task-email.js';
 import { TaskHistoryService } from './services/task-history-service.js';
+import { TaskMaintenanceService } from './services/maintenance-service.js';
 import { createTaskNotifier, type TaskNotifier } from './services/task-notifier.js';
 import { TaskReadPortService } from './services/task-read-port.js';
 import { TaskService } from './services/task-service.js';
@@ -101,6 +102,7 @@ import {
   createTasksRemindersJob,
   startTasksReminders,
   TASKS_DIGEST_SCOPE_REASON,
+  TASKS_MAINTENANCE_SCOPE_REASON,
   TASKS_REMINDERS_SCOPE_REASON,
   type TasksRemindersJob,
 } from './workers/tasks-reminders-worker.js';
@@ -150,6 +152,7 @@ interface TasksCradle {
   readonly tasksEmail: TaskEmail;
   readonly tasksReminderService: TaskReminderService;
   readonly tasksDigestService: TaskDigestService;
+  readonly tasksMaintenanceService: TaskMaintenanceService;
   readonly tasksRemindersJob: TasksRemindersJob;
   /**
    * `transactional_emails`' late-bound sender, read per send. It answers
@@ -656,7 +659,7 @@ export function registerModule(ctx: ModuleContext): void {
   });
   // --- end of Settings ----------------------------------------------------------------
 
-  // --- Reminders and the daily digest (User Story 7, research R-17, R-18) -------------
+  // --- Reminders, the daily digest and the maintenance pass (US7, US10; R-17 – R-19) --
   // A sweep, not timers: the reminder rows are the schedule, and one pass claims
   // each (reminder, recipient) with a delivery row before it tells anyone. The
   // bell is `admin_notifications`', which this module only degrades without: its
@@ -710,11 +713,19 @@ export function registerModule(ctx: ModuleContext): void {
         });
       })
       .singleton(),
-    // What one tick of the clock runs, and the digest cadence. Registered, so that
+    // The #450 clean-up: Tasks whose context's record is gone, asked of each
+    // present owner that can say (`existingContexts`, research R-19).
+    tasksMaintenanceService: ctx
+      .asFunction(
+        ({ emFactory, commandBus, taskContextRegistry, auditLogService }: TasksCradle) =>
+          new TaskMaintenanceService({ emFactory, commandBus, contexts: taskContextRegistry, auditLog: auditLogService }),
+      )
+      .singleton(),
+    // What one tick of the clock runs, and the slower passes' cadence. Registered, so that
     // what a test drives (`runTasksRemindersJob`) is what the consumer runs:
     // presence, then each pass's probe, then its scope.
     tasksRemindersJob: ctx
-      .asFunction(({ tasksReminderService, tasksDigestService }: TasksCradle) =>
+      .asFunction(({ tasksReminderService, tasksDigestService, tasksMaintenanceService }: TasksCradle) =>
         createTasksRemindersJob({
           isPresent: () => effectiveState.isPresent('tasks'),
           reminders: {
@@ -726,6 +737,11 @@ export function registerModule(ctx: ModuleContext): void {
             scopeReason: TASKS_DIGEST_SCOPE_REASON,
             hasWork: (now) => tasksDigestService.hasWork(now),
             run: (now) => tasksDigestService.pass(now),
+          },
+          maintenance: {
+            scopeReason: TASKS_MAINTENANCE_SCOPE_REASON,
+            hasWork: () => tasksMaintenanceService.hasWork(),
+            run: () => tasksMaintenanceService.pass(),
           },
           log: ctx.log,
         }),
@@ -767,7 +783,7 @@ export function registerModule(ctx: ModuleContext): void {
       onClose: (close) => app.addHook('onClose', close),
     });
   });
-  // --- end of Reminders and the daily digest --------------------------------------------
+  // --- end of Reminders, the daily digest and the maintenance pass ----------------------
 
   // --- Published ports (contracts/ports-and-events.md §1) ---------------------------
   // What another module reads and writes Tasks through. Both are `providePort`:

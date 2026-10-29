@@ -313,7 +313,8 @@ export class StageTaskService {
       };
     };
     // A Task whose Stage is gone (deleted while Tasks was off) belongs to no
-    // Stage the Project shows; it stays readable in the Tasks module.
+    // Stage the Project shows until the Tasks module's maintenance pass takes
+    // the Stage off it (#450); it stays readable in the Tasks module.
     return {
       tasksAvailable: true,
       stages: stages.map((stage) => ({

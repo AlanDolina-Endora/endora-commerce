@@ -36,6 +36,14 @@ import { PROJECT_TASK_CONTEXT_TYPE } from './project-tasks.js';
  * assigned to: it is **stored as the Role** (`role:<id>`, {@link responsibleRoleNote}),
  * never as a sentence, so each reader sees it in their own language with the
  * Role's current name. Any other note is shown as stored.
+ *
+ * `existingContexts` tells the Tasks module's maintenance pass which Projects
+ * still exist and which Stages each has, whoever may see them
+ * (`specs/165-task-management/` R-19, issue #450): the Tasks of a Project
+ * deleted while Tasks was off are then deleted, and those of a deleted Stage
+ * lose it. Asked only in the system scope, answered by
+ * `ProjectAccess.existingWithStages`. With Projects off it is never asked — the
+ * registry does not enumerate this descriptor — so nothing is taken for gone.
  */
 
 const ROLE_NOTE = /^role:([0-9a-f-]{36})$/i;
@@ -63,6 +71,7 @@ export function createProjectTaskContext(deps: {
     // to the Project's work: it needs `projects:write` and a Project the caller sees.
     canChangeTasks: async (id) =>
       (await access.callerHolds(PROJECTS_WRITE_PERMISSION)) && (await access.visibleIds([id])).has(id),
+    existingContexts: (ids) => access.existingWithStages(ids),
     describe: async (ids) => {
       const visible = [...(await access.visibleIds(ids))];
       const out = new Map<string, TaskContextDescription>();
