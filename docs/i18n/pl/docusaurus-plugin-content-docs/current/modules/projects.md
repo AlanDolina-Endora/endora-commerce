@@ -532,8 +532,10 @@ XML, skrypt — jest odrzucany. *Usuń* odłącza plik; sam plik zostaje w
 bibliotece mediów.
 
 **Biblioteka mediów nie usunie pliku, którego używa projekt**, i wskazuje ten
-projekt numerem — także wtedy, gdy moduł Projekty jest wyłączony. Najpierw
-odłącz plik od projektu. Odnośnik do pobrania jest przygotowywany w chwili
+projekt numerem tym, którzy mogą go zobaczyć — także wtedy, gdy moduł Projekty
+jest wyłączony. Najpierw odłącz plik od projektu. Plik używany tylko przez
+projekty, których ktoś nie jest członkiem, jest przed nim ukryty w bibliotece
+mediów. Odnośnik do pobrania jest przygotowywany w chwili
 kliknięcia *Pobierz* i ważny przez kilka minut.
 
 ## Alerty o terminach

@@ -513,8 +513,9 @@ run — an HTML page, an SVG image, an XML document, a script — is refused.
 *Remove* detaches a file; the file itself stays in the media library.
 
 **The media library refuses to delete a file a project uses**, and names the
-project by its number — also while Projects is switched off. Detach it from the
-project first. A download link is prepared at the moment you press *Download*
+project by its number to those who may see it — also while Projects is switched
+off. Detach it from the project first. A file used only by projects somebody is
+not a member of is hidden from them in the media library. A download link is prepared at the moment you press *Download*
 and is valid for a few minutes.
 
 ## Deadline alerts

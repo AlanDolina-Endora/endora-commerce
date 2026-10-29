@@ -86,7 +86,8 @@ renders.
 | Path | Change |
 | --- | --- |
 | `docs/i18n/pl/docusaurus-plugin-content-docs/current/modules/assets-library/index.md` (and its translation-cache entry) | The Polish copy of the new section (`docs/docs/contributing/documentation-i18n.md`). |
-| The Polish copies of `tasks.md`, `projects.md` and `crm.md`, where they exist under the same tree | The one sentence each. |
+| The Polish copies of `tasks.md`, `projects.md` and `crm.md`, where they exist under the same tree | The one sentence each, and their translation-cache entries (`docs/translation-cache/pl/packages--modules--{tasks,projects,crm}--docs--*.json`). |
+| `docs/i18n/pl/docusaurus-plugin-content-docs/current/module-reference/assets-library.md` and `docs/translation-cache/pl/generated:module-reference--assets-library.json` (T051) | The Polish mirror of the `admin_roles` row `composer:generate` added to the generated English reference at T013 (T004's edge). `check:docs-translations` reported it stale; nothing else in the page changed. |
 
 ## H. Not changed (checked)
 
@@ -96,3 +97,10 @@ renders.
 | `packages/modules/assets_library/src/admin/` | The drawer's "Delete disabled while referenced" stays correct by invariant I-1, so there is no UI change. The designer may still review the empty-folder and not-found states. |
 | `transactional_emails`, `pim_ergonode`, `product_feeds`, `invoices`, `orders`, `document_templates` | Port consumers on their own terms (R-1). |
 | `admin_roles` | Read through its published `permissionService`; no change. |
+
+## I. `.changeset/` (T052)
+
+| Path | Change |
+| --- | --- |
+| `.changeset/166-*.md` (new, six files) | One per meaning, per `plan.md` *Other gates*: `contracts`, `mod-assets-library`, `mod-tasks`, `mod-projects`, `mod-crm` minor; `mod-catalog`, `mod-cms`, `mod-blog`, `mod-megamenu` patch in one file. |
+| `.changeset/assets-library-folder-delete-references.md` (#537's, unreleased) | Its last sentence said each asset is asked separately, so a large folder issues more queries; T013 replaced that fallback with the batched attribution, and both changesets release together, so the sentence would have described code that does not ship. |

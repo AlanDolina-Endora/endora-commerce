@@ -18,6 +18,9 @@ Biblioteka zasobów (Assets Library) to warstwa plików cyfrowych platformy. Zap
 - Podmianę pliku w miejscu, z zachowaniem poprzedniej wersji, którą można przywrócić.
 - Ochronę odwołań: plików używanych przez katalog lub CMS nie można usunąć, dopóki wszystkie
   odwołania nie zostaną usunięte.
+- Widoczność zależną od czytającego: plik używany tylko przez rekordy, których ktoś nie może
+  zobaczyć — prywatne zadanie, projekt, którego nie jest członkiem, szansę sprzedażową spoza jego
+  zasięgu — jest przed nim ukryty. Zobacz [Kto widzi które pliki](#who-sees-which-files).
 - Okresowe czyszczenie, które trwale usuwa pliki usunięte miękko i podmienione wersje po upływie
   okresu przechowywania.
 
@@ -131,6 +134,85 @@ rozwiązany adres, ale dla pliku `private` dopiero po tym samym sprawdzeniu toke
 podlega plik lokalny; bez ważnego tokenu odpowiada `403 ASSET_ACCESS_DENIED`. Ekrany panelu pobierają
 adresy prywatne z `GET /api/v1/admin/assets/:id/url` i działają bez zmian.
 
+## Kto widzi które pliki {#who-sees-which-files}
+
+Nie wszystkie rekordy, które używają plików z biblioteki, są widoczne dla każdego: prywatne zadanie
+albo szkic zadania, zadanie rekordu, którego nie możesz zobaczyć, projekt, którego nie jesteś
+członkiem, szansa sprzedażowa organizacji spoza twojego zasięgu. Biblioteka idzie za tymi rekordami,
+więc ich pliki nie trafiają do tych, którzy nie mogą ich zobaczyć.
+
+**Widzisz plik, gdy** nie używa go nic, co ukrywa pliki — to plik przesłany, którego nikt jeszcze
+nie używa, albo plik używany tylko przez produkty, kategorie, strony CMS, wpisy bloga lub menu —
+**albo gdy możesz zobaczyć choć jeden z rekordów, które go używają.** Plik używany przez prywatne
+zadanie *i* produkt widzi każdy, kto może otworzyć bibliotekę; tak samo plik używany przez dwa
+zadania, z których jedno możesz zobaczyć. O tym, które rekordy możesz zobaczyć, decyduje moduł, do
+którego należą, według tej samej reguły co na jego ekranach: Zadania — prywatne zadania, szkice i
+rekord, do którego zadanie należy; Projekty — członkostwo; CRM — `crm:read` i zasięg organizacji.
+
+**Pliku, którego nie możesz zobaczyć, dla ciebie nie ma.**
+
+- Nie ma go na liście biblioteki, w jej wyszukiwaniu, w folderach ani w oknie wyboru pliku, które
+  otwierają inne ekrany.
+- Otwarcie go po identyfikatorze — szczegóły, odnośnik do pobrania, podgląd — i każda czynność na
+  nim — zmiana nazwy, przeniesienie, podmiana, przywrócenie poprzedniej wersji, zmiana widoczności,
+  ustawienie lub usunięcie stałego linku, usunięcie i przywrócenie — dają dokładnie tę samą
+  odpowiedź co plik, który nie istnieje. Przenoszenie wielu plików naraz pomija go, tak jak pomija
+  brakujący.
+- Dołączenie go do zadania, projektu lub szansy sprzedażowej jest odrzucane jak dla brakującego
+  pliku.
+- Odmowa ustawienia stałego linku (`409 ASSET_PERMALINK_TAKEN`) nie wskazuje pliku, który ma już tę
+  nazwę, jeśli nie możesz go zobaczyć.
+
+**_Używany przez_ pokazuje tylko rekordy, które możesz zobaczyć.** Pozostałe nie są ani
+wymieniane, ani liczone, więc dwie osoby mogą zobaczyć dla tego samego pliku różne listy.
+
+**Usunięcie jest nadal odrzucane, dopóki czegokolwiek używa plik**, także rekordów, których nie
+możesz zobaczyć: biblioteka liczy każde użycie, bez względu na to, kto pyta. Odmowa wskazuje tylko
+rekordy, które możesz zobaczyć, a jej komunikat jest dla wszystkich ten sam.
+
+**Foldery.**
+
+- Liczba plików ze stałym linkiem, którą podaje potwierdzenie usunięcia folderu, obejmuje tylko
+  pliki, które widzisz.
+- Folder, w którym są tylko pliki, których nie możesz zobaczyć, jest dla ciebie pusty. Jego
+  usunięcie przenosi te pliki do folderu nadrzędnego — do *Nieposortowane (root)*, gdy go nie ma —
+  i usuwa folder. Nigdy nie trafiają w twoim imieniu do kosza.
+- Dotyczy to każdego sposobu usuwania folderu. Przeniesienie zawartości do folderu nadrzędnego
+  działa jak dotąd. Usunięcie wszystkiego (`deleteRecursively`) przenosi pliki, które widzisz, do
+  kosza, a pozostałe do folderu nadrzędnego, i jest **odrzucane, gdy którykolwiek widoczny dla
+  ciebie plik w folderze, na dowolnej głębokości, jest nadal używany** — odmowa podaje identyfikatory
+  tych plików, a nic nie zostaje usunięte ani przeniesione.
+- Wpis audytu folderu wymienia pliki przeniesione w ten sposób do folderu nadrzędnego
+  (`rehomedAssetIds`).
+
+**Administrator platformy** — rola z uprawnieniem `*` — widzi każdy plik, bez względu na to, kto go
+używa. Także jemu usunięcie jest odrzucane, dopóki plik jest używany.
+
+**Gdy moduł jest wyłączony.** Jego rekordy zostają, a z nimi użycia plików z biblioteki. Pliki
+używane tylko przez rekordy wyłączonego modułu są ukryte przed każdym czytającym bibliotekę poza
+administratorem platformy i nikt nie może ich usunąć — także administrator platformy. Po ponownym
+włączeniu modułu wracają do wszystkich, którzy widzieli je wcześniej; gdy moduł jest wyłączony, nic
+nie jest przenoszone ani zapisywane.
+
+**Trwałe usunięcie takich plików.** Są dwie drogi:
+
+- włącz moduł z powrotem i usuń rekordy lub załączniki, które używają plików; stają się wtedy
+  zwykłymi nieużywanymi plikami;
+- usuń moduł z wdrożenia — odinstaluj go i usuń jego pakiet albo zbuduj instancję bez niego. Moduł,
+  który nie jest częścią wdrożenia, nie zgłasza żadnych użyć, więc jego dawne pliki są traktowane
+  jak nieużywane: widoczne i możliwe do usunięcia. Moduł tylko niedostępny na platformie albo
+  odinstalowany miękko nadal jest częścią wdrożenia, a jego pliki pozostają ukryte i chronione tak
+  jak przy wyłączonym module.
+
+**Co się nie zmienia.**
+
+- Własny adres pliku (`/assets/file/…`) i jego stały link serwują plik dokładnie jak dotąd: o
+  dostarczaniu publicznym i prywatnym decyduje widoczność pliku, a nie to, kto może go zobaczyć w
+  bibliotece.
+- Prace w tle — okresowe czyszczenie, sprawdzanie magazynu — widzą każdy plik.
+- Liczby plików usuniętych i oczekujących na sprzątanie na stronie magazynu pozostają sumami dla
+  całej biblioteki.
+
 ## Podmiana pliku {#replacing-a-file}
 
 `POST /api/v1/admin/assets/:id/replace` (multipart: opcjonalne pole `expectedContentVersion`, a po nim
@@ -194,7 +276,9 @@ wpisywania i prosi o potwierdzenie przed zmianą lub usunięciem ustawionego sta
   głębokości, ma stały link (`GET /api/v1/admin/assets/folders/:folderId/permalink-count`). Opcja
   API `deleteRecursively` żądania `DELETE /api/v1/admin/assets/folders/:folderId` przenosi natomiast
   pliki folderu do kosza bez potwierdzenia, więc ich stałe linki odpowiadają `410`, dopóki pliki nie
-  zostaną przywrócone.
+  zostaną przywrócone. Jest odrzucana, dopóki którykolwiek z tych plików jest używany, a pliki,
+  których czytający nie może zobaczyć, trafiają zamiast tego do folderu nadrzędnego (zobacz
+  [Kto widzi które pliki](#who-sees-which-files)).
 
 Ustawienie i usunięcie stałego linku to audytowane komendy `asset.permalink_set` i
 `asset.permalink_remove`. Wyszukiwanie na liście dopasowuje także stałe linki.
@@ -291,7 +375,8 @@ Usuwanie przebiega w dwóch etapach:
 
 1. `DELETE /api/v1/admin/assets/:id` → usunięcie miękkie. Ustawia `deletedAt`; plik znika z list i
    list wyboru, ale można go przywrócić przez `POST /api/v1/admin/assets/:id/restore`, co wyłącza go
-   też z czyszczenia. Rekurencyjne usuwanie folderu działa tak samo. Podawane `purgeAfterAt` to
+   też z czyszczenia. Rekurencyjne usuwanie folderu działa tak samo i jest odrzucane w całości,
+   dopóki którykolwiek plik w folderze jest używany. Podawane `purgeAfterAt` to
    `deletedAt` plus bieżący okres przechowywania.
 2. [Okresowe czyszczenie](#retention-and-purge) trwale usuwa plik po upływie okresu: usuwa wiersz i
    prosi adapter o usunięcie pliku źródłowego.
@@ -337,8 +422,61 @@ poniższych:
 - `categories.main_image_asset_id` (główny obraz kategorii)
 - `cms_pages.body` zawierające węzeł `{ type: "asset_ref", assetId }`
 
-Lista odwołań jest dołączana do tablicy `details` w odpowiedzi z błędem, aby panel mógł pokazać, gdzie
-plik jest używany.
+Każdy moduł, który używa plików z biblioteki, zgłasza w ten sam sposób własne rodzaje odwołań —
+między innymi Zadania, Projekty, CRM, wpisy bloga i menu. Sprawdzenie liczy **każde** odwołanie, bez
+względu na to, kto pyta i jakie ma uprawnienia, także gdy moduł, do którego należy odwołanie, jest
+wyłączony. Lista odwołań w tablicy `details` odpowiedzi z błędem — to, co panel pokazuje jako
+miejsca użycia — wskazuje tylko rekordy, które pytający może zobaczyć; administratorowi platformy
+wymienia wszystkie. Rekurencyjne usuwanie folderu zadaje to samo pytanie naraz o każdy plik w
+folderze i odmawia, gdy którykolwiek jest używany.
+
+### Dla programistów: odwołania zależne od czytającego
+
+Moduł zgłasza `AssetReferenceDescriptor` (z `@endora-commerce/contracts`) do rejestru odwołań
+biblioteki z haka startowego, który służy tylko do zgłaszania wkładów. O widoczności decydują w nim
+dwie rzeczy.
+
+**Przypisanie.** `findReferences(assetIds)` zwraca `AssetReferenceHit[]`: każde odwołanie niesie
+`assetId`, na który wskazuje, a deskryptor odpowiada na całą partię identyfikatorów **jednym**
+zapytaniem. Deskryptor, który nadal zwraca zwykłe `AssetReference`, kompiluje się i dostaje
+poprawną odpowiedź — rejestr pyta go ponownie o każdy plik osobno wszędzie tam, gdzie musi przypisać
+partię — ale kosztuje to jedno zapytanie na plik. Biblioteka usuwa `assetId`, zanim odwołanie trafi
+do odpowiedzi.
+
+**`readerRestriction`.** Opcjonalna właściwość danych, tylko do odczytu. Gdy jej nie ma, odwołania
+deskryptora nigdy nie ukrywają pliku (katalog, CMS, blog, menu). Gdy jest, odwołania zależą od
+czytającego, a moduł odpowiada w imieniu **bieżącego wywołującego**:
+
+```ts
+interface AssetReferenceReaderRestriction {
+  /** Of these record ids, the ones the caller may see. */
+  visibleEntityIds(entityIds: readonly string[]): Promise<ReadonlySet<string>>;
+  /** Every asset id a record the caller may NOT see points at — the exact complement. */
+  assetIdsWithHiddenReferences(): Promise<readonly string[]>;
+  /** Every asset id any record of this kind points at; asked while the owner is off. */
+  allReferencedAssetIds(): Promise<readonly string[]>;
+}
+```
+
+- Stosuj regułę, której używają ekrany modułu, a zbiór ukrytych zapisuj odpornie na NULL
+  (`(<visible>) is not true`), tak by wiersz, o którym warunek nie rozstrzyga, był ukryty.
+- Usługi, których potrzebuje, pobieraj przez funkcje wywoływane przy każdym użyciu, nigdy przy
+  starcie, i nie sprawdzaj obecności własnego modułu: o obecności decyduje biblioteka. Gdy moduł
+  jest wyłączony, wywoływana jest tylko `allReferencedAssetIds`, więc musi to być zwykłe SQL na
+  własnych tabelach modułu, które nie rozwiązuje żadnego portu.
+- Biblioteka najpierw klasyfikuje wywołującego. Aktor systemowy i posiadacz `*` widzą każdy plik i
+  żaden moduł nie jest pytany; klient, klucz API albo żądanie bez administratora nie widzą żadnego
+  rekordu zależnego od czytającego i również nikt nie jest pytany.
+- Koszt na żądanie, nie na plik: strona listy pyta każdy deskryptor zależny od czytającego o
+  `assetIdsWithHiddenReferences` raz, a potem o `findReferences` i `visibleEntityIds` raz dla tych
+  kandydatów na tej stronie, które inne odwołanie mogłoby uczynić widocznymi.
+
+**`assetReadPort.visibleToCaller(assetIds)`** odpowiada, które z identyfikatorów bieżący wywołujący
+może zobaczyć w bibliotece — brakujący identyfikator, ukryty i niebędący uuid są tak samo nieobecne.
+Moduł, który pozwala dołączyć istniejący plik z biblioteki, pyta o to **przed** każdą inną odmową
+opisującą plik (jego widoczność, typ), aby ukryty i brakujący plik dostały jedną odpowiedź. Pozostałe
+metody portu nie filtrują: służą modułom, które decydują według reguł własnego rekordu.
+`assetsLibraryPort.getAsset` zwraca szczegóły z odwołaniami, które wywołujący może zobaczyć.
 
 ## Wymienne adaptery przechowywania
 

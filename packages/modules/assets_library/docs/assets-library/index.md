@@ -19,6 +19,10 @@ The Assets Library is the platform's digital-asset substrate. It owns:
 - In-place file replacement, with the previous version kept and restorable.
 - Reference protection: assets in use by Catalog or CMS cannot be deleted
   until every reference is detached.
+- Reader-aware visibility: a file used only by records a reader may not see
+  — a private Task, a Project they are not a member of, an Opportunity
+  outside their reach — is hidden from that reader. See
+  [Who sees which files](#who-sees-which-files).
 - A retention sweep that hard-deletes soft-deleted assets and replaced files
   once their retention period has passed.
 
@@ -141,6 +145,90 @@ gets; without a valid token it answers `403 ASSET_ACCESS_DENIED`. Admin
 screens obtain private URLs from `GET /api/v1/admin/assets/:id/url` and are
 unaffected.
 
+## Who sees which files {#who-sees-which-files}
+
+Some of the records that use library files are not visible to everybody: a
+private or draft Task, a Task of a record you may not see, a Project you are not
+a member of, an Opportunity of an Organization outside your reach. The library
+follows those records, so their files do not reach readers who may not see
+them.
+
+**You see a file when** nothing that hides files uses it — an upload nobody
+uses yet, or a file used only by products, categories, CMS pages, blog posts or
+menus — **or when you may see at least one of the records that use it.** A file
+used by a private Task *and* a product is visible to everybody who may open the
+library; so is a file used by two Tasks of which you may see one. Which records
+you may see is decided by the module that owns them, by the rule its own
+screens use: Tasks by private and draft Tasks and the record a Task belongs to,
+Projects by membership, CRM by `crm:read` and your Organization reach.
+
+**A file you may not see is not there for you.**
+
+- It is missing from the library's list, its search, its folders and the file
+  picker other screens open.
+- Opening it by its id — the detail, the download link, the preview — and every
+  action on it — rename, move, replace, restoring the previous version,
+  changing its visibility, setting or removing its permalink, delete and
+  restore — answers exactly as for a file that does not exist. Moving several
+  files at once skips it, as it skips a missing one.
+- Attaching it to a Task, a Project or an Opportunity is refused as for a
+  missing file.
+- A permalink refusal (`409 ASSET_PERMALINK_TAKEN`) does not name the file that
+  holds the name when you may not see it.
+
+**_Referenced by_ lists only the records you may see.** The others are neither
+named nor counted, so two readers can see a different list for the same file.
+
+**Delete is still refused while anything uses the file**, including records you
+may not see: the library counts every use, whoever asks. The refusal names only
+the records you may see, and its message is the same for everybody.
+
+**Folders.**
+
+- The number of files with a permalink that the folder-delete confirmation
+  names counts only files you see.
+- A folder whose only files are ones you may not see is empty for you. Deleting
+  it moves those files to the parent folder — to *Unsorted (root)* when there is
+  none — and deletes the folder. They are never moved to the trash on your
+  behalf.
+- This holds for every way of deleting a folder. Moving the contents to the
+  parent works as before. Deleting everything (`deleteRecursively`) moves the
+  files you see to the trash and the others to the parent folder, and it is
+  **refused when any file you see in the folder, at any depth, is still in use**
+  — the refusal lists those files' ids, and nothing is deleted or moved.
+- The folder's audit entry lists the files moved to the parent folder this way
+  (`rehomedAssetIds`).
+
+**The Platform administrator** — a role holding `*` — sees every file, whoever
+uses it. Delete is still refused for them while a file is in use.
+
+**When a module is switched off.** Its records stay, and so do their uses of
+library files. The files used only by records of a switched-off module are
+hidden from every library reader except the Platform administrator, and nobody
+can delete them — the Platform administrator included. Switching the module back
+on shows them again to everybody who saw them before; nothing is moved or
+written while it is off.
+
+**Removing such files for good.** There are two ways:
+
+- switch the module back on and remove the records or the attachments that use
+  the files; they are then ordinary unused files;
+- remove the module from the deployment — uninstall it and remove its package,
+  or build the instance without it. A module that is not part of the deployment
+  reports no uses, so its former files are treated as unused: visible and
+  deletable. A module only made unavailable on the platform, or soft-uninstalled,
+  is still part of the deployment, and its files stay hidden and protected as
+  while it is switched off.
+
+**What does not change.**
+
+- A file's own address (`/assets/file/…`) and its permalink serve the file
+  exactly as before: public and private delivery is decided by the file's
+  visibility, not by who may see it in the library.
+- Background work — the retention sweep, storage checks — sees every file.
+- The storage page's counts of deleted files and of files awaiting clean-up
+  stay the library's totals.
+
 ## Replacing a file
 
 `POST /api/v1/admin/assets/:id/replace` (multipart: an optional
@@ -215,7 +303,9 @@ is changed or removed.
   (`GET /api/v1/admin/assets/folders/:folderId/permalink-count`). The API
   option `deleteRecursively` of `DELETE /api/v1/admin/assets/folders/:folderId`
   instead moves the folder's assets to the trash without confirmation, so their
-  permalinks answer `410` until the assets are restored.
+  permalinks answer `410` until the assets are restored. It is refused while
+  any of those assets is in use, and files the reader may not see are moved to
+  the parent folder instead (see [Who sees which files](#who-sees-which-files)).
 
 Setting and removing a permalink are the audited Commands
 `asset.permalink_set` and `asset.permalink_remove`. The list search also
@@ -321,7 +411,8 @@ Deletes go through a two-step lifecycle:
 1. `DELETE /api/v1/admin/assets/:id` → soft-delete. Sets `deletedAt`; the asset
    disappears from listings and pickers but remains recoverable via
    `POST /api/v1/admin/assets/:id/restore`, which also takes it out of the
-   sweep. Recursive folder deletion works the same way. The reported
+   sweep. Recursive folder deletion works the same way, and is refused as a
+   whole while any file in the folder is in use. The reported
    `purgeAfterAt` is `deletedAt` plus the current retention period.
 2. The [retention sweep](#retention-and-purge) hard-deletes the asset once the
    period has passed: it removes the row and asks the adapter to delete the
@@ -371,8 +462,68 @@ following points at the asset:
 - `categories.main_image_asset_id` (Category main image)
 - `cms_pages.body` containing a `{ type: "asset_ref", assetId }` node
 
-The reference list is included in the error envelope's `details` array so
-the admin UI can show "in use by" prompts.
+Every module that uses library files contributes its own kinds of reference
+in the same way — Tasks, Projects, CRM, blog posts and menus among them. The
+check counts **every** reference, whoever asks and whatever their permissions,
+and also while the module that owns the reference is switched off. The
+reference list in the error envelope's `details` array — what the admin UI
+shows as "in use by" — names only the records the requesting reader may see;
+the Platform administrator's lists them all. A recursive folder delete asks the
+same question for every file in the folder at once and refuses when any is in
+use.
+
+### For developers: reader-restricted references
+
+A contributor pushes an `AssetReferenceDescriptor` (from
+`@endora-commerce/contracts`) into the library's reference registry from a
+contribution-only boot hook. Two things in it decide visibility.
+
+**Attribution.** `findReferences(assetIds)` returns `AssetReferenceHit[]`:
+each reference carries the `assetId` it points at, and the descriptor answers a
+batch of ids in **one** statement. A descriptor that still returns plain
+`AssetReference`s compiles and is answered correctly — the registry asks it
+again one asset at a time wherever it must attribute a batch — but it costs a
+statement per asset. The library strips `assetId` before a reference reaches
+the wire.
+
+**`readerRestriction`.** An optional, readonly data property. Absent, the
+descriptor's references never hide an asset (catalog, CMS, blog, menus).
+Present, they are reader-restricted, and the owner answers for the **ambient
+caller**:
+
+```ts
+interface AssetReferenceReaderRestriction {
+  /** Of these record ids, the ones the caller may see. */
+  visibleEntityIds(entityIds: readonly string[]): Promise<ReadonlySet<string>>;
+  /** Every asset id a record the caller may NOT see points at — the exact complement. */
+  assetIdsWithHiddenReferences(): Promise<readonly string[]>;
+  /** Every asset id any record of this kind points at; asked while the owner is off. */
+  allReferencedAssetIds(): Promise<readonly string[]>;
+}
+```
+
+- Use the rule the owner's own screens use, and write the hidden set NULL-safe
+  (`(<visible>) is not true`), so a row the predicate cannot decide is hidden.
+- Take the services it needs as getters resolved per call, never at boot, and
+  do not probe the module's own presence: the library decides presence. While
+  the owner is switched off, only `allReferencedAssetIds` is called, so it must
+  be plain SQL over the owner's own tables that resolves no port.
+- The library classifies the caller first. The system actor and a holder of `*`
+  see every asset and no owner is asked; a customer, an API key or a request
+  with no administrator sees no restricted record and no owner is asked either.
+- Cost per request, not per asset: a list page asks each restricted descriptor
+  `assetIdsWithHiddenReferences` once, then `findReferences` and
+  `visibleEntityIds` once for the candidates on that page that another
+  reference might make visible.
+
+**`assetReadPort.visibleToCaller(assetIds)`** answers which of the ids the
+ambient caller may see in the library — a missing id, a hidden one and a
+non-uuid are all absent. A module that lets a caller attach an existing library
+file asks it **before** any other refusal that describes the file (its
+visibility, its type), so a hidden file and a missing one get one answer. The
+port's other methods are unfiltered: they serve modules that decide by their
+own record's rules. `assetsLibraryPort.getAsset` answers the detail with the
+references the caller may see.
 
 ## Pluggable storage adapters
 
