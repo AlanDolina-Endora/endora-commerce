@@ -389,6 +389,7 @@
   "create.context": "To zadanie zostanie umieszczone w rekordzie, z którego je utworzono.",
   "comments.empty": "Brak komentarzy.",
   "comments.hint": "Komentarze widzi każdy, kto widzi to zadanie. Wpisz @, aby wspomnieć o osobie.",
+  "comments.hintReadOnly": "Komentarze widzi każdy, kto widzi to zadanie.",
   "comments.composer.label": "Nowy komentarz",
   "comments.composer.placeholder": "Napisz komentarz",
   "comments.composer.submit": "Dodaj komentarz",

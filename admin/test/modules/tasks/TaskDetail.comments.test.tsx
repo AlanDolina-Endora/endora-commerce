@@ -191,5 +191,8 @@ describe('TaskDetail — comments (US4)', () => {
     const items = await entries(section);
     expect(within(section).queryByLabelText(en('comments.composer.label'))).toBeNull();
     expect(within(items[0]!).queryByRole('button')).toBeNull();
+    // No form, so no "Type @ to mention someone" either (T095).
+    expect(within(section).queryByText(en('comments.hint'))).toBeNull();
+    expect(within(section).getByText(en('comments.hintReadOnly'))).toBeTruthy();
   });
 });

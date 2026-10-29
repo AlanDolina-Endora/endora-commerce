@@ -389,6 +389,7 @@
   "create.context": "This task will be placed in the record it was started from.",
   "comments.empty": "No comments yet.",
   "comments.hint": "Everyone who can see this task can read its comments. Type @ to mention someone.",
+  "comments.hintReadOnly": "Everyone who can see this task can read its comments.",
   "comments.composer.label": "New comment",
   "comments.composer.placeholder": "Write a comment",
   "comments.composer.submit": "Add comment",
