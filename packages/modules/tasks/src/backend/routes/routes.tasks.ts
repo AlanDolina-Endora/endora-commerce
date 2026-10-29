@@ -91,10 +91,15 @@ export async function registerTaskRoutes(app: FastifyInstance, deps: TaskRoutesD
       .catch(refuseUnofferedCustomField),
   }));
 
-  // For a private Task (`taskId`), its Creator alone (FR-038).
+  // For a private Task (`taskId`), its Creator alone (FR-038); for a Task in a
+  // record, or a `contextType`/`contextId` on the create form, who may see it (#506).
   app.get(`${API}/lookups/assignees`, { preHandler: requireAdmin('tasks:write') }, async (request) => {
     const query = TaskAssigneeLookupQuerySchema.parse(request.query ?? {});
-    return { data: await tasks.assignees(query.q, query.taskId) };
+    const context =
+      query.contextType !== undefined && query.contextId !== undefined
+        ? { contextType: query.contextType, contextId: query.contextId }
+        : undefined;
+    return { data: await tasks.assignees(query.q, query.taskId, context) };
   });
 
   // Who a text of a Task may mention (admin-api §3): somebody who may see it.

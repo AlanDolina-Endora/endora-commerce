@@ -18,6 +18,11 @@ export interface AssigneePickerProps {
   onChange: (next: ChosenAssignee[]) => void;
   ariaDescribedBy?: string;
   disabled?: boolean;
+  /** The Task being edited: only who may see it is offered (#506). */
+  taskId?: string;
+  /** The record a new Task is created in (the create form's `?context=`): only who may see it is offered. */
+  contextType?: string;
+  contextId?: string;
 }
 
 /**
@@ -30,7 +35,10 @@ export interface AssigneePickerProps {
  * allowed to assign Tasks must not need the right to manage administrators to
  * do it. The lookup answers the active administrators, at most fifty, and the
  * control narrows them as the operator types; somebody already chosen stays a
- * chip, named, whether or not the lookup still offers them.
+ * chip, named, whether or not the lookup still offers them. On a Task's
+ * screen, or on the create form inside a record, the lookup is asked for that
+ * Task or record, and offers only who may see it — the save refuses anybody
+ * else (#506).
  */
 export function AssigneePicker(props: AssigneePickerProps): ReactNode {
   const t = useTranslation('tasks');
@@ -38,13 +46,17 @@ export function AssigneePicker(props: AssigneePickerProps): ReactNode {
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sequence = useRef(0);
+  const { taskId, contextType, contextId } = props;
 
   const load = useCallback(async (): Promise<void> => {
     const current = ++sequence.current;
     setSearching(true);
     setError(null);
     try {
-      const options = await tasksApi.assignees('');
+      const options = await tasksApi.assignees('', {
+        ...(taskId ? { taskId } : {}),
+        ...(contextType && contextId ? { context: { contextType, contextId } } : {}),
+      });
       if (current === sequence.current) setFound(options);
     } catch (failure) {
       if (current === sequence.current) {
@@ -54,7 +66,7 @@ export function AssigneePicker(props: AssigneePickerProps): ReactNode {
     } finally {
       if (current === sequence.current) setSearching(false);
     }
-  }, [t]);
+  }, [t, taskId, contextType, contextId]);
 
   useEffect(() => {
     void load();

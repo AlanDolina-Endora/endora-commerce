@@ -15,3 +15,4 @@ Task management (`specs/165-task-management/`). **Breaking** for consumers of th
 - `ERROR_CODES` gains `TASK_PRIORITY_UNKNOWN`, `TASK_TAG_UNKNOWN`, `TASK_TAG_NAME_TAKEN`, `TASK_ATTACHMENT_REFUSED`, `TASK_WORKFLOW_INVALID`, `TASK_STATUS_IN_USE_TOO_MANY`, `TASK_VIEW_NAME_TAKEN`, `TASK_PARENT_CYCLE`, `TASK_HIERARCHY_TOO_DEEP`, `TASK_LINK_INVALID`, `TASK_REMINDER_INVALID`, `TASK_PRIVATE_ASSIGNEE` and `TASK_ALREADY_PUBLISHED`.
 - `createTaskSavedViewRequestSchema` and `updateTaskSavedViewRequestSchema` in `saved-list-views.ts`.
 - Admin preferences gain `listViewModes`: `{[listId]: 'list' | 'board'}`, merged per list, `null` forgetting a list; the read side falls back to `{}`. `ADMIN_LIST_VIEW_MODES`, `adminListViewModeSchema`, `ADMIN_LIST_VIEW_MODES_MAX`.
+- `TaskAssigneeLookupQuerySchema` gains `contextType` and `contextId`, both or neither (#506).

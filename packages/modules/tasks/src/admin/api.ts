@@ -204,10 +204,24 @@ export const tasksApi = {
     return data(apiClient.get<{ data: TaskContextOption[] }>(`${BASE}/lookups/contexts${tail}`));
   },
 
-  /** Active administrators by name or e-mail — `tasks:write`, the assignee picker's source. */
-  assignees(q: string): Promise<TaskAssigneeOption[]> {
-    const tail = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
-    return data(apiClient.get<{ data: TaskAssigneeOption[] }>(`${BASE}/lookups/assignees${tail}`));
+  /**
+   * Active administrators by name or e-mail who may be assigned — `tasks:write`,
+   * the assignee picker's source. A Task (`taskId`), or the record a new Task is
+   * created in (`context`), narrows them to who may see it (#506).
+   */
+  assignees(
+    q: string,
+    scope: { taskId?: string; context?: { contextType: string; contextId: string } } = {},
+  ): Promise<TaskAssigneeOption[]> {
+    const qs = new URLSearchParams();
+    if (q.trim()) qs.set('q', q.trim());
+    if (scope.taskId) qs.set('taskId', scope.taskId);
+    if (scope.context) {
+      qs.set('contextType', scope.context.contextType);
+      qs.set('contextId', scope.context.contextId);
+    }
+    const query = qs.toString();
+    return data(apiClient.get<{ data: TaskAssigneeOption[] }>(`${BASE}/lookups/assignees${query ? `?${query}` : ''}`));
   },
 
   /** The operator's priority list, most urgent first — `tasks:read`. */

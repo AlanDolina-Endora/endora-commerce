@@ -56,12 +56,18 @@ import {
   type TaskRow,
 } from './task-access.js';
 import type { TaskHierarchyService } from './hierarchy-service.js';
-import type { TaskAudience, TaskMentionService } from './mention-service.js';
+import type { TaskAudience, TaskAudienceFacts, TaskMentionService } from './mention-service.js';
 import type { TaskPriorityService } from './priority-service.js';
 import type { TaskRecordLinkService } from './record-link-service.js';
 import type { TaskReferenceService } from './reference-service.js';
 import type { TaskTagService } from './tag-service.js';
-import { assertContextForCaller, assertMayBeAssigned, assertMayPutIn, assertMayTakeOut } from './task-checks.js';
+import {
+  assertAssigneesSeeContext,
+  assertContextForCaller,
+  assertMayBeAssigned,
+  assertMayPutIn,
+  assertMayTakeOut,
+} from './task-checks.js';
 import {
   changeTaskAssigneesCommand,
   changeTaskCustomFieldsCommand,
@@ -80,6 +86,7 @@ import type { TaskContextRegistry } from './task-context-registry.js';
 import {
   mapDraftPrivateViolation,
   taskAlreadyPublished,
+  taskContextInvalid,
   taskNotFound,
   taskPrivateAssignee,
   taskPrivateInContext,
@@ -603,6 +610,7 @@ export class TaskService {
     const assigneeIds = [...new Set(body.assigneeIds ?? [])];
     if (isPrivate) assertPrivateAssignees(assigneeIds, actingAdminUserId());
     await assertMayBeAssigned(this.deps.adminUsers, this.deps.permissions, assigneeIds);
+    await assertAssigneesSeeContext(this.deps.contexts, this.deps.adminUsers, context, assigneeIds);
     const priorityCode = body.priorityCode ?? null;
     await this.deps.priorities.assertKnown(priorityCode);
     const tagIds = [...new Set(body.tagIds ?? [])];
@@ -698,6 +706,22 @@ export class TaskService {
     }
     if (assignees) {
       await assertMayBeAssigned(this.deps.adminUsers, this.deps.permissions, 'set' in assignees ? assignees.set : assignees.add);
+    }
+    // Everybody assigned after this write may see the record it is in (#506):
+    // those named now, and — when the Task moves to another record — those it
+    // keeps. Within one record an assignee kept from before is not asked again.
+    const contextAfter =
+      body.context !== undefined ? body.context : { contextType: row.context_type, contextId: row.context_id };
+    const movesRecord =
+      body.context != null && (body.context.contextType !== row.context_type || body.context.contextId !== row.context_id);
+    if (contextAfter && (assignees || movesRecord)) {
+      const current = movesRecord ? ((await this.#assigneeIds([row.id])).get(row.id) ?? []) : [];
+      const asked = !assignees
+        ? current
+        : 'set' in assignees
+          ? assignees.set
+          : [...current.filter((who) => !assignees.remove.includes(who)), ...assignees.add];
+      await assertAssigneesSeeContext(this.deps.contexts, this.deps.adminUsers, contextAfter, asked);
     }
 
     // Private (FR-038): only its Creator says so, and a private Task is in no
@@ -860,14 +884,32 @@ export class TaskService {
    * **Who may be assigned** is who the save accepts and who would see the
    * Task: a holder of `tasks:read` (`assertMayBeAssigned` refuses anybody else
    * with 422 — the walk found the list offering them, T095), and for an
-   * existing Task whoever passes the Task's audience as `mentionable` asks it.
-   * A draft is asked as if published: its assignees see it from then on.
+   * existing Task whoever passes the Task's audience as `mentionable` asks it —
+   * a Task in a record therefore offers only who may see the record
+   * (`canSeeAs`, #506). A draft is asked as if published: its assignees see it
+   * from then on. On the create form a `context` asks the same of the record
+   * the Task is about to be created in; the caller must see it themselves, or
+   * it is 422 `TASK_CONTEXT_INVALID` — the lookup answers nothing about a
+   * record they may not see. A `context` with a `taskId` replaces the Task's.
    * Asked in name order, stopping at the limit, as `mentionable` does.
    */
-  async assignees(q: string | undefined, taskId?: string): Promise<TaskAssigneeOption[]> {
+  async assignees(
+    q: string | undefined,
+    taskId?: string,
+    context?: { contextType: string; contextId: string },
+  ): Promise<TaskAssigneeOption[]> {
     const needle = foldDiacritics(q ?? '').trim().toLowerCase();
     const task = taskId !== undefined ? await this.deps.access.loadVisible(taskId) : null;
+    if (context) await this.#assertSeesContext(context);
     const only = task?.is_private ? task.created_by_admin_user_id : null;
+    const facts: TaskAudienceFacts = {
+      // Read only for a draft or a private Task; a Task about to be created is neither here.
+      created_by_admin_user_id: task?.created_by_admin_user_id ?? actingAdminUserId() ?? '',
+      is_draft: false,
+      is_private: task?.is_private ?? false,
+      context_type: context?.contextType ?? task?.context_type ?? null,
+      context_id: context?.contextId ?? task?.context_id ?? null,
+    };
     const candidates = (await this.deps.adminUsers.listAll({ activeOnly: true }))
       .filter((admin) => isActive(admin) && (only === null || admin.id === only))
       .map((admin) => ({ id: admin.id, name: personName(admin), email: admin.email }))
@@ -880,18 +922,18 @@ export class TaskService {
     const options: TaskAssigneeOption[] = [];
     for (const option of candidates) {
       if (options.length >= ASSIGNEE_OPTIONS_LIMIT) break;
-      const allowed =
-        task !== null
-          ? await this.deps.audience(option.id, { ...task, is_draft: false })
-          : await this.#readsTasks(option.id);
-      if (allowed) options.push(option);
+      if (await this.deps.audience(option.id, facts)) options.push(option);
     }
     return options;
   }
 
-  async #readsTasks(adminUserId: string): Promise<boolean> {
-    const held = await this.deps.permissions.listPermissions(adminUserId);
-    return held.includes(ADMIN_PERMISSION_WILDCARD) || held.includes('tasks:read');
+  /** The caller sees the record: its owner is present and lists it among theirs. */
+  async #assertSeesContext(context: { contextType: string; contextId: string }): Promise<void> {
+    const descriptor = this.deps.contexts.presentFor(context.contextType);
+    const visible = descriptor ? await descriptor.visibleContextIds([context.contextId]) : new Set<string>();
+    if (!visible.has(context.contextId)) {
+      throw taskContextInvalid('The record does not exist or is not available to you.');
+    }
   }
 
   // --- Read port --------------------------------------------------------------

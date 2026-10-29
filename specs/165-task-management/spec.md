@@ -405,7 +405,9 @@ their Project without a Stage.
 - An assignee loses the right to see a Task (Project visibility changed): they stay listed
   but are not notified, and the Task is not in their *My Tasks*.
 - A Task in a Project is assigned to someone who may not see the Project: refused, naming the
-  person — as in feature 163.
+  person, and the assignee picker does not offer them. *(Implementation ruling, #506: feature
+  163 accepted such an assignment and only did not notify; the owner chose the refusal on
+  2026-10-29.)*
 - Two users change the same Task at once: the later save does not silently undo the earlier
   one's other fields; a Status change on the board against a Task changed meanwhile is
   re-checked against the workflow.

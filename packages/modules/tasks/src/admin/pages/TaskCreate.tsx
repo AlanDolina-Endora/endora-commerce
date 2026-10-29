@@ -210,6 +210,7 @@ export function TaskCreate(): ReactNode {
                       id={ids.assignee}
                       value={assignees}
                       onChange={setAssignees}
+                      {...(context ? { contextType: context.contextType, contextId: context.contextId } : {})}
                       ariaDescribedBy={`${ids.assignee}-hint`}
                     />
                     <p id={`${ids.assignee}-hint`} className="text-xs text-muted-foreground">

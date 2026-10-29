@@ -808,6 +808,7 @@ function TaskEditForm(props: TaskEditFormProps): ReactNode {
               id={ids.assignee}
               value={assignees}
               onChange={setAssignees}
+              taskId={task.id}
               ariaDescribedBy={`${ids.assignee}-hint`}
             />
             <p id={`${ids.assignee}-hint`} className="text-xs text-muted-foreground">

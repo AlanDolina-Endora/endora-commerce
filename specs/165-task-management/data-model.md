@@ -86,7 +86,7 @@ Removing one in use runs through its reassignment Command.
   - The response carries `openSubtasks` for the UI's warning.
 - **Assignees.**
   - Each assignee must be an active admin when added.
-  - On a Task with a context, the descriptor's `canSeeAs` must answer yes (163 behaviour, kept).
+  - On a Task with a context, the descriptor's `canSeeAs` must answer yes, or the HTTP write is 422 `TASK_ASSIGNEE_INVALID` naming the person (spec *Edge Cases*; #506, option A). 163 accepted such an assignee and only did not tell them; the write port still does, since its caller owns the context.
   - On a private Task, the Creator is the only possible assignee.
 - **Hierarchy (R-15).**
   - No cycles, and a depth of at most 5.

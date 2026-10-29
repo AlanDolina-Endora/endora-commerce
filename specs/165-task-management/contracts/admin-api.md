@@ -60,6 +60,8 @@ Unknown status, priority and tag ids **match nothing**; they never produce a 422
 - `parentTaskId: null` to detach a sub-task;
 - `private` (Creator only).
 
+**Assignees** (both bodies): each an active admin holding `tasks:read`, else 422 `TASK_ASSIGNEE_INVALID`. On a Task with a context, each must also pass the descriptor's `canSeeAs` — those named, and on a move to another record those the Task keeps — else 422 `TASK_ASSIGNEE_INVALID` with `details {code: 'context_hidden', name, adminUserId}` naming the first refused (spec *Edge Cases*; issue #506, owner ruling 2026-10-29, option A). `taskWritePort.createMany` asks only the first rule: its caller owns the context and names the assignees (a Project's Stage holder).
+
 `status` is **not** accepted here; a status change goes through `/status`.
 
 **`TaskSummary`:**
@@ -103,7 +105,7 @@ Unknown status, priority and tag ids **match nothing**; they never produce a 422
 
 | Method and path | Gate | Notes |
 | --- | --- | --- |
-| `GET /tasks/lookups/assignees?q=&taskId=` | W | Active admins with `tasks:read` who may see the Task. Answers only the Creator for a private Task. |
+| `GET /tasks/lookups/assignees?q=&taskId=&contextType=&contextId=` | W | Active admins with `tasks:read` who may see the Task — for a Task in a context, those its `canSeeAs` admits. Answers only the Creator for a private Task. `contextType`+`contextId` (both or neither, else 400) ask the same of a record before there is a Task — the create form's `?context=` — and need the caller to see it, else 422 `TASK_CONTEXT_INVALID` (#506). |
 | `GET /tasks/lookups/mentionable?taskId=&q=` | R | Same rule; ≤ 20 |
 | `GET /tasks/lookups/documents?q=` | W | `RecordDocumentLookupResponse` with groups order · quote_request · task · opportunity · project. A group appears only when its owner is present and the caller holds its read permission. |
 | `GET /tasks/lookups/records?kind=&q=` | W | Link targets (opportunity, order, quote_request) |

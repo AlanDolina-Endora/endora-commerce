@@ -175,9 +175,13 @@ module is switched off, it is shown as unavailable and reveals nothing about
 it. A description written before formatting existed reads as it did.
 
 **Assignees.** A task has any number of assignees, up to twenty — each an
-active administrator who may view tasks. Somebody assigned to a task of a
-project they may not see is not told about it, and does not find it in *My
-tasks*. An assignee whose account is later deactivated stays on the
+active administrator who may view tasks and, for a task of a record such as a
+project, who may see that record. Assigning anybody else is refused, naming
+them, and the assignee picker — on a task's screen, and on the new-task form
+started inside a record — offers only those who may. Moving a task into another
+record asks the same of the assignees it keeps. Somebody who loses sight of the
+project after being assigned stays on the task, is not told about it, and does
+not find it in *My tasks*. An assignee whose account is later deactivated stays on the
 task, marked *inactive*; nobody is told anything on their behalf, and they can
 be removed.
 
@@ -522,7 +526,7 @@ them `degrades-without` with a `whenAbsent` sentence.
 | Port | Methods |
 | --- | --- |
 | `taskReadPort` (`TaskReadPort`) | `findById`, `findByIds`, `search` (number or title), `listInContext`, `listOpenInContext` (open category and not a draft — a completion gate's question), `countInContext`. A `TaskRecord` carries `status` (a code), `statusCategory`, `closed`, `assigneeIds`, `dueAt`, `draft` and `private`. Narrowed by the full visibility rule for an administrator — context, drafts, private tasks — not for the system. |
-| `taskWritePort` (`TaskWritePort`) | `createMany({ context, tasks })` — at most 100 tasks, each `{ title, description?, assigneeIds?, dueOn?, contextGroupId?, contextNote?, sourceKey? }`, published, in the workflow's start status; one audited `tasks.task.create` command and one `tasks.task.created.v1` event per task created; refused with `TASK_CONTEXT_INVALID` when no switched-on module owns the context type and with `TASK_ASSIGNEE_INVALID` when an assignee is not an active administrator, before anything is written. `deleteInContext({ contextType, contextId })` — every task of one record, one audited `tasks.task.delete` command each. |
+| `taskWritePort` (`TaskWritePort`) | `createMany({ context, tasks })` — at most 100 tasks, each `{ title, description?, assigneeIds?, dueOn?, contextGroupId?, contextNote?, sourceKey? }`, published, in the workflow's start status; one audited `tasks.task.create` command and one `tasks.task.created.v1` event per task created; refused with `TASK_CONTEXT_INVALID` when no switched-on module owns the context type and with `TASK_ASSIGNEE_INVALID` when an assignee is not an active administrator, before anything is written. Whether an assignee may see the record is the owning module's to decide — a project assigns each stage task to the member holding its role — so the port does not ask it, as the Tasks screens and API do. `deleteInContext({ contextType, contextId })` — every task of one record, one audited `tasks.task.delete` command each. |
 
 **`sourceKey` makes creation idempotent.** A task given a `sourceKey` (up to 100
 characters) is created only if the context holds no task with that key; the

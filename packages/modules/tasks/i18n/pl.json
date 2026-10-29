@@ -6,6 +6,7 @@
   "errors.TASK_NOT_FOUND": "To zadanie nie istnieje albo nie masz do niego dostępu.",
   "errors.TASK_CONTEXT_INVALID": "To zadanie nie może tam należeć: rekord nie istnieje, nie masz do niego dostępu albo jego moduł jest wyłączony.",
   "errors.TASK_ASSIGNEE_INVALID": "Tej osoby nie można przypisać: nie jest aktywnym administratorem z dostępem do zadań albo zadanie ma już 20 przypisanych osób.",
+  "errors.TASK_ASSIGNEE_INVALID.context_hidden": "Nie można przypisać zadania osobie {name}: nie ma ona dostępu do rekordu, do którego należy to zadanie.",
   "errors.TASK_STATUS_UNKNOWN": "Ten status nie istnieje w przebiegu zadań.",
   "errors.TASK_TRANSITION_FORBIDDEN": "Przebieg zadań nie pozwala na to przejście. Zadanie może przejść do: {allowed}.",
   "errors.TASK_TRANSITION_CONFLICT": "Ktoś w międzyczasie zmienił status tego zadania. Odśwież je i spróbuj ponownie.",

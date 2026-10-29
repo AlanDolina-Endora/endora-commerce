@@ -8,6 +8,7 @@ import {
   ANNA_ID,
   ME_ID,
   PROJECT_ID,
+  STAGE_ID,
   TASK_ID,
   en,
   historyPage,
@@ -96,6 +97,36 @@ async function renderDetail(permissions?: readonly string[]): Promise<void> {
   });
   await screen.findByRole('heading', { name: /Order the racking/ });
 }
+
+/** The assignee lookups the screen asked, by query string. */
+function assigneeLookups(): string[] {
+  return getSpy.mock.calls
+    .map(([path]) => String(path))
+    .filter((path) => path.startsWith(`${TASKS_API}/lookups/assignees`));
+}
+
+describe('the assignee picker asks who may see the Task (#506)', () => {
+  it('on the create form inside a record, the lookup names the record', async () => {
+    renderCreate(`/tasks/new?context=project:${PROJECT_ID}:${STAGE_ID}`);
+    await screen.findByRole('combobox', { name: en('field.assignee') });
+    expect(assigneeLookups()).toContain(
+      `${TASKS_API}/lookups/assignees?contextType=project&contextId=${PROJECT_ID}`,
+    );
+  });
+
+  it('on the create form of a free-standing Task, it names nothing', async () => {
+    renderCreate();
+    await screen.findByRole('combobox', { name: en('field.assignee') });
+    expect(assigneeLookups()).toEqual([`${TASKS_API}/lookups/assignees`]);
+  });
+
+  it('on a Task’s screen, the lookup names the Task', async () => {
+    await renderDetail();
+    await userEvent.click(screen.getByRole('button', { name: en('detail.edit') }));
+    await screen.findByRole('combobox', { name: en('field.assignee') });
+    expect(assigneeLookups()).toContain(`${TASKS_API}/lookups/assignees?taskId=${TASK_ID}`);
+  });
+});
 
 describe('TaskCreate — drafts and private Tasks', () => {
   it('saves a Task as a draft and opens it', async () => {

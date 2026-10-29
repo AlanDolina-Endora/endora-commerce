@@ -192,9 +192,14 @@ o celu. Opis napisany, zanim pojawiło się formatowanie, czyta się tak jak
 wcześniej.
 
 **Osoby przypisane.** Zadanie ma dowolną liczbę osób przypisanych, do
-dwudziestu — każda to aktywny administrator, który może przeglądać zadania.
-Osoba przypisana do zadania projektu, którego nie może zobaczyć, nie dostaje
-o nim powiadomienia i nie znajduje go w *Moich zadaniach*. Osoba przypisana,
+dwudziestu — każda to aktywny administrator, który może przeglądać zadania,
+a przy zadaniu rekordu, na przykład projektu, może też zobaczyć ten rekord.
+Przypisanie kogokolwiek innego jest odrzucane z podaniem tej osoby, a wybór
+osób przypisanych — na ekranie zadania i w formularzu nowego zadania
+rozpoczętym w rekordzie — proponuje tylko te, które mogą. Przeniesienie zadania
+do innego rekordu wymaga tego samego od osób, które przy nim zostają. Osoba,
+która po przypisaniu straci dostęp do projektu, zostaje przy zadaniu, ale nie
+dostaje o nim powiadomienia i nie znajduje go w *Moich zadaniach*. Osoba przypisana,
 której konto zostanie później dezaktywowane, zostaje przy zadaniu z oznaczeniem
 *nieaktywny*; nikt nie jest o niczym powiadamiany w jej imieniu i można ją
 usunąć.
@@ -567,7 +572,7 @@ Rozwiązuj je przez `lazyPort` i deklaruj jako `degrades-without` ze zdaniem
 | Port | Metody |
 | --- | --- |
 | `taskReadPort` (`TaskReadPort`) | `findById`, `findByIds`, `search` (numer albo tytuł), `listInContext`, `listOpenInContext` (kategoria otwarta i nie wersja robocza — pytanie blokady zakończenia), `countInContext`. `TaskRecord` ma `status` (kod), `statusCategory`, `closed`, `assigneeIds`, `dueAt`, `draft` i `private`. Zawężane pełną regułą widoczności dla administratora — kontekst, wersje robocze, zadania prywatne — ale nie dla systemu. |
-| `taskWritePort` (`TaskWritePort`) | `createMany({ context, tasks })` — najwyżej 100 zadań, każde `{ title, description?, assigneeIds?, dueOn?, contextGroupId?, contextNote?, sourceKey? }`, opublikowane, w statusie początkowym przebiegu; jedno audytowane polecenie `tasks.task.create` i jedno zdarzenie `tasks.task.created.v1` na każde utworzone zadanie; odrzucane z `TASK_CONTEXT_INVALID`, gdy żaden włączony moduł nie jest właścicielem typu kontekstu, i z `TASK_ASSIGNEE_INVALID`, gdy osoba przypisana nie jest aktywnym administratorem — zanim cokolwiek zostanie zapisane. `deleteInContext({ contextType, contextId })` — wszystkie zadania jednego rekordu, każde przez osobne audytowane polecenie `tasks.task.delete`. |
+| `taskWritePort` (`TaskWritePort`) | `createMany({ context, tasks })` — najwyżej 100 zadań, każde `{ title, description?, assigneeIds?, dueOn?, contextGroupId?, contextNote?, sourceKey? }`, opublikowane, w statusie początkowym przebiegu; jedno audytowane polecenie `tasks.task.create` i jedno zdarzenie `tasks.task.created.v1` na każde utworzone zadanie; odrzucane z `TASK_CONTEXT_INVALID`, gdy żaden włączony moduł nie jest właścicielem typu kontekstu, i z `TASK_ASSIGNEE_INVALID`, gdy osoba przypisana nie jest aktywnym administratorem — zanim cokolwiek zostanie zapisane. Czy osoba przypisana może zobaczyć rekord, rozstrzyga moduł, do którego rekord należy — projekt przypisuje każde zadanie etapu członkowi z jego rolą — więc port o to nie pyta, w przeciwieństwie do ekranów i API zadań. `deleteInContext({ contextType, contextId })` — wszystkie zadania jednego rekordu, każde przez osobne audytowane polecenie `tasks.task.delete`. |
 
 **`sourceKey` czyni tworzenie idempotentnym.** Zadanie z `sourceKey` (do 100
 znaków) jest tworzone tylko wtedy, gdy kontekst nie ma zadania z tym kluczem;

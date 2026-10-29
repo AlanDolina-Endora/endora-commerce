@@ -23,6 +23,21 @@ export function taskAssigneeInvalid(): HttpError {
   );
 }
 
+/**
+ * An assignee who may not see the record the Task belongs to (spec, Edge
+ * Cases; issue #506): refused, naming them. `details.code` keys the sentence
+ * (`errors.TASK_ASSIGNEE_INVALID.context_hidden`) and `details.name` fills it.
+ * The caller sees the record, so the refusal says nothing they do not know.
+ */
+export function taskAssigneeContextHidden(person: { id: string; name: string }): HttpError {
+  return new HttpError(
+    422,
+    ERROR_CODES.TASK_ASSIGNEE_INVALID,
+    `${person.name} may not see the record this Task belongs to, so the Task cannot be assigned to them.`,
+    { code: 'context_hidden', name: person.name, adminUserId: person.id },
+  );
+}
+
 /** A private Task given an assignee other than its Creator (FR-038, research R-3). */
 export function taskPrivateAssignee(): HttpError {
   return new HttpError(

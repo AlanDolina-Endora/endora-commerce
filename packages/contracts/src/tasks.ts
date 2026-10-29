@@ -498,13 +498,23 @@ export type CreateTaskReminderBody = z.infer<typeof CreateTaskReminderBodySchema
 const lookupSearchSchema = z.string().trim().max(200).optional();
 
 /**
- * `GET /tasks/lookups/assignees?q=&taskId=` — active administrators holding
- * `tasks:read` who may see the Task; only the Creator for a private one.
+ * `GET /tasks/lookups/assignees?q=&taskId=&contextType=&contextId=` — active
+ * administrators holding `tasks:read` who may see the Task; only the Creator
+ * for a private one. A context (both of its parts, or neither) narrows the
+ * answer to who may see that record — the create form's `?context=`, before
+ * there is a Task (issue #506); the caller must see the record themselves.
  */
-export const TaskAssigneeLookupQuerySchema = z.object({
-  q: lookupSearchSchema,
-  taskId: uuid.optional(),
-});
+export const TaskAssigneeLookupQuerySchema = z
+  .object({
+    q: lookupSearchSchema,
+    taskId: uuid.optional(),
+    contextType: taskContextTypeSchema.optional(),
+    contextId: uuid.optional(),
+  })
+  .refine((query) => (query.contextType === undefined) === (query.contextId === undefined), {
+    message: 'A context is its type and its id together.',
+    path: ['contextId'],
+  });
 export type TaskAssigneeLookupQuery = z.infer<typeof TaskAssigneeLookupQuerySchema>;
 
 /** `GET /tasks/lookups/mentionable?taskId=&q=` — at most 20 (R-5). */
