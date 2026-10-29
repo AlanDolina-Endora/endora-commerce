@@ -1175,13 +1175,6 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
 
   Record the result in the PR description.
   - **Not done as specified — open for the owner.** It asks for an *independent* reviewer, and the implementing agent is not one; there is no PR yet to record it in. What the implementing agent checked, 2026-10-29, as input for that reviewer: (1) no file outside `packages/modules/tasks/` reads a Task-owned table except the demo composition (`packages/demo-composition/src/{projects,tasks,demo-usage}.ts`, seeding and withdrawing by id); (2) inside the module every reader is in `TASK_ACCESS_READERS` with its reason (19 files) and the seam test (`T/backend/task-visibility-seam.test.ts`, 11/11) holds the list and the per-file statement counts; (3) every write service calls `assertMayChange` after `loadVisible`, and `draft-private.test.ts` loops over the served write routes for the `TASK_PRIVATE_READ_ONLY` refusal; (4) every notification path — assignment, mention, comment, reminder pass, digest pass — asks `createTaskAudience` (`tasks:read`, the draft/private rule, the context's `canSeeAs`, an absent owner vouching for nobody) per recipient before telling; the maintenance pass tells nobody. No finding.
-- [ ] T093 Have an independent reviewer go over the visibility path:
-  - every file reading a Task-owned table;
-  - the seam test's allow-list;
-  - the `tasks:see_private` write refusals;
-  - the sweeps' recipient checks.
-
-  Record the result in the PR description.
 - [ ] T094 Run the full verification set of `quickstart.md` §3.
   - Regenerate `composer:generate`, `manifests:generate`, `pnpm install --lockfile-only` and the OpenAPI baseline.
   - Grep `backend/test/**` and `admin/test/**` for `TagPicker`, `MoveToMenu` (the CRM path), `TasksList`, `MyTasks.tsx`, `assignedAdminUserId` (task) and `TASK_STATUSES`.
