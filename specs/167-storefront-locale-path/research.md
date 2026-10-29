@@ -294,6 +294,17 @@ The rule for every emitter: compose with `storefrontPagePath({ path, languageCod
 | Megamenu category links | `megamenu/.../cross-module-ports.ts:90` | — | — | relative; localized at render (FR-020) |
 | CMS block links, product cards | `packages/cms-components` | — | — | `LinkHrefEnv.localizePath` |
 
+**T070 investigation (2026-10-29) — `[NEEDS CLARIFICATION]` for the owner.** The invoice e-mail's
+`downloadUrl` is `<storefront_url>/orders/<orderId>/invoices/<invoiceId>/pdf`
+(`invoices/.../invoice-email-dispatch.ts`). No storefront route serves that path: the storefront has
+the order page `/orders/[id]` (`app/(account)/orders/[id]/page.tsx`), whose download links point at
+the **backend** route `GET /api/v1/orders/:id/invoices/:invoiceId/pdf` on the API origin
+(`storefront/lib/api/invoices.ts` `invoiceDownloadUrl`, `invoices/.../routes.customer.ts`). Two
+targets are plausible and they differ in kind: (a) the storefront order page `/orders/<orderId>`,
+a page URL that would take the language prefix like every other emitter; (b) the backend PDF URL on
+the API origin — not a storefront page, so not prefixed, and served only with the buyer's session
+cookie on that origin. The owner has to choose; T071/T072 wait for it.
+
 Not storefront page URLs (unchanged): `crm`/`projects`/`tasks` `reference-service.ts` (admin
 routes), API URLs, asset URLs.
 
