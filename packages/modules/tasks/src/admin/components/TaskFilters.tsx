@@ -208,14 +208,16 @@ export function TaskFilters(props: TaskFiltersProps): ReactNode {
             selected={params.getAll('priority')}
             onChange={(next): void => set('priority', next)}
             placeholder={t('filter.priority.any')}
-            ariaLabel={t('filter.priority')}
+            ariaLabelledBy={id('priority-label')}
             className="flex [&>button]:flex-1"
           />
         </div>
         <div className="space-y-1">
-          <span className="block text-sm font-medium">{t('filter.tags')}</span>
+          <span className="block text-sm font-medium" id={id('tags-label')}>
+            {t('filter.tags')}
+          </span>
           <TagMultiSelect
-            ariaLabel={t('filter.tags')}
+            ariaLabelledBy={id('tags-label')}
             selected={params.getAll('tagId')}
             onChange={(next): void => set('tagId', next)}
             loadTags={tasksApi.listTags}

@@ -155,6 +155,35 @@ describe('TasksPage — the list', () => {
     expect(within(unassigned).getByText(en('list.overdue'))).toBeTruthy();
   });
 
+  it('marks a draft, a private Task and a sub-task beside the title (T092)', async () => {
+    listAnswer = () => ({
+      items: [
+        taskSummary({ draft: true, private: true, parent: { id: OTHER_TASK_ID, number: 'TSK-000009', available: true } }),
+        { ...UNAVAILABLE, parent: { id: TASK_ID, number: null, available: false } },
+      ],
+      nextCursor: null,
+    });
+    renderTasks(<TasksPage />, { path: '/tasks', pattern: '/tasks' });
+    const marked = (await screen.findByText('Order the racking')).closest('tr') as HTMLElement;
+    expect(within(marked).getByText(en('detail.draftBadge'))).toBeTruthy();
+    expect(within(marked).getByText(en('detail.privateBadge'))).toBeTruthy();
+    expect(within(marked).getByText(en('list.subtaskOf', { number: 'TSK-000009' }))).toBeTruthy();
+    const hiddenParent = screen.getByText('Sign the handover').closest('tr') as HTMLElement;
+    expect(within(hiddenParent).getByText(en('list.subtaskOfHidden'))).toBeTruthy();
+    expect(within(hiddenParent).queryByText(en('detail.draftBadge'))).toBeNull();
+    expect(within(hiddenParent).queryByText(en('detail.privateBadge'))).toBeNull();
+  });
+
+  it('names the priority and tag pickers by their visible labels, not by a second copy (T092)', async () => {
+    renderTasks(<TasksPage />, { path: '/tasks', pattern: '/tasks' });
+    await screen.findByText('Order the racking');
+    for (const name of [en('filter.priority'), en('filter.tags')]) {
+      const trigger = screen.getByRole('button', { name });
+      expect(trigger).not.toHaveAttribute('aria-label');
+      expect(document.getElementById(trigger.getAttribute('aria-labelledby') ?? '')?.textContent).toBe(name);
+    }
+  });
+
   it('links an available context to its record, and names an unavailable one without a link', async () => {
     renderTasks(<TasksPage />, { path: '/tasks', pattern: '/tasks' });
     const context = await screen.findByRole('link', { name: /PRJ-000001 Warehouse fit-out/ });

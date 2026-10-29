@@ -32,6 +32,7 @@ are additive (`release-intent.md`).
 | `packages/modules/_i18n/i18n/{en,pl}.json` (added at T025) | The core bundle's `references.{kind,group,inserted,unavailable}.{opportunity,project}` sentences the kit's reference components compose (`admin/test/kit/kit-collaboration-bundle.test.ts` requires every member of each family). |
 | `src/lib/admin-preferences/{store,use-admin-preference}.ts` | `listViewModes` and `useListViewModePreference(listId)`. |
 | `src/components/comments/CommentThread.tsx` (added at T059) | `keepDeleted` and the optional `RecordComment.deletedAt`: a deleted Task comment keeps its place in the thread, marked (R-6 "soft, so the thread shows deleted"); without the prop the thread behaves as before, so CRM and Projects do not change. Its sentence is the core bundle's `comments.removedEntry` (en, pl), and `admin/test/kit/kit-comments.test.tsx` gains two cases. |
+| `src/ui/multi-select.tsx`, `src/components/tags/TagPicker.tsx` (added at T092) | `ariaLabelledBy`, optional and additive: the trigger is named by a visible label's id instead of a duplicate `ariaLabel` (WCAG 2.5.3, the Tasks filters and field inputs). Without it both behave as before; `admin/test/kit/kit-tags.test.tsx` gains one case. |
 | Tests beside each | — |
 
 ## C. `packages/modules/crm/`

@@ -96,7 +96,14 @@ export function TaskFieldInputs(props: TaskFieldInputsProps): ReactNode {
   const { values, onChange, disabled = false } = props;
   const t = useTranslation('tasks');
   const { language } = useAppLanguage();
-  const ids = { description: useId(), dueOn: useId(), dueTime: useId(), startOn: useId(), priority: useId() };
+  const ids = {
+    description: useId(),
+    dueOn: useId(),
+    dueTime: useId(),
+    startOn: useId(),
+    priority: useId(),
+    tags: useId(),
+  };
   const { kinds, lookups } = useTaskReferences(props.taskId);
   const priorities = usePriorities();
   const priorityOptions = priorities.map((priority) => ({
@@ -121,8 +128,11 @@ export function TaskFieldInputs(props: TaskFieldInputsProps): ReactNode {
           maxLength={TASK_DESCRIPTION_MAX}
           disabled={disabled}
           rows={4}
+          aria-describedby={`${ids.description}-hint`}
         />
-        <p className="text-xs text-muted-foreground">{t('field.descriptionHint')}</p>
+        <p id={`${ids.description}-hint`} className="text-xs text-muted-foreground">
+          {t('field.descriptionHint')}
+        </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-1">
@@ -180,9 +190,11 @@ export function TaskFieldInputs(props: TaskFieldInputsProps): ReactNode {
           </Select>
         </div>
         <div className="space-y-1">
-          <span className="text-sm font-medium leading-none">{t('field.tags')}</span>
+          <span id={ids.tags} className="text-sm font-medium leading-none">
+            {t('field.tags')}
+          </span>
           <TagMultiSelect
-            ariaLabel={t('field.tags')}
+            ariaLabelledBy={ids.tags}
             selected={values.tagIds}
             onChange={(tagIds): void => onChange({ tagIds })}
             loadTags={tasksApi.listTags}

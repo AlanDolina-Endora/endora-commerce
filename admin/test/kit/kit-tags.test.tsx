@@ -83,6 +83,19 @@ describe('TagMultiSelect — options from the caller', () => {
     expect(trigger).toBeDisabled();
   });
 
+  it('takes its name from a visible label by id, with no second copy in aria-label (165 T092)', async () => {
+    renderWithI18n(
+      <>
+        <span id="tags-label">Tags</span>
+        <TagMultiSelect ariaLabelledBy="tags-label" selected={[]} onChange={vi.fn()} loadTags={loadTags} />
+      </>,
+      { core: CORE },
+    );
+    const trigger = await screen.findByRole('button', { name: 'Tags' });
+    expect(trigger).toHaveAttribute('aria-labelledby', 'tags-label');
+    expect(trigger).not.toHaveAttribute('aria-label');
+  });
+
   it('says the list could not be read when the loader fails', async () => {
     loadTags.mockRejectedValue(new Error('boom'));
     renderWithI18n(<TagMultiSelect ariaLabel="Tags" selected={[]} onChange={vi.fn()} loadTags={loadTags} />, {

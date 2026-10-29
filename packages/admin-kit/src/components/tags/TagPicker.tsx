@@ -67,16 +67,23 @@ export function useTagOptions<T extends TagOption>(
   return { tags, loading, failed };
 }
 
-export interface TagMultiSelectProps {
-  /** The trigger's accessible name — what the choice is *for* on this screen. */
-  ariaLabel: string;
+/**
+ * The trigger's accessible name — what the choice is *for* on this screen:
+ * `ariaLabelledBy`, the id of the visible label beside it, or, with no visible
+ * label, `ariaLabel`.
+ */
+export type TagMultiSelectName =
+  | { ariaLabel: string; ariaLabelledBy?: never }
+  | { ariaLabelledBy: string; ariaLabel?: never };
+
+export type TagMultiSelectProps = TagMultiSelectName & {
   selected: readonly string[];
   onChange: (tagIds: string[]) => void;
   /** Where the tag list comes from — the module's own endpoint. Keep it stable. */
   loadTags: () => Promise<readonly TagOption[]>;
   disabled?: boolean;
   className?: string;
-}
+};
 
 /**
  * Choose any number of tags from the tag list — on the kit's `MultiSelect`.
@@ -105,7 +112,9 @@ export function TagMultiSelect(props: TagMultiSelectProps): ReactNode {
           props.onChange(tags.filter((tag) => chosen.has(tag.id)).map((tag) => tag.id));
         }}
         placeholder={placeholder}
-        ariaLabel={props.ariaLabel}
+        {...(props.ariaLabelledBy !== undefined
+          ? { ariaLabelledBy: props.ariaLabelledBy }
+          : { ariaLabel: props.ariaLabel })}
         disabled={(props.disabled ?? false) || loading || tags.length === 0}
         searchable={tags.length > 8}
         searchPlaceholder={t('tags.picker.search')}
