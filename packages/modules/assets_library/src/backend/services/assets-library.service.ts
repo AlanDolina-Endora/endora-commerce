@@ -514,14 +514,19 @@ export class AssetsLibraryService {
       // the stored `purgeAfterAt` keeps the first value as a rollback snapshot.
       return { deletedAt: a.deletedAt, purgeAfterAt: purgeAfter(a.deletedAt) };
     }
-    // Reference protection (FR-030).
+    // Reference protection (FR-030): every reference counts, whoever asks and
+    // whatever they may see (`specs/166-asset-reference-visibility/` FR-008).
+    // The refusal names only the references the caller may see (R-8); the
+    // asset is visible to them (the by-id guard ran), so by invariant I-1 at
+    // least one is named — a hidden record is neither named nor counted.
     const refs = await this.deps.referenceRegistry.findReferences(assetId);
     if (refs.length > 0) {
+      const visible = await this.deps.visibility.visibleReferences(assetId);
       throw new HttpError(
         409,
         ERROR_CODES.ASSET_REFERENCED,
-        `Asset is in use by ${refs.length} record(s); detach those first.`,
-        refs.slice(0, 20).map((r) => ({
+        `Asset is in use by ${visible.length} record(s); detach those first.`,
+        visible.slice(0, 20).map((r) => ({
           path: r.kind,
           issue: r.label,
         })),

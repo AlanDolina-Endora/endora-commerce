@@ -165,3 +165,44 @@ describe('AssetsLibraryService detail — the "used by" list is the caller’s (
     expect(everyDescriptor).not.toHaveBeenCalled();
   });
 });
+
+describe('AssetsLibraryService.softDelete — counts every reference, names the visible ones (FR-008, R-8)', () => {
+  it('refuses while any reference exists, and the 409’s count and details are the caller’s visible references', async () => {
+    const em = fakeEm([]);
+    const registry = new AssetReferenceRegistry();
+    const everyDescriptor = vi.fn(async () => [
+      { kind: 'product_gallery' as const, entityId: 'p1', label: 'Product', assetId: VISIBLE },
+      { kind: 'task_attachment' as const, entityId: 'hidden-task', label: 'Task', assetId: VISIBLE },
+    ]);
+    registry.register({ ownerModuleId: 'catalog', findReferences: everyDescriptor });
+    const visible = [{ kind: 'product_gallery' as const, entityId: 'p1', label: 'Product' }];
+    const visibleReferences = vi.fn(async () => visible);
+
+    const refusal = service(
+      em,
+      { exclusionFor: async () => [], hiddenAmong: async () => new Set(), visibleReferences },
+      { referenceRegistry: registry },
+    ).softDelete(VISIBLE);
+
+    await expect(refusal).rejects.toMatchObject({
+      statusCode: 409,
+      code: ERROR_CODES.ASSET_REFERENCED,
+      message: 'Asset is in use by 1 record(s); detach those first.',
+      details: [{ path: 'product_gallery', issue: 'Product' }],
+    });
+    // The in-use decision is the registry's, which counts every reference.
+    expect(everyDescriptor).toHaveBeenCalledTimes(1);
+    expect(visibleReferences).toHaveBeenCalledWith(VISIBLE);
+    expect(em.flush).not.toHaveBeenCalled();
+  });
+
+  it('does not ask for the visible references of a file nothing uses', async () => {
+    const em = fakeEm([]);
+    const visibleReferences = vi.fn(async () => []);
+    const out = await service(em, { exclusionFor: async () => [], hiddenAmong: async () => new Set(), visibleReferences }).softDelete(
+      VISIBLE,
+    );
+    expect(out.deletedAt).toBeInstanceOf(Date);
+    expect(visibleReferences).not.toHaveBeenCalled();
+  });
+});

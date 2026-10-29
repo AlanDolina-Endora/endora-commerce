@@ -149,7 +149,7 @@ export function assetsLibraryModule(options: AssetsLibraryModuleOptions): {
     ...(options.adminUserReadPort ? { adminUsers: options.adminUserReadPort } : {}),
   });
   const folders = new FoldersService(
-    options.emFactory, referenceRegistry, options.auditLog, loadRetentionDays,
+    options.emFactory, referenceRegistry, visibility, options.auditLog, loadRetentionDays,
   );
 
   const requireAdmin = options.requireAdmin;
