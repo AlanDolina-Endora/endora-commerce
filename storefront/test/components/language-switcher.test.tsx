@@ -27,7 +27,7 @@ vi.mock('../../lib/dictionary/DictionaryProvider', () => ({
   }),
 }));
 
-const { LocaleSwitcher, languageCookie } = await import('../../components/HeaderPreferenceSwitchers');
+const { LocaleSwitcher, alternatePath, languageCookie } = await import('../../components/HeaderPreferenceSwitchers');
 const { LocalePathProvider } = await import('../../lib/i18n/localized-link');
 
 const plEn: ChannelUrlLanguage[] = [
@@ -92,6 +92,19 @@ describe('LocaleSwitcher', () => {
 
   it('writes the lang cookie for one year, site-wide, samesite=lax (OR-11)', () => {
     expect(languageCookie('en-US')).toBe(`lang=en-US; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`);
+  });
+});
+
+describe('alternatePath — the switcher stays on the visitor\'s origin', () => {
+  it('keeps only the path, query and fragment of an absolute alternate', () => {
+    // `metadataBase` makes the head's alternates absolute, on the configured site
+    // URL; a deployment serving a channel on another host must not be sent there.
+    expect(alternatePath('https://shop.example.com/pl/o-nas?x=1#top')).toBe('/pl/o-nas?x=1#top');
+    expect(alternatePath('/en/about-us')).toBe('/en/about-us');
+  });
+
+  it('refuses a value that is not a URL', () => {
+    expect(alternatePath('http://[bad')).toBeNull();
   });
 });
 

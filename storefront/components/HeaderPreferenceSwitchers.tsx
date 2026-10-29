@@ -40,12 +40,27 @@ function setPreferenceCookie(name: string, value: string): void {
 }
 
 /** The `hreflang` alternates the page published in its head, by language code. */
+/**
+ * The path, query and fragment of an alternate's `href`. The head's alternates are
+ * absolute on the configured site URL (`metadataBase`); the switcher keeps the visitor
+ * on the origin they are on, which may be another host serving the channel.
+ */
+export function alternatePath(href: string): string | null {
+  try {
+    const url = new URL(href, 'http://origin.invalid');
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
+}
+
 function documentAlternates(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const link of document.querySelectorAll<HTMLLinkElement>('link[rel="alternate"][hreflang]')) {
     const code = link.getAttribute('hreflang');
     const href = link.getAttribute('href');
-    if (code && href && code !== 'x-default') out[code.toLowerCase()] = href;
+    const path = href ? alternatePath(href) : null;
+    if (code && path && code !== 'x-default') out[code.toLowerCase()] = path;
   }
   return out;
 }
