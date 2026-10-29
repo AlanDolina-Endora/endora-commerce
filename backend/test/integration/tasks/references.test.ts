@@ -275,6 +275,27 @@ describe('tasks — references and mentions in the description (US1, #446)', () 
       expect(ids).toContain(colleague.adminUserId);
       expect(ids).not.toContain(outsider.adminUserId);
     });
+
+    it('offers as assignees only those who may read Tasks — saving any other answers 422 (T095)', async () => {
+      const assignable = async (query: string) => {
+        const response = await call('GET', `/lookups/assignees?q=refs-${query}`);
+        expect(response.statusCode, response.body).toBe(200);
+        return TaskMentionableLookupResponseSchema.parse(response.json()).data.map((o) => o.id);
+      };
+      // The create form, before there is a Task.
+      const onCreate = await assignable('');
+      expect(onCreate).toContain(colleague.adminUserId);
+      expect(onCreate).not.toContain(outsider.adminUserId);
+      // An existing Task, and a draft — whose assignees see it once it is published.
+      const task = await create({ title: 'Who may be assigned' });
+      const draft = await create({ title: 'A draft to assign', draft: true });
+      for (const id of [task.id, draft.id]) {
+        const ids = await assignable(`&taskId=${id}`);
+        expect(ids, id).toContain(colleague.adminUserId);
+        expect(ids, id).not.toContain(outsider.adminUserId);
+      }
+      expect((await call('PATCH', `/${task.id}`, { assigneeIds: [outsider.adminUserId] })).statusCode).toBe(422);
+    });
   });
 
   describe('the @@ document list', () => {

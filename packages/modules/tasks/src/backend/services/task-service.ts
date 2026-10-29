@@ -853,15 +853,22 @@ export class TaskService {
   }
 
   /**
-   * `GET /tasks/lookups/assignees` — active administrators, by name; for a
-   * private Task (`taskId`) its Creator alone (FR-038). A Task the caller may
-   * not see is 404.
+   * `GET /tasks/lookups/assignees` — active administrators who may be assigned,
+   * by name; for a private Task (`taskId`) its Creator alone (FR-038). A Task
+   * the caller may not see is 404.
+   *
+   * **Who may be assigned** is who the save accepts and who would see the
+   * Task: a holder of `tasks:read` (`assertMayBeAssigned` refuses anybody else
+   * with 422 — the walk found the list offering them, T095), and for an
+   * existing Task whoever passes the Task's audience as `mentionable` asks it.
+   * A draft is asked as if published: its assignees see it from then on.
+   * Asked in name order, stopping at the limit, as `mentionable` does.
    */
   async assignees(q: string | undefined, taskId?: string): Promise<TaskAssigneeOption[]> {
     const needle = foldDiacritics(q ?? '').trim().toLowerCase();
     const task = taskId !== undefined ? await this.deps.access.loadVisible(taskId) : null;
     const only = task?.is_private ? task.created_by_admin_user_id : null;
-    return (await this.deps.adminUsers.listAll({ activeOnly: true }))
+    const candidates = (await this.deps.adminUsers.listAll({ activeOnly: true }))
       .filter((admin) => isActive(admin) && (only === null || admin.id === only))
       .map((admin) => ({ id: admin.id, name: personName(admin), email: admin.email }))
       .filter(
@@ -869,8 +876,22 @@ export class TaskService {
           needle === '' ||
           [option.name, option.email].some((value) => foldDiacritics(value).toLowerCase().includes(needle)),
       )
-      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
-      .slice(0, ASSIGNEE_OPTIONS_LIMIT);
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    const options: TaskAssigneeOption[] = [];
+    for (const option of candidates) {
+      if (options.length >= ASSIGNEE_OPTIONS_LIMIT) break;
+      const allowed =
+        task !== null
+          ? await this.deps.audience(option.id, { ...task, is_draft: false })
+          : await this.#readsTasks(option.id);
+      if (allowed) options.push(option);
+    }
+    return options;
+  }
+
+  async #readsTasks(adminUserId: string): Promise<boolean> {
+    const held = await this.deps.permissions.listPermissions(adminUserId);
+    return held.includes(ADMIN_PERMISSION_WILDCARD) || held.includes('tasks:read');
   }
 
   // --- Read port --------------------------------------------------------------
