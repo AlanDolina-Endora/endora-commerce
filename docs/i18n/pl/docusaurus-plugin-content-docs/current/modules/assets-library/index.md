@@ -468,8 +468,10 @@ interface AssetReferenceReaderRestriction {
   żaden moduł nie jest pytany; klient, klucz API albo żądanie bez administratora nie widzą żadnego
   rekordu zależnego od czytającego i również nikt nie jest pytany.
 - Koszt na żądanie, nie na plik: strona listy pyta każdy deskryptor zależny od czytającego o
-  `assetIdsWithHiddenReferences` raz, a potem o `findReferences` i `visibleEntityIds` raz dla tych
-  kandydatów na tej stronie, które inne odwołanie mogłoby uczynić widocznymi.
+  `assetIdsWithHiddenReferences` raz; biblioteka zostawia tych kandydatów, których pokazałyby jej
+  własne filtry (folder, wyszukiwanie), a potem pyta `findReferences` każdego deskryptora i
+  `visibleEntityIds` każdego modułu raz o nich wszystkich naraz, bo inne odwołanie może jeszcze
+  uczynić kandydata widocznym.
 
 **`assetReadPort.visibleToCaller(assetIds)`** odpowiada, które z identyfikatorów bieżący wywołujący
 może zobaczyć w bibliotece — brakujący identyfikator, ukryty i niebędący uuid są tak samo nieobecne.

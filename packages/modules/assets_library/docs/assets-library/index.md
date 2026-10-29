@@ -512,9 +512,10 @@ interface AssetReferenceReaderRestriction {
   see every asset and no owner is asked; a customer, an API key or a request
   with no administrator sees no restricted record and no owner is asked either.
 - Cost per request, not per asset: a list page asks each restricted descriptor
-  `assetIdsWithHiddenReferences` once, then `findReferences` and
-  `visibleEntityIds` once for the candidates on that page that another
-  reference might make visible.
+  `assetIdsWithHiddenReferences` once; the library keeps the candidates its own
+  filters (folder, search) would list, then asks each descriptor's
+  `findReferences` and each owner's `visibleEntityIds` once for all of them
+  together, because another reference may still make a candidate visible.
 
 **`assetReadPort.visibleToCaller(assetIds)`** answers which of the ids the
 ambient caller may see in the library — a missing id, a hidden one and a
