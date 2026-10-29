@@ -1,7 +1,12 @@
 // perf-weight: fast — about 20 s locally (2026-10-26: seeding 5 000 Projects and 20 000 Tasks, then 30 list reads; 165 T024 adds 5 000 Tasks with assignees and tags and 15 more reads per sort); not yet timed on the CI runner.
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MyTasksResponseSchema, TASK_LIST_SORTS, TaskListResponseSchema } from '@endora-commerce/contracts';
+import {
+  MyTasksResponseSchema,
+  TASK_LIST_SORTS,
+  TaskBoardResponseSchema,
+  TaskListResponseSchema,
+} from '@endora-commerce/contracts';
 import {
   setupBackendServer,
   teardownBackendServer,
@@ -209,5 +214,34 @@ describe.skipIf(!shouldRun)('tasks — the context pre-filter at scale (R-9, T07
         `first page p95 ms — ${measured.join('; ')}; GET /tasks/mine p95 ${mine.toFixed(0)} ms`,
     );
     expect(mine).toBeLessThan(sc002Budget);
+  }, 600_000);
+
+  it(`SC-002 (165 T091): the board over every Task, and filtered to one tag, < ${sc002Budget} ms p95`, async () => {
+    // The board answers a count per column over the whole filtered set and the
+    // first cards of each; the viewer sees all ${projectCount * tasksPerProject + freeTasks}.
+    const all = await measure(
+      '/api/v1/admin/tasks/board',
+      (body) => {
+        const total = TaskBoardResponseSchema.parse(body).data.columns.reduce((sum, column) => sum + column.count, 0);
+        expect(total).toBeGreaterThanOrEqual(freeTasks);
+      },
+      sortIterations,
+    );
+    const tag = (
+      (await h.em().getConnection().execute(`select "id" from "task_tags" where "name" = 'perf-tag-001'`)) as Array<{
+        id: string;
+      }>
+    )[0]!.id;
+    const tagged = await measure(
+      `/api/v1/admin/tasks/board?tagId=${tag}`,
+      (body) => {
+        expect(TaskBoardResponseSchema.parse(body).data.columns.some((column) => column.count > 0)).toBe(true);
+      },
+      sortIterations,
+    );
+    // eslint-disable-next-line no-console -- the measurement is the output (165 T091).
+    console.log(`[perf] tasks SC-002 board: all p95 ${all.toFixed(0)} ms; one tag p95 ${tagged.toFixed(0)} ms`);
+    expect(all).toBeLessThan(sc002Budget);
+    expect(tagged).toBeLessThan(sc002Budget);
   }, 600_000);
 });
