@@ -105,8 +105,8 @@ US1 and US2 ship together: the middleware that makes the path win is the one tha
 
 ## Phase 5: US4 — the switcher links to the same page (P2; same release as US1)
 
-- [ ] T048 [P] [US4] RED `storefront/test/components/language-switcher.test.tsx` — one `<a>` per channel language with `hreflang`/`lang`, `aria-current` on the current one, endonym labels, hidden for one language, activating an option writes `lang=<code>` (`path=/`, one year, `samesite=lax`) without preventing the navigation (OR-11), server-rendered href = `localizePath(logicalPath + search, code)`, after hydration replaced by `link[rel=alternate][hreflang]` when present
-- [ ] T049 [US4] Implement `LocaleSwitcher` in `storefront/components/HeaderPreferenceSwitchers.tsx`; add `header.language` to `storefront/lib/i18n/messages.ts` (en-US, pl-PL) replacing the hard-coded `Język:`
+- [X] T048 [P] [US4] RED `storefront/test/components/language-switcher.test.tsx` — one `<a>` per channel language with `hreflang`/`lang`, `aria-current` on the current one, endonym labels, hidden for one language, activating an option writes `lang=<code>` (`path=/`, one year, `samesite=lax`) without preventing the navigation (OR-11), server-rendered href = `localizePath(logicalPath + search, code)`, after hydration replaced by `link[rel=alternate][hreflang]` when present
+- [X] T049 [US4] Implement `LocaleSwitcher` in `storefront/components/HeaderPreferenceSwitchers.tsx`; add `header.language` to `storefront/lib/i18n/messages.ts` (en-US, pl-PL) replacing the hard-coded `Język:`
 
 ---
 

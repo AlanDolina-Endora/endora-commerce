@@ -92,9 +92,8 @@ export function Header(props: {
             <LocalizedAnchor href="/help" className="industria-topbar__item">
               <HelpIcon /> Wsparcie B2B
             </LocalizedAnchor>
-            {props.config.languages.length > 1 ? (
-              <LocaleSwitcher locale={props.locale} />
-            ) : null}
+            {/* Feature 167 — the channel's languages decide; it hides itself for one. */}
+            <LocaleSwitcher label={t('header.language')} />
           </div>
         </div>
       </div>
