@@ -49,6 +49,21 @@ const EXPECTED: readonly ExpectedAction[] = [
     icon: 'Settings',
     label: { en: 'Task statuses and workflow', pl: 'Statusy i przejścia zadań' },
   },
+  {
+    // `specs/165-task-management/contracts/admin-surfaces.md` §4 (T083).
+    id: 'open-task-priorities',
+    route: '/tasks/settings/priorities',
+    permission: 'tasks:configure',
+    icon: 'Settings',
+    label: { en: 'Task priorities', pl: 'Priorytety zadań' },
+  },
+  {
+    id: 'open-task-tags',
+    route: '/tasks/settings/tags',
+    permission: 'tasks:configure',
+    icon: 'Settings',
+    label: { en: 'Task tags', pl: 'Etykiety zadań' },
+  },
 ];
 
 describe('tasks palette actions (163 FR-041, T130)', () => {
@@ -74,10 +89,15 @@ describe('tasks palette actions (163 FR-041, T130)', () => {
     const result = actionRouteFindings('tasks');
     expect(result.violations).toEqual([]);
     expect(result.stale).toEqual([]);
-    // The workflow screen is `tasks:configure` in the admin, while the workflow
-    // it loads is read-gated: the status picker and the board read it too. The
-    // check's ledger records that one disagreement, and only it (165 T047).
-    expect(result.ledgered.map((finding) => finding.actionId)).toEqual(['open-task-workflow']);
+    // The configuration screens are `tasks:configure` in the admin, while the
+    // lists they load are read-gated: the status picker, the priority picker,
+    // the tag picker, the filters and the board read them too. The check's
+    // ledger records those three disagreements, and only them (165 T047, T083).
+    expect(result.ledgered.map((finding) => finding.actionId).sort()).toEqual([
+      'open-task-priorities',
+      'open-task-tags',
+      'open-task-workflow',
+    ]);
   });
 
   it('serves them, labelled in English and Polish', async () => {

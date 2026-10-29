@@ -3,7 +3,8 @@
  * §1–§3): 163's four screens and two sidebar rows — the Tasks screen and *My
  * Tasks* now each a list or a board (`specs/165-task-management/` User Story 3)
  * — the workflow screen (User Story 2) with its *Task settings* row, and the
- * general settings screen (User Story 7), linked from the workflow screen.
+ * priorities and tags screens (User Story 9) and the general settings screen
+ * (User Story 7), each linked from the workflow screen.
  *
  * The palette actions are the manifest's (`src/manifest.ts`, §4). The zone
  * `task.detail.after` is mounted by `pages/TaskDetail.tsx`; this module
@@ -23,14 +24,19 @@ const READ_PERMISSION = 'tasks:read';
 const WRITE_PERMISSION = 'tasks:write';
 
 /**
- * The code that opens the workflow screen: every write it makes — statuses and
- * moves — is gated on it (`specs/165-task-management/` FR-012).
+ * The code that opens the configuration screens: every write they make —
+ * statuses and moves, priorities, tags, the time zone — is gated on it
+ * (`specs/165-task-management/` FR-012, FR-041).
  */
 const CONFIGURE_PERMISSION = 'tasks:configure';
 
 const TASKS_PATH = '/tasks';
 
 const WORKFLOW_PATH = `${TASKS_PATH}/settings/workflow`;
+
+const PRIORITIES_PATH = `${TASKS_PATH}/settings/priorities`;
+
+const TAGS_PATH = `${TASKS_PATH}/settings/tags`;
 
 const GENERAL_SETTINGS_PATH = `${TASKS_PATH}/settings/general`;
 
@@ -56,6 +62,18 @@ export const contributions: AdminContributions = {
     {
       path: WORKFLOW_PATH,
       component: () => import('./pages/settings/TaskWorkflowPage.js'),
+      requiredPermission: CONFIGURE_PERMISSION,
+    },
+    {
+      // The priority list (User Story 9, R-9), reached from the workflow screen and ⌘K.
+      path: PRIORITIES_PATH,
+      component: () => import('./pages/settings/TaskPrioritiesPage.js'),
+      requiredPermission: CONFIGURE_PERMISSION,
+    },
+    {
+      // The tag list (User Story 9, R-10), reached from the workflow screen and ⌘K.
+      path: TAGS_PATH,
+      component: () => import('./pages/settings/TaskTagsPage.js'),
       requiredPermission: CONFIGURE_PERMISSION,
     },
     {

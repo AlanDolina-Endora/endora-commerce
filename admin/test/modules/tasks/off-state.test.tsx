@@ -175,12 +175,14 @@ const concreteUrl = (pattern: string): string => pattern.replace(/:[A-Za-z]+/g, 
 const READ_AND_WRITE = ['tasks:read', 'tasks:write'];
 
 describe('tasks admin surface', () => {
-  it('is registered: the list, My Tasks, the create screen, the two settings screens (165) and one Task', () => {
+  it('is registered: the list, My Tasks, the create screen, the four settings screens (165) and one Task', () => {
     expect(routes.map((route) => route.path)).toEqual([
       '/tasks',
       '/tasks/mine',
       '/tasks/new',
       '/tasks/settings/workflow',
+      '/tasks/settings/priorities',
+      '/tasks/settings/tags',
       '/tasks/settings/general',
       '/tasks/:id',
     ]);
@@ -228,9 +230,11 @@ describe('tasks admin surface', () => {
     const writer = renderAt('/tasks/settings/workflow');
     await waitFor(() => expect(notFoundIsRendered()).toBe(true));
     writer.unmount();
-    const general = renderAt('/tasks/settings/general');
-    await waitFor(() => expect(notFoundIsRendered()).toBe(true));
-    general.unmount();
+    for (const path of ['/tasks/settings/priorities', '/tasks/settings/tags', '/tasks/settings/general']) {
+      const settings = renderAt(path);
+      await waitFor(() => expect(notFoundIsRendered(), path).toBe(true));
+      settings.unmount();
+    }
 
     permissions = new Set(['tasks:write']);
     const shell = renderAt('/');

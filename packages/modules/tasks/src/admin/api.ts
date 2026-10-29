@@ -1,6 +1,8 @@
 import { apiClient } from '@endora-commerce/admin-kit/lib';
 import type {
   CreateTaskBody,
+  CreateTaskPriorityBody,
+  CreateTaskTagBody,
   CreateTaskReminderBody,
   CreateTaskStatusBody,
   SetTaskTransitionsBody,
@@ -28,6 +30,8 @@ import type {
   TaskTimeZone,
   TaskWorkflow,
   UpdateTaskBody,
+  UpdateTaskPriorityBody,
+  UpdateTaskTagBody,
 } from '@endora-commerce/contracts';
 
 /**
@@ -211,9 +215,38 @@ export const tasksApi = {
     return data(apiClient.get<{ data: TaskPriorityConfig[] }>(`${BASE}/priorities`));
   },
 
+  /** `tasks:configure` — each answers the whole priority list as it stands afterwards. */
+  createPriority(body: CreateTaskPriorityBody): Promise<TaskPriorityConfig[]> {
+    return data(apiClient.post<{ data: TaskPriorityConfig[] }>(`${BASE}/priorities`, body));
+  },
+
+  updatePriority(code: string, body: UpdateTaskPriorityBody): Promise<TaskPriorityConfig[]> {
+    return data(apiClient.patch<{ data: TaskPriorityConfig[] }>(`${BASE}/priorities/${encodeURIComponent(code)}`, body));
+  },
+
+  /** Removes a priority; `replacement` — a code, or `none` — is what its Tasks get (required while any hold it). */
+  deletePriority(code: string, replacement?: string): Promise<TaskPriorityConfig[]> {
+    const tail = replacement ? `?replacement=${encodeURIComponent(replacement)}` : '';
+    return data(apiClient.delete<{ data: TaskPriorityConfig[] }>(`${BASE}/priorities/${encodeURIComponent(code)}${tail}`));
+  },
+
   /** The tag list, by name — `tasks:read`. A stable function: the kit's tag picker reads it once per mount. */
   listTags(): Promise<TaskTag[]> {
     return data(apiClient.get<{ data: TaskTag[] }>(`${BASE}/tags`));
+  },
+
+  /** `tasks:configure`; 409 `TASK_TAG_NAME_TAKEN` for a name taken in any case. */
+  createTag(body: CreateTaskTagBody): Promise<TaskTag> {
+    return data(apiClient.post<{ data: TaskTag }>(`${BASE}/tags`, body));
+  },
+
+  updateTag(id: string, body: UpdateTaskTagBody): Promise<TaskTag> {
+    return data(apiClient.patch<{ data: TaskTag }>(`${BASE}/tags/${id}`, body));
+  },
+
+  /** Deletes a tag; it comes off every Task that carries it. */
+  deleteTag(id: string): Promise<void> {
+    return apiClient.delete<void>(`${BASE}/tags/${id}`);
   },
 
   /** Who a text of a Task may mention (`taskId` omitted on the create form). */

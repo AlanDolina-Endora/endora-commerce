@@ -282,6 +282,28 @@ export const manifest = defineModuleManifest({
       keywords: ['task statuses', 'workflow', 'transitions', 'statusy', 'przejścia', 'przebieg'],
       weight: 333,
     },
+    {
+      // `contracts/admin-surfaces.md` §4 (User Story 9): the priority list's screen.
+      id: 'open-task-priorities',
+      labelKey: 'actions.openTaskPriorities.label',
+      descriptionKey: 'actions.openTaskPriorities.description',
+      icon: 'Settings',
+      targetRoute: '/tasks/settings/priorities',
+      requiredPermission: 'tasks:configure',
+      keywords: ['task priorities', 'priority', 'urgency', 'priorytety', 'priorytet', 'pilność'],
+      weight: 334,
+    },
+    {
+      // `contracts/admin-surfaces.md` §4 (User Story 9): the tag list's screen.
+      id: 'open-task-tags',
+      labelKey: 'actions.openTaskTags.label',
+      descriptionKey: 'actions.openTaskTags.description',
+      icon: 'Settings',
+      targetRoute: '/tasks/settings/tags',
+      requiredPermission: 'tasks:configure',
+      keywords: ['task tags', 'tags', 'labels', 'tagi', 'etykiety'],
+      weight: 335,
+    },
   ],
   /**
    * The e-mails this module sends (R-17, R-18). Their default subject and body

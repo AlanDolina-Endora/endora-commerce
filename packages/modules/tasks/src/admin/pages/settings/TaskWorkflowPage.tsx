@@ -16,7 +16,7 @@ import {
 import { StatusTransitionGraph, type StatusTransitionGraphStatus } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { tasksApi } from '../../api.js';
-import { TASK_GENERAL_SETTINGS_PATH } from '../../lib/settings-paths.js';
+import { TASK_GENERAL_SETTINGS_PATH, TASK_PRIORITIES_PATH, TASK_TAGS_PATH } from '../../lib/settings-paths.js';
 import { TaskStatusDeleteDialog } from '../../components/workflow/TaskStatusDeleteDialog.js';
 import { BoardCardFieldsEditor } from '../../components/BoardCardFieldsEditor.js';
 import { TaskStatusDialog, type TaskStatusDialogSubmit } from '../../components/workflow/TaskStatusDialog.js';
@@ -38,7 +38,9 @@ type DialogState = { kind: 'create' } | { kind: 'edit'; status: TaskStatusConfig
  * where the operator was working. Gated `tasks:configure` by its route.
  *
  * Below the workflow, the *Board card* section (User Story 3, FR-022): which
- * fields a card on the Task board shows (`BoardCardFieldsEditor`).
+ * fields a card on the Task board shows (`BoardCardFieldsEditor`). The header
+ * links to the other configuration screens — priorities, tags (User Story 9)
+ * and the general settings.
  */
 export function TaskWorkflowPage(): ReactNode {
   const t = useTranslation('tasks');
@@ -126,12 +128,23 @@ export function TaskWorkflowPage(): ReactNode {
       title={t('workflow.title')}
       description={t('workflow.description')}
       actions={
-        <Link
-          to={TASK_GENERAL_SETTINGS_PATH}
-          className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline sm:min-h-8"
-        >
-          {t('settings.link')}
-        </Link>
+        <nav aria-label={t('settings.nav')} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {(
+            [
+              [TASK_PRIORITIES_PATH, 'settings.priorities.link'],
+              [TASK_TAGS_PATH, 'settings.tags.link'],
+              [TASK_GENERAL_SETTINGS_PATH, 'settings.link'],
+            ] as const
+          ).map(([to, labelKey]) => (
+            <Link
+              key={to}
+              to={to}
+              className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline sm:min-h-8"
+            >
+              {t(labelKey)}
+            </Link>
+          ))}
+        </nav>
       }
     />
   );

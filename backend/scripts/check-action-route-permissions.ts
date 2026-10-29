@@ -117,6 +117,16 @@ export const ACTION_PERMISSION_DISAGREEMENTS: Readonly<Record<string, string>> =
     '(`specs/165-task-management/contracts/admin-surfaces.md` §4). Declaring the read code would ' +
     'advertise a screen a reader is refused. Retire this entry if those screens stop reading the ' +
     'workflow route, or the configuration screen reads one of its own.',
+  'tasks:open-task-priorities':
+    '"Task priorities" declares `tasks:configure`, the code the priorities screen and every write on ' +
+    'it are gated on; the list it loads (GET /api/v1/admin/tasks/priorities) is `tasks:read`, because ' +
+    'the priority picker, the list filter and the board card read it (`specs/165-task-management/' +
+    'contracts/admin-surfaces.md` §4). Retire this entry on the same terms as `open-task-workflow`.',
+  'tasks:open-task-tags':
+    '"Task tags" declares `tasks:configure`, the code the tags screen and every write on it are gated ' +
+    'on; the list it loads (GET /api/v1/admin/tasks/tags) is `tasks:read`, because whoever edits a Task ' +
+    'picks among the existing tags (US9 scenario 4, `specs/165-task-management/contracts/' +
+    'admin-surfaces.md` §4). Retire this entry on the same terms as `open-task-workflow`.',
 };
 
 async function main(): Promise<void> {
