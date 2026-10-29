@@ -238,6 +238,8 @@ import { Migration20260727T233211LinkedinAdsInit } from '@endora-commerce/mod-li
 
 // ── megamenu ────────────────────────────────────────────────────────────────
 import { Migration20260505T193836MegamenuInit } from '@endora-commerce/mod-megamenu/migrations';
+import { Migration20261029T162855MegamenuNavigationBar } from '@endora-commerce/mod-megamenu/migrations';
+import { Migration20261029T190956MegamenuTabClickNavigates } from '@endora-commerce/mod-megamenu/migrations';
 
 // ── meta_ads ────────────────────────────────────────────────────────────────
 import { Migration20260728T002715MetaAdsInit } from '@endora-commerce/mod-meta-ads/migrations';
@@ -616,6 +618,8 @@ export const MIGRATION_REGISTRY: readonly MigrationRegistryEntry[] = [
 
   // ── megamenu ────────────────────────────────────────────────────────────────
   migration('megamenu', Migration20260505T193836MegamenuInit),
+  migration('megamenu', Migration20261029T162855MegamenuNavigationBar),
+  migration('megamenu', Migration20261029T190956MegamenuTabClickNavigates),
 
   // ── meta_ads ────────────────────────────────────────────────────────────────
   migration('meta_ads', Migration20260728T002715MetaAdsInit),

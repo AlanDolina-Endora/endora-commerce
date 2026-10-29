@@ -23,6 +23,15 @@ export type MessageKey =
   | 'nav.quickOrder'
   | 'nav.cart'
   | 'nav.quoteRequest'
+  | 'nav.megamenu.label'
+  | 'nav.megamenu.more'
+  | 'nav.megamenu.allIn'
+  | 'nav.megamenu.open'
+  | 'nav.megamenu.close'
+  | 'nav.megamenu.title'
+  | 'nav.megamenu.seeAll'
+  | 'nav.megamenu.go'
+  | 'nav.megamenu.expand'
   | 'catalog.heading'
   | 'catalog.filters'
   | 'catalog.empty'
@@ -445,6 +454,15 @@ export const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'nav.quickOrder': 'Quick Order',
     'nav.cart': 'Cart',
     'nav.quoteRequest': 'Quote',
+    'nav.megamenu.label': 'Main navigation',
+    'nav.megamenu.more': 'More',
+    'nav.megamenu.allIn': 'All in {label}',
+    'nav.megamenu.open': 'Menu',
+    'nav.megamenu.close': 'Close',
+    'nav.megamenu.title': 'Menu',
+    'nav.megamenu.seeAll': 'See all →',
+    'nav.megamenu.go': 'Open →',
+    'nav.megamenu.expand': 'Show the {label} menu',
     'catalog.heading': 'Catalog',
     'catalog.filters': 'Filters',
     'catalog.empty': 'No products match your filters.',
@@ -844,6 +862,15 @@ export const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'nav.quickOrder': 'Quick Order',
     'nav.cart': 'Koszyk',
     'nav.quoteRequest': 'Zapytanie',
+    'nav.megamenu.label': 'Nawigacja główna',
+    'nav.megamenu.more': 'Więcej',
+    'nav.megamenu.allIn': 'Wszystko w: {label}',
+    'nav.megamenu.open': 'Menu',
+    'nav.megamenu.close': 'Zamknij',
+    'nav.megamenu.title': 'Menu',
+    'nav.megamenu.seeAll': 'Zobacz wszystko →',
+    'nav.megamenu.go': 'Otwórz →',
+    'nav.megamenu.expand': 'Rozwiń menu: {label}',
     'catalog.heading': 'Katalog',
     'catalog.filters': 'Filtry',
     'catalog.empty': 'Żaden produkt nie pasuje do filtrów.',

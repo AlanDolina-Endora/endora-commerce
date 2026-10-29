@@ -523,6 +523,26 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
       'Phase 10): publishing a Task that is no longer a draft — publishing is one-way.',
   },
+  MEGAMENU_KIND_NOT_ALLOWED_AS_TAB: {
+    to: 'megamenu',
+    reason:
+      'Minted by the navigation bar (`specs/168-megamenu-navigation-bar/`, issue #522): a top-level ' +
+      'item — a tab of the bar — of kind `asset`, `cms-block-embed` or `category-tree`, which open ' +
+      'under a tab and never as one.',
+  },
+  MEGAMENU_LINK_TAB_INVALID: {
+    to: 'megamenu',
+    reason:
+      'Minted by the navigation bar (`specs/168-megamenu-navigation-bar/`, issue #522): a tab shown ' +
+      'as a plain link that has children no visitor could reach, or that is a `group` with no link.',
+  },
+  MEGAMENU_LABEL_REQUIRED: {
+    to: 'megamenu',
+    reason:
+      'Minted by the navigation bar (`specs/168-megamenu-navigation-bar/`, issue #522): an ' +
+      '`external-link`, `button` or `group` with no label in any language — the kinds with no ' +
+      'target name to inherit one from.',
+  },
   PROJECT_NOT_FOUND: {
     to: 'projects',
     reason:

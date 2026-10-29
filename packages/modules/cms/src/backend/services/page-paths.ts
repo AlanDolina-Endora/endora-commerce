@@ -2,7 +2,9 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   cmsLocalizedPage,
   cmsPagePublicPaths,
+  type CmsLocalizablePage,
   type CmsPagePathNode,
+  type CmsPageStorefrontLink,
   type CmsPageTranslations,
 } from '@endora-commerce/contracts';
 
@@ -197,4 +199,37 @@ export function anyNested(nodes: readonly ChannelPageNode[], pageIds: ReadonlySe
     }
   }
   return false;
+}
+
+/**
+ * A storefront link to each of `ids` that the channel serves, in one language
+ * (`specs/168-megamenu-navigation-bar/` plan R-8): the page's name in it and
+ * its logical path in that language's tree — no language prefix, which the
+ * storefront adds (feature 167).
+ * A page the channel does not serve is left out; the order is `ids`'.
+ *
+ * No status or `active` narrowing, on purpose: a menu's link to a draft or a
+ * deactivated page has always stayed and answered for itself when followed
+ * (`megamenu`'s `resolveCmsPageUrl`), and this keeps that decision.
+ */
+export function pageStorefrontLinks(
+  nodes: readonly ChannelPageNode[],
+  pages: readonly (CmsLocalizablePage & { id: string })[],
+  ids: readonly string[],
+  scope: { salesChannelId: string; language: string },
+): CmsPageStorefrontLink[] {
+  const paths = channelPaths(nodes, scope.salesChannelId, scope.language);
+  const pageById = new Map(pages.map((page) => [page.id, page]));
+  const out: CmsPageStorefrontLink[] = [];
+  for (const id of ids) {
+    const path = paths.get(id);
+    const page = pageById.get(id);
+    if (path === undefined || !page) continue;
+    out.push({
+      id,
+      name: cmsLocalizedPage(page, scope.language).name,
+      url: `/${path}`,
+    });
+  }
+  return out;
 }

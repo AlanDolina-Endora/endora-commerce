@@ -30,8 +30,8 @@ const assetOf = (kind: AssetStoredKind, id = '22222222-2222-4222-8222-2222222222
 const present = <T>(): T => ({}) as T;
 
 const stubPorts = (overrides: Partial<MegamenuCrossModulePorts> = {}): MegamenuCrossModulePorts => ({
-  categories: { findById: async () => present<CatalogCategoryRecord>() },
-  pages: { findById: async () => present<CmsPageRecord>() },
+  categories: { findById: async () => present<CatalogCategoryRecord>(), listAll: async () => [] },
+  pages: { findById: async () => present<CmsPageRecord>(), findStorefrontLinks: async () => [] },
   blocks: {
     findById: async () => ({ id: 'b', code: 'hero', active: true }),
     findLocalizedById: async () => null,
@@ -41,6 +41,9 @@ const stubPorts = (overrides: Partial<MegamenuCrossModulePorts> = {}): MegamenuC
     visibleToCaller: async (ids: readonly string[]) => new Set(ids),
   },
   assetLibrary: { getAsset: async () => present<AssetDetail>() },
+  customerGroups: { findByIds: async () => [] },
+  customerAccounts: { findById: async () => null },
+  organizations: { findById: async () => null },
   ...overrides,
 });
 
@@ -67,7 +70,7 @@ describe('target-validator (T011)', () => {
       target: { categoryId: '11111111-1111-1111-1111-111111111111' },
     } as MegamenuItem;
     await expect(
-      validateTarget(item, ['ch-1'], stubPorts({ categories: { findById: async () => null } })),
+      validateTarget(item, ['ch-1'], stubPorts({ categories: { findById: async () => null, listAll: async () => [] } })),
     ).rejects.toMatchObject({ code: ERROR_CODES.MEGAMENU_TARGET_OUT_OF_SCOPE });
   });
 
@@ -177,7 +180,7 @@ describe('target-validator (T011)', () => {
       target: { categoryId: '11111111-1111-1111-1111-111111111111' },
     } as MegamenuItem;
     await expect(
-      validateTarget(item, ['ch-1'], stubPorts({ categories: { findById: async () => null } })),
+      validateTarget(item, ['ch-1'], stubPorts({ categories: { findById: async () => null, listAll: async () => [] } })),
     ).rejects.toBeInstanceOf(HttpError);
   });
 
@@ -242,5 +245,36 @@ describe('target-validator (T011)', () => {
       } as MegamenuItem;
       await expect(validateTarget(item, ['ch-1'], stubPorts())).resolves.toBeUndefined();
     });
+  });
+});
+
+/** Feature 168 — a category tree names a root that must exist, or none at all. */
+describe('validateTarget — category-tree (feature 168)', () => {
+  const tree = (rootCategoryId: string | null): MegamenuItem =>
+    ({ ...baseItem, kind: 'category-tree', labels: {}, target: { rootCategoryId, depth: 2 } }) as MegamenuItem;
+
+  it('accepts a whole-catalogue tree without reading the catalogue', async () => {
+    let reads = 0;
+    const ports = stubPorts({
+      categories: {
+        findById: async () => {
+          reads += 1;
+          return null;
+        },
+        listAll: async () => [],
+      },
+    });
+    await validateTarget(tree(null), ['ch-1'], ports);
+    expect(reads).toBe(0);
+  });
+
+  it('refuses a tree rooted at a category that does not exist', async () => {
+    await expect(
+      validateTarget(
+        tree('11111111-1111-1111-1111-111111111111'),
+        ['ch-1'],
+        stubPorts({ categories: { findById: async () => null, listAll: async () => [] } }),
+      ),
+    ).rejects.toMatchObject({ code: ERROR_CODES.MEGAMENU_TARGET_OUT_OF_SCOPE });
   });
 });
