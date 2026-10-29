@@ -10,3 +10,4 @@ Additive (`specs/165-task-management/`):
 - Admin preferences: `listViewModes` in the preference store, and `useListViewModePreference(listId)`, which remembers a list's list-or-board choice across devices.
 - `CommentThread` takes `keepDeleted`: a deleted entry keeps its place, marked as deleted, with nothing left to change (`RecordComment.deletedAt`, optional). Without it a deleted entry leaves the list, as before.
 - `MultiSelect` and `TagMultiSelect` take `ariaLabelledBy`: the trigger is named by a visible label's id rather than a second copy of it in `ariaLabel`. `TagMultiSelect` takes one of the two.
+- `StatusTransitionGraph` names the statuses in its *From* / *To* form and in the selected move through `statusLabel`, as its graph already did, instead of showing their codes; the options' values stay the codes. Every workflow screen built on it (orders, returns, CRM, Projects' stages, Tasks) shows names there now.

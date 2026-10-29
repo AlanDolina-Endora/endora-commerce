@@ -33,6 +33,7 @@ are additive (`release-intent.md`).
 | `src/lib/admin-preferences/{store,use-admin-preference}.ts` | `listViewModes` and `useListViewModePreference(listId)`. |
 | `src/components/comments/CommentThread.tsx` (added at T059) | `keepDeleted` and the optional `RecordComment.deletedAt`: a deleted Task comment keeps its place in the thread, marked (R-6 "soft, so the thread shows deleted"); without the prop the thread behaves as before, so CRM and Projects do not change. Its sentence is the core bundle's `comments.removedEntry` (en, pl), and `admin/test/kit/kit-comments.test.tsx` gains two cases. |
 | `src/ui/multi-select.tsx`, `src/components/tags/TagPicker.tsx` (added at T092) | `ariaLabelledBy`, optional and additive: the trigger is named by a visible label's id instead of a duplicate `ariaLabel` (WCAG 2.5.3, the Tasks filters and field inputs). Without it both behave as before; `admin/test/kit/kit-tags.test.tsx` gains one case. |
+| `src/components/status-transition-graph/StatusTransitionGraph.tsx` (added at T095) | The *From* / *To* options and the selected-move label show `statusLabel(status)` instead of the code; the values stay codes. The walk found Task status codes on the workflow screen; the graph's nodes and tooltips already used `statusLabel`, so every caller already supplies names. `admin/test/modules/tasks/TaskWorkflowPage.test.tsx` gains one case; the orders, returns, CRM and Projects screens' tests run unchanged. Changeset bullet. |
 | Tests beside each | — |
 
 ## C. `packages/modules/crm/`

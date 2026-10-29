@@ -244,6 +244,20 @@ describe('TaskWorkflowPage — the moves', () => {
     );
   });
 
+  it('names the statuses of the moves form and the selected move, keeping the codes as values (T095)', async () => {
+    await renderPage();
+    const from = screen.getByLabelText(core('orderStatusConfig.col.from'));
+    const inProgress = within(from).getByRole('option', { name: 'In progress' });
+    expect(inProgress).toHaveValue('in_progress');
+    expect(within(from).queryByRole('option', { name: 'in_progress' })).toBeNull();
+    await waitFor(() => expect(chartHandlers.has('click')).toBe(true));
+    act(() => {
+      chartHandlers.get('click')!({ dataType: 'edge', name: '', data: { source: 'in_progress', target: 'done' } });
+    });
+    expect(await screen.findByText('In progress → Done')).toBeInTheDocument();
+    expect(screen.queryByText('in_progress → done')).toBeNull();
+  });
+
   it('shows a refused change of the moves', async () => {
     putSpy.mockRejectedValue(
       new ApiError(422, {
