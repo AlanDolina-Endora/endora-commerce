@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   ERROR_CODES,
@@ -14,7 +15,7 @@ import { setupBackendServer, teardownBackendServer, type BackendServerHandle } f
 import { AssetReferenceRegistry } from '../../../../packages/modules/assets_library/src/backend/services/reference-registry.js';
 import { AssetsLibraryService } from '../../../../packages/modules/assets_library/src/backend/services/assets-library.service.js';
 import { AssetVisibility } from '../../../../packages/modules/assets_library/src/backend/services/asset-visibility.js';
-import { TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
+import { TEST_ADMIN_ID, TEST_ORGANIZATION_ID } from '../../helpers/test-actors.js';
 import { withModuleOff } from '../../helpers/off-state.js';
 import { Asset } from '../../helpers/package-entities.js';
 import { removeCrmAssets, seedCrmAdmin, seedCrmAsset } from '../../helpers/seed-crm.js';
@@ -409,5 +410,78 @@ describe('projects — attachments (US7)', () => {
       expect(refused.statusCode, refused.body).toBe(404);
       expect(await h.em().count(Asset, { filename: 'not-stored.png' }, { filters: false })).toBe(before);
     });
+  });
+
+  /**
+   * FR-006 (`specs/166-asset-reference-visibility/` research R-13, F-19): a file
+   * the library hides from the caller is not there to attach. Here it is held
+   * by **another** module's record — a private Task of somebody else, which a
+   * reader holding `tasks:read` without `tasks:see_private` may not see — so
+   * Projects' own holder check cannot see it; and one of the two is **public**,
+   * so the refusal must come before the private-file one to give the
+   * missing-file sentence.
+   */
+  describe('attaching a file the library hides from the caller (feature 166, FR-006)', () => {
+    const privateTask = randomUUID();
+    let reader: Person;
+
+    beforeAll(async () => {
+      reader = await seedCrmAdmin(h.em(), 'att-fr6', ['projects:read', 'projects:write', 'tasks:read', 'assets.read']);
+      await h
+        .em()
+        .getConnection()
+        .execute(
+          `insert into "tasks" ("id", "number", "title", "created_by_admin_user_id", "is_private") values (?, ?, 'Private', ?, true)`,
+          [privateTask, `T-F6-${privateTask.slice(0, 8)}`, TEST_ADMIN_ID],
+        );
+    });
+
+    afterAll(async () => {
+      reader?.undo();
+      await h.em().getConnection().execute(`delete from "tasks" where "id" = ?`, [privateTask]);
+    });
+
+    it.each(['private', 'public'] as const)(
+      'refuses a %s file held only by a Task the caller may not see — the missing-file 422',
+      async (visibility) => {
+        const own = await createProject(h, {
+          title: `Own ${visibility}`,
+          members: [{ adminUserId: reader.adminUserId, roleIds: [] }],
+        });
+        created.push(own.id);
+        const file = await asset({ visibility });
+        await h
+          .em()
+          .getConnection()
+          .execute(`insert into "task_attachments" ("task_id", "asset_id", "added_by_admin_user_id") values (?, ?, ?)`, [
+            privateTask,
+            file.id,
+            TEST_ADMIN_ID,
+          ]);
+
+        const attach = (assetId: string, cookies?: Person['cookies']) =>
+          callProjects(h, 'POST', `/${own.id}/attachments`, { payload: { assetId }, ...(cookies ? { cookies } : {}) });
+        const hidden = await attach(file.id, reader.cookies);
+        const missing = await attach(randomUUID(), reader.cookies);
+        expect(missing.statusCode, missing.body).toBe(422);
+        expect(hidden.statusCode, hidden.body).toBe(422);
+        expect(errorShape(hidden.body)).toEqual(errorShape(missing.body));
+        expect(errorShape(hidden.body)).toMatchObject({
+          code: ERROR_CODES.VALIDATION_FAILED,
+          message: 'The file does not exist in the media library.',
+        });
+        expect(await list(own.id, reader)).toEqual([]);
+
+        // The control: the Platform administrator sees the Task, so the file is there to attach
+        // — and is then refused for what it is (a public file), not for being missing.
+        const forAdmin = await attach(file.id);
+        if (visibility === 'private') {
+          expect(forAdmin.statusCode, forAdmin.body).toBe(201);
+        } else {
+          expect(forAdmin.statusCode, forAdmin.body).toBe(422);
+          expect(forAdmin.json().error.message).not.toBe('The file does not exist in the media library.');
+        }
+      },
+    );
   });
 });
