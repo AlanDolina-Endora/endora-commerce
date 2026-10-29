@@ -238,11 +238,10 @@ export function TasksPage(): ReactNode {
               <AlertDescription>{viewsError}</AlertDescription>
             </Alert>
           ) : null}
-          {staleNotice ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {staleNotice}
-            </p>
-          ) : null}
+          {/* Mounted before it has text, so the notice is announced (WCAG 4.1.3). */}
+          <p id="tasks-views-notice" role="status" className={staleNotice ? 'text-sm text-muted-foreground' : 'sr-only'}>
+            {staleNotice ?? ''}
+          </p>
           <TaskFilters
             idPrefix="tasks"
             params={params}

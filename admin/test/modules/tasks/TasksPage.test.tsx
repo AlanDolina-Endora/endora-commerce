@@ -306,8 +306,16 @@ describe('TasksPage — saved views (FR-021)', () => {
     renderTasks(<TasksPage />, { path: '/tasks', pattern: '/tasks' });
     await screen.findByText('Order the racking');
     await screen.findByRole('option', { name: HIGH_PRIORITY_VIEW.name });
+    // The notice's live region is on the page, empty, before the notice arrives
+    // — one that mounts already carrying its text is not reliably announced
+    // (WCAG 4.1.3; `ux-laws` §4; 165 T092).
+    const region = document.getElementById('tasks-views-notice');
+    expect(region?.getAttribute('role')).toBe('status');
+    expect(region?.textContent).toBe('');
     await userEvent.selectOptions(screen.getByRole('combobox', { name: core('savedViews.label') }), HIGH_PRIORITY_VIEW.id);
     await waitFor(() => expect(lastListQuery().getAll('status')).toEqual(['done']));
     expect(await screen.findByText(en('views.stale', { count: 1 }))).toBeTruthy();
+    expect(document.getElementById('tasks-views-notice')).toBe(region);
+    expect(region?.textContent).toBe(en('views.stale', { count: 1 }));
   });
 });
