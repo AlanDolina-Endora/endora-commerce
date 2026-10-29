@@ -438,13 +438,15 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
       'Phase 4): a workflow configuration write that breaks a rule — one initial open status, a done ' +
       'and a cancelled status, moves between known statuses, a free code, a category changed under ' +
-      'Tasks, a removal in use without a replacement.',
+      'Tasks, a removal in use without a replacement. From Phase 11 also the priority list’s two ' +
+      'refusals of that shape (`priority_code_taken`, `priority_replacement_required`).',
   },
   TASK_STATUS_IN_USE_TOO_MANY: {
     to: 'tasks',
     reason:
       'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
-      'Phase 4): removing a status that more Tasks are in than one Command moves to its replacement.',
+      'Phase 4): removing a status that more Tasks are in than one Command moves to its replacement; ' +
+      'from Phase 11 also a priority, `details.code: priority` keying its sentence.',
   },
   TASK_PRIVATE_READ_ONLY: {
     to: 'tasks',

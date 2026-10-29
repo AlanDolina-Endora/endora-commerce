@@ -710,9 +710,9 @@ export const ERROR_CODES = {
   TASK_TRANSITION_FORBIDDEN: 'TASK_TRANSITION_FORBIDDEN',
   /** The Task left the status the caller saw before the move. */
   TASK_TRANSITION_CONFLICT: 'TASK_TRANSITION_CONFLICT',
-  /** A Task workflow change that breaks a rule; carries `rule` (`specs/165-task-management/` FR-013, FR-016). */
+  /** A Task workflow or priority-list change that breaks a rule; carries `rule` (`specs/165-task-management/` FR-013, FR-016, FR-024). */
   TASK_WORKFLOW_INVALID: 'TASK_WORKFLOW_INVALID',
-  /** A Task status removal that would move more Tasks than one Command moves (R-1). */
+  /** A Task status or priority removal that would move more Tasks than one Command moves (R-1, R-9). */
   TASK_STATUS_IN_USE_TOO_MANY: 'TASK_STATUS_IN_USE_TOO_MANY',
   /** A change to someone else's private Task by a holder of `tasks:see_private` (R-3). */
   TASK_PRIVATE_READ_ONLY: 'TASK_PRIVATE_READ_ONLY',

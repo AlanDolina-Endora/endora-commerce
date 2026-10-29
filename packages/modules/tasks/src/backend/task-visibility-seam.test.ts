@@ -213,19 +213,20 @@ const RULE_SCOPED_READ_LEDGER: Readonly<Record<string, number>> = {
   'services/comment-service.ts': 4,
   'services/digest-service.ts': 2,
   'services/hierarchy-service.ts': 5,
-  'services/priority-service.ts': 1,
+  'services/priority-service.ts': 2,
   'services/record-link-service.ts': 3,
   'services/relation-service.ts': 2,
   'services/reminder-schedule.ts': 3,
   'services/reminder-service.ts': 12,
-  'services/tag-service.ts': 2,
+  'services/tag-service.ts': 3,
   'services/task-access.ts': 3,
   'services/task-asset-references.ts': 2,
   'services/task-commands.ts': 8,
   'services/task-service.ts': 21,
   'services/task-visibility.ts': 0,
+  'services/task-reassignment.ts': 1,
   'services/task-write-port.ts': 1,
-  'services/workflow-config-service.ts': 3,
+  'services/workflow-config-service.ts': 2,
 };
 
 describe('the Task visibility seam (R-3, R-21)', () => {

@@ -285,8 +285,14 @@ export function registerModule(ctx: ModuleContext): void {
       .singleton(),
     tasksPriorityService: ctx
       .asFunction(
-        ({ emFactory, tasksWorkflowRead, tasksVisibility }: TasksCradle) =>
-          new TaskPriorityService({ emFactory, workflow: tasksWorkflowRead, visibility: tasksVisibility }),
+        ({ emFactory, tasksWorkflowRead, tasksVisibility, commandBus, auditLogService }: TasksCradle) =>
+          new TaskPriorityService({
+            emFactory,
+            workflow: tasksWorkflowRead,
+            visibility: tasksVisibility,
+            commandBus,
+            auditLog: auditLogService,
+          }),
       )
       .singleton(),
     tasksTagService: ctx

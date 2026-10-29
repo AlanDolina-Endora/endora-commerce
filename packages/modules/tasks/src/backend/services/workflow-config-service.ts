@@ -8,12 +8,13 @@ import {
   type SupportedLanguage,
   type UpdateTaskStatusBody,
 } from '@endora-commerce/contracts';
-import { recordAuditFromContext, type CommandBus } from '@endora-commerce/platform/commands';
+import type { CommandBus } from '@endora-commerce/platform/commands';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import { TaskWorkflowConfigError, type TaskWorkflowRule } from '../domain/task-status-graph.js';
 import { TaskStatus } from '../entities/task-status.entity.js';
 import { TaskStatusTransition } from '../entities/task-status-transition.entity.js';
+import { heldIds, holdTasksFor, recordReassignments, type HeldTask } from './task-reassignment.js';
 import { taskStatusUnknown, transitionForbidden } from './task-transition-service.js';
 import type { TaskWorkflowRead } from './task-workflow-read.js';
 
@@ -220,18 +221,10 @@ export class TaskWorkflowConfigService {
     await this.#configure({ action: 'tasks.status.delete', objectType: 'task_status', objectId: code }, async (em) => {
       const status = await this.#locked(em, code);
       // Locked: a Task cannot leave or enter the status until this commits.
-      const held = (await em.execute(
-        `select "id", "completed_at" from "tasks" where "status" = ? order by "id" limit ? for update`,
-        [code, TASK_STATUS_REASSIGN_MAX + 1],
-      )) as Array<{ id: string; completed_at: Date | string | null }>;
-      if (held.length > TASK_STATUS_REASSIGN_MAX) {
-        throw new HttpError(
-          409,
-          ERROR_CODES.TASK_STATUS_IN_USE_TOO_MANY,
-          `More than ${TASK_STATUS_REASSIGN_MAX} Tasks are in the status "${code}". Move some of them first.`,
-          { statusCode: code, max: TASK_STATUS_REASSIGN_MAX },
-        );
-      }
+      const held = await holdTasksFor(em, 'status', code, {
+        message: `More than ${TASK_STATUS_REASSIGN_MAX} Tasks are in the status "${code}". Move some of them first.`,
+        details: { statusCode: code },
+      });
 
       let moved = 0;
       if (held.length > 0) {
@@ -267,34 +260,21 @@ export class TaskWorkflowConfigService {
    * `tasks.task.status_change` audit row per Task on the Command's transaction
    * — each Task's history shows the move, `reason: 'status_removed'`.
    */
-  async #reassign(
-    em: EntityManager,
-    held: ReadonlyArray<{ id: string; completed_at: Date | string | null }>,
-    from: string,
-    to: string,
-    toDone: boolean,
-  ): Promise<number> {
+  async #reassign(em: EntityManager, held: readonly HeldTask[], from: string, to: string, toDone: boolean): Promise<number> {
     const now = new Date();
-    const ids = held.map((row) => row.id);
+    const ids = heldIds(held);
     await em.execute(
       `update "tasks" set "status" = ?, "completed_at" = ${toDone ? `coalesce("completed_at", ?)` : 'null'}, "updated_at" = ?
         where "id" = any(?::uuid[])`,
-      toDone ? [to, now, now, `{${ids.join(',')}}`] : [to, now, `{${ids.join(',')}}`],
+      toDone ? [to, now, now, ids] : [to, now, ids],
     );
-    for (const row of held) {
+    recordReassignments(this.deps.auditLog, em, held, 'tasks.task.status_change', (row) => {
       const completedAt = row.completed_at === null ? null : new Date(row.completed_at).toISOString();
-      recordAuditFromContext(this.deps.auditLog, em, {
-        action: 'tasks.task.status_change',
-        objectType: 'task',
-        objectId: row.id,
-        stateBefore: { status: from, completedAt },
-        stateAfter: {
-          status: to,
-          completedAt: toDone ? (completedAt ?? now.toISOString()) : null,
-          reason: 'status_removed',
-        },
-      });
-    }
+      return {
+        before: { status: from, completedAt },
+        after: { status: to, completedAt: toDone ? (completedAt ?? now.toISOString()) : null, reason: 'status_removed' },
+      };
+    });
     return held.length;
   }
 

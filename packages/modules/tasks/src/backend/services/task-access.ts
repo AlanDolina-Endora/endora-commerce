@@ -52,9 +52,18 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
     'author changes (and its `task_references` rows, replaced by the saving Command), and the assignees a new ' +
     'comment tells — each of whom is asked again whether they may see the Task before being told.',
   'services/priority-service.ts':
-    'The in-use count of each priority composes the visibility pre-filter (`TaskVisibility.condition`).',
+    'The in-use count the list shows composes the visibility pre-filter (`TaskVisibility.condition`). Removing a ' +
+    'priority is configuration (FR-024, research R-9): it moves **every** Task holding it to the replacement, or ' +
+    'clears it, whoever may see the Task — drafts and private Tasks included — by the ids `task-reassignment.ts` ' +
+    'locked, hands nothing back but the list, and records each move in that Task\'s own history.',
   'services/tag-service.ts':
-    'The usage count of each tag joins `tasks` and composes the visibility pre-filter (`TaskVisibility.condition`).',
+    'The usage count the list shows joins `tasks` and composes the visibility pre-filter (`TaskVisibility.condition`). ' +
+    'Deleting a tag counts its assignments platform-wide, whoever may see the Tasks, because the tag leaves every one ' +
+    'of them (research R-10): the count goes into the tag\'s own audit row, never to the caller.',
+  'services/task-reassignment.ts':
+    'A status or priority removal (FR-016, FR-024) locks the ids and completion times of **every** Task holding the ' +
+    'value, whoever may see it — a Task the operator cannot see still holds it — inside the removing Command; the ' +
+    'caller moves them and records each move in that Task\'s history, and answers only how many moved.',
   'services/task-asset-references.ts':
     'The asset library asks whether **anything** still uses a file before deleting it — platform-wide on ' +
     'purpose, by whoever deletes it, who need not see the Task — and is answered with the Task\'s number, never ' +
@@ -73,8 +82,8 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
   'services/workflow-config-service.ts':
     'A status is platform configuration: changing what it means, or removing it, asks how many Tasks are in it ' +
     'and moves them to the replacement **whoever may see them**, because a Task the operator cannot see is ' +
-    'still in the status (FR-016, research R-1). It reads ids and completion times only, hands nothing back to ' +
-    'the caller but the workflow, and records each move in that Task\'s own audit history.',
+    'still in the status (FR-016, research R-1). It moves the ids `task-reassignment.ts` locked, hands nothing ' +
+    'back to the caller but the workflow, and records each move in that Task\'s own audit history.',
   'services/reminder-service.ts':
     'Setting and removing reminders starts from `loadVisible` and reads the reminders and assignees of that one ' +
     'Task by its id. The delivery pass is a sweep in the system scope (research R-17): it reads the due ' +
