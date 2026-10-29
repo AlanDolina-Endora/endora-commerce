@@ -132,6 +132,12 @@ export const ACTION_PERMISSION_DISAGREEMENTS: Readonly<Record<string, string>> =
     'on; the list it loads (GET /api/v1/admin/tasks/tags) is `tasks:read`, because whoever edits a Task ' +
     'picks among the existing tags (US9 scenario 4, `specs/165-task-management/contracts/' +
     'admin-surfaces.md` §4). Retire this entry on the same terms as `open-task-workflow`.',
+  'tasks:open-task-general-settings':
+    '"Task general settings" declares `tasks:configure`, the code the general settings screen and the ' +
+    'write on it are gated on; the time zone it loads (GET /api/v1/admin/tasks/settings/time-zone) is ' +
+    '`tasks:read`, because the Task screens count date-only due dates and reminders in it ' +
+    '(`specs/165-task-management/contracts/admin-api.md` §4). Retire this entry on the same terms as ' +
+    '`open-task-workflow`.',
   // Issue #516 — sidebar screens that open on a configuration or write code
   // while the walk compares them against a read-gated GET: either the list they
   // load is read-gated because other screens read it too, or the walk cannot

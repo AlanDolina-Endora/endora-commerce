@@ -470,6 +470,8 @@
   "actions.openTaskPriorities.description": "Skonfiguruj priorytety zadań i ich kolejność",
   "actions.openTaskTags.label": "Etykiety zadań",
   "actions.openTaskTags.description": "Dodawaj, zmieniaj i usuwaj etykiety nadawane zadaniom",
+  "actions.openTaskGeneralSettings.label": "Ogólne ustawienia zadań",
+  "actions.openTaskGeneralSettings.description": "Ustaw strefę czasową terminów, przypomnień i podsumowania zadań",
   "workflow.title": "Statusy i przebieg zadań",
   "workflow.description": "Statusy, przez które przechodzi zadanie, status, w którym zaczyna nowe zadanie, oraz dozwolone przejścia między nimi. Stosują się do nich wszystkie ekrany zadań i tablica.",
   "workflow.statuses.title": "Statusy",

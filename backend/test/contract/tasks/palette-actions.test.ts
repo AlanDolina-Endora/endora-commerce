@@ -64,6 +64,14 @@ const EXPECTED: readonly ExpectedAction[] = [
     icon: 'Settings',
     label: { en: 'Task tags', pl: 'Etykiety zadań' },
   },
+  {
+    // The general settings screen (the time zone), CI palette-coverage (PR #533).
+    id: 'open-task-general-settings',
+    route: '/tasks/settings/general',
+    permission: 'tasks:configure',
+    icon: 'Settings',
+    label: { en: 'Task general settings', pl: 'Ogólne ustawienia zadań' },
+  },
 ];
 
 describe('tasks palette actions (163 FR-041, T130)', () => {
@@ -92,8 +100,10 @@ describe('tasks palette actions (163 FR-041, T130)', () => {
     // The configuration screens are `tasks:configure` in the admin, while the
     // lists they load are read-gated: the status picker, the priority picker,
     // the tag picker, the filters and the board read them too. The check's
-    // ledger records those three disagreements, and only them (165 T047, T083).
+    // ledger records those four disagreements, and only them (165 T047, T083);
+    // the general settings screen reads the read-gated time zone the same way.
     expect(result.ledgered.map((finding) => finding.actionId).sort()).toEqual([
+      'open-task-general-settings',
       'open-task-priorities',
       'open-task-tags',
       'open-task-workflow',

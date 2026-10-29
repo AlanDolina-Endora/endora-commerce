@@ -304,6 +304,18 @@ export const manifest = defineModuleManifest({
       keywords: ['task tags', 'tags', 'labels', 'tagi', 'etykiety'],
       weight: 335,
     },
+    {
+      // `contracts/admin-surfaces.md` §4: the general settings screen (the time
+      // zone due dates, reminders and the digest are counted in).
+      id: 'open-task-general-settings',
+      labelKey: 'actions.openTaskGeneralSettings.label',
+      descriptionKey: 'actions.openTaskGeneralSettings.description',
+      icon: 'Settings',
+      targetRoute: '/tasks/settings/general',
+      requiredPermission: 'tasks:configure',
+      keywords: ['task settings', 'time zone', 'timezone', 'ustawienia', 'strefa', 'czasowa'],
+      weight: 336,
+    },
   ],
   /**
    * The e-mails this module sends (R-17, R-18). Their default subject and body

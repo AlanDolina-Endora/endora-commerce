@@ -470,6 +470,8 @@
   "actions.openTaskPriorities.description": "Configure task priorities and their order",
   "actions.openTaskTags.label": "Task tags",
   "actions.openTaskTags.description": "Add, rename and delete the tags put on tasks",
+  "actions.openTaskGeneralSettings.label": "Task general settings",
+  "actions.openTaskGeneralSettings.description": "Set the time zone task due dates, reminders and the digest are counted in",
   "workflow.title": "Task statuses and workflow",
   "workflow.description": "The statuses a task goes through, which one a new task starts in, and which moves between them are allowed. Every task screen and the board follow it.",
   "workflow.statuses.title": "Statuses",

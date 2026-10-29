@@ -153,7 +153,7 @@ describe('tasks off-state (Constitution XVII)', () => {
   it.each<OffStateAxis>(['deactivated', 'platform-unavailable'])(
     'offers its palette actions and its search type while on, neither while %s, and both after',
     async (axis) => {
-      const ACTIONS = ['new-task', 'open-my-tasks', 'open-task-priorities', 'open-task-tags', 'open-task-workflow', 'open-tasks'];
+      const ACTIONS = ['new-task', 'open-my-tasks', 'open-task-general-settings', 'open-task-priorities', 'open-task-tags', 'open-task-workflow', 'open-tasks'];
       const capability = async (): Promise<string[]> => {
         const response = await h.app.inject({
           method: 'GET',
