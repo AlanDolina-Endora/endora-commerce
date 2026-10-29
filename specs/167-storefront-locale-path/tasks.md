@@ -97,9 +97,9 @@ US1 and US2 ship together: the middleware that makes the path win is the one tha
 
 ## Phase 4: US3 — the per-channel switch in the admin (P2)
 
-- [ ] T045 [P] [US3] RED `packages/modules/sales_channels/src/admin/components/ChannelIdentityForm.test.tsx` — switch shown, default on for a new channel; read-only without `sales_channels:write`; derived prefix list (`channelUrlLanguages` on the form's current languages, updates as languages change); hint text; value sent in create and PATCH bodies
-- [ ] T046 [US3] Implement `ChannelIdentityForm.tsx` and `pages/SalesChannelEditPage.tsx` beside `anonymousAccess`, admin-kit primitives only
-- [ ] T047 [US3] Add `identity.prefixDefaultLanguage.label`, `.hint`, `.prefixesHeading`, `.urlChangeWarning` to `packages/modules/sales_channels/i18n/en.json` and `pl.json` (EN *"Prefix the default language in URLs"*, PL *"Prefiks języka domyślnego w adresach URL"*; hint per spec US3); run `pnpm run check:language` and the i18n bundle parity checks named in `specs/conventions/module-i18n.md`
+- [X] T045 [P] [US3] RED `packages/modules/sales_channels/src/admin/components/ChannelIdentityForm.test.tsx` — switch shown, default on for a new channel; read-only without `sales_channels:write`; derived prefix list (`channelUrlLanguages` on the form's current languages, updates as languages change); hint text; value sent in create and PATCH bodies *(written beside the form's other admin tests, `admin/test/modules/sales_channels/channel-form-prefix-default-language.test.tsx`, as 154's switch is; read-only is a new `readOnly` form prop the edit page sets from `sales_channels:write`)*
+- [X] T046 [US3] Implement `ChannelIdentityForm.tsx` and `pages/SalesChannelEditPage.tsx` beside `anonymousAccess`, admin-kit primitives only
+- [X] T047 [US3] Add `identity.prefixDefaultLanguage.label`, `.hint`, `.prefixesHeading`, `.urlChangeWarning` to `packages/modules/sales_channels/i18n/en.json` and `pl.json` (EN *"Prefix the default language in URLs"*, PL *"Prefiks języka domyślnego w adresach URL"*; hint per spec US3); run `pnpm run check:language` and the i18n bundle parity checks named in `specs/conventions/module-i18n.md`
 
 ---
 

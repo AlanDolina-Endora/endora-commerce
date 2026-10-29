@@ -83,6 +83,7 @@ function channel(themeCode: string | null): SalesChannelDetail {
     name: { 'en-US': 'Serwis A' },
     active: true,
     anonymousAccess: true,
+    prefixDefaultLanguage: true,
     systemDefault: false,
     defaultLanguage: 'en-US',
     defaultCurrency: 'PLN',

@@ -89,5 +89,9 @@
   "identity.anonymousAccess.hint": "Gdy wyłączone, odwiedzający muszą się zalogować, a ze sklepu mogą korzystać tylko klienci, których organizacja jest przypisana do tego kanału. Przy automatycznej moderacji dostęp otrzymuje każdy, kto zarejestruje tu firmę.",
   "identity.anonymousAccess.pricesHint": "To, czy niezalogowani odwiedzający widzą ceny, decyduje osobne ustawienie — tryb wyświetlania dla niezalogowanych: dla wszystkich kanałów w Ustawieniach cenowych albo tylko dla tego kanału na ekranie Ustawienia.",
   "identity.anonymousAccess.pricesLink": "Otwórz ustawienia cenowe",
+  "identity.prefixDefaultLanguage.label": "Prefiks języka domyślnego w adresach URL",
+  "identity.prefixDefaultLanguage.hint": "Gdy włączone, każdy adres sklepu zaczyna się od swojego języka, również domyślnego: /pl/p/wiertarka, /en/p/drill. Gdy wyłączone, adres bez języka oznacza język domyślny (/p/wiertarka), a prefiks mają tylko pozostałe języki. Zmienione adresy nadal działają dzięki przekierowaniom.",
+  "identity.prefixDefaultLanguage.prefixesHeading": "Prefiksy języków w adresach sklepu",
+  "identity.prefixDefaultLanguage.urlChangeWarning": "Zmiana języków kanału lub tego przełącznika zmienia adresy URL sklepu. Stare adresy są przekierowywane; przeglądarki mogą pamiętać zapisane przekierowanie do godziny.",
   "list.badge.signInRequired": "Wymaga logowania"
 }
