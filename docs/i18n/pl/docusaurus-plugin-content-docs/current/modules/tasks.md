@@ -53,11 +53,11 @@ adresem. Dla takiej osoby to zadanie nie istnieje.
 
 Dwa rodzaje zadań widzi jeszcze mniej osób:
 
-- **Wersję roboczą** widzi tylko osoba, która ją utworzyła — nikt inny,
-  niezależnie od uprawnień. Nikt nie dostaje powiadomienia o wersji roboczej,
-  żadne jej przypomnienie nie jest wysyłane i nie liczy się ona do blokady
-  zakończenia żadnego projektu. Gdy jest gotowa, jej autor ją **publikuje**;
-  opublikowane zadanie nie może wrócić do wersji roboczej.
+- **Szkic** widzi tylko osoba, która go utworzyła — nikt inny,
+  niezależnie od uprawnień. Nikt nie dostaje powiadomienia o szkicu,
+  żadne jego przypomnienie nie jest wysyłane i nie liczy się on do blokady
+  zakończenia żadnego projektu. Gdy jest gotowy, jego autor go **publikuje**;
+  opublikowane zadanie nie może wrócić do szkicu.
 - Zadanie **prywatne** widzi tylko osoba, która je utworzyła, oraz posiadacze
   uprawnienia *See private tasks* — na przykład gdy autor odszedł z firmy.
   Zadanie prywatne nie należy do żadnego rekordu i może być przypisane tylko
@@ -103,7 +103,7 @@ ustawione przed przełączeniem zostają.
   przypisana (ktokolwiek, ty albo nikt), utworzone przez (ktokolwiek albo ty),
   priorytet, etykiety (każda wybrana), termin od i do, tylko zadania po
   terminie, tylko podzadania, tylko zadania główne albo tylko zadania
-  z podzadaniami, tylko twoje wersje robocze (*Tylko moje szkice*), tylko
+  z podzadaniami, tylko twoje szkice (*Tylko moje szkice*), tylko
   zadania prywatne, pola niestandardowe zadań oznaczone jako filtry listy oraz
   wyszukiwanie po numerze lub tytule. *Pokaż na liście zadań* w panelu
   *Zadania* otwiera listę zadań jednego rekordu, a *Pokaż wszystkie zadania*
@@ -118,7 +118,7 @@ ustawione przed przełączeniem zostają.
 **Moje zadania** (`/tasks/mine`) to twoja otwarta praca: opublikowane zadania
 przypisane do ciebie, które nie są zamknięte, najpierw te z najbliższym
 terminem, na końcu te bez terminu, jako lista albo tablica, z tymi samymi
-filtrami. Twoich wersji roboczych tu nie ma — znajdziesz je filtrem *Tylko moje
+filtrami. Twoich szkiców tu nie ma — znajdziesz je filtrem *Tylko moje
 szkice* na ekranie **Zadania**. Pole **Dzienne podsumowanie** u góry włącza
 i wyłącza twoje podsumowanie oraz ustawia jego godzinę.
 
@@ -126,7 +126,7 @@ i wyłącza twoje podsumowanie oraz ustawia jego godzinę.
 przypisanych — wybieranych po nazwisku spośród aktywnych administratorów, którzy
 mogą przeglądać zadania, albo przyciskiem *Przypisz do mnie* — terminu
 z godziną, daty rozpoczęcia, priorytetu i etykiet. *Utwórz zadanie* publikuje
-je; *Zapisz jako wersję roboczą* zostawia je tylko dla ciebie. *Prywatne*
+je; *Zapisz jako szkic* zostawia je tylko dla ciebie. *Prywatne*
 ogranicza osoby przypisane do ciebie. Zadanie utworzone tutaj nie należy do
 żadnego rekordu: zadanie projektu dodaje się w zakładce *Zadania* projektu, do
 jednego z jego etapów. Rozpoczęte z panelu *Zadania* rekordu jest z tym
@@ -134,8 +134,8 @@ rekordem powiązane; rozpoczęte przyciskiem *Dodaj podzadanie* zadania jest jeg
 podzadaniem.
 
 **Ekran zadania** pokazuje jego numer i tytuł, status — z propozycją tylko tych
-przejść, na które pozwala przebieg — oraz *Wersja robocza* albo *Prywatne*, gdy
-zadanie nią jest. Wersja robocza pokazuje swojemu autorowi *Opublikuj*; autor
+przejść, na które pozwala przebieg — oraz *Szkic* albo *Prywatne*, gdy
+zadanie nim jest. Szkic pokazuje swojemu autorowi *Opublikuj*; autor
 zadania bez rekordu może włączać i wyłączać *Prywatne*. Dalej:
 
 - **Szczegóły** — opis z odwołaniami jako odnośnikami; osoby przypisane, termin
@@ -214,8 +214,8 @@ jego treścią — z odnośnikiem do zadania:
   wyjątkiem autora komentarza — a ktoś, kto jest w nim wspomniany i zarazem
   przypisany, dostaje jedno powiadomienie.
 
-Nikt nie dostaje powiadomienia o zadaniu, którego nie może zobaczyć, o wersji
-roboczej ani o własnym działaniu. Gdy moduł *Admin notifications* jest
+Nikt nie dostaje powiadomienia o zadaniu, którego nie może zobaczyć, o szkicu
+ani o własnym działaniu. Gdy moduł *Admin notifications* jest
 wyłączony, wszystko działa tak samo, a nikt nie dostaje powiadomień.
 
 **Zmiana statusu.** Zadanie przechodzi tylko przejściem, na które pozwala
@@ -275,7 +275,7 @@ Przypomnienie przed terminem przesuwa się razem z terminem i jest wysyłane
 ponownie w nowej chwili; gdy termin zostanie usunięty, przypomnienie też jest
 usuwane, a historia zadania o tym mówi. Nic nie jest wysyłane odbiorcy, który
 nie może już zobaczyć zadania albo którego konto dezaktywowano, ani w sprawie
-zadania zamkniętego, usuniętego albo będącego wersją roboczą. Jeśli platforma
+zadania zamkniętego, usuniętego albo będącego szkicem. Jeśli platforma
 nie działała w tej chwili, przypomnienie jest wysyłane raz po jej powrocie —
 jeśli od tej chwili minęło mniej niż 24 godziny; starsze nie jest wysyłane.
 Widzisz przypomnienia, które ustawiłeś, i te, które cię wymieniają; *Wysłane*
@@ -289,7 +289,7 @@ po terminie. W dniu bez takich zadań nic nie jest wysyłane; zadanie, którego
 termin przypada później tego samego dnia, trafia do podsumowania następnego
 dnia. Podsumowanie jest wyłączone, dopóki go nie włączysz.
 
-**Wersje robocze i zadania prywatne.** *Zapisz jako wersję roboczą* zostawia
+**Szkice i zadania prywatne.** *Zapisz jako szkic* zostawia
 nowe zadanie tylko dla ciebie: nikt nie dostaje o nim powiadomienia, żadne jego
 przypomnienie nie jest wysyłane i nikt inny go nigdzie nie znajdzie — nawet
 posiadacz *See private tasks*. *Opublikuj* zmienia je w zwykłe zadanie, a osoby
@@ -394,10 +394,10 @@ zostają w swoim projekcie bez etapu — każda zmiana trafia do dziennika zmian
 
 | Kod | Na co pozwala |
 | --- | --- |
-| `tasks:read` | Przeglądanie zadań — listy, tablicy, *Moich zadań*, pojedynczego zadania, jego komentarzy, załączników i historii — z uwzględnieniem kontekstu każdego zadania, wersji roboczych i zadań prywatnych; komentowanie widocznych zadań; zapisane widoki i własne dzienne podsumowanie. |
+| `tasks:read` | Przeglądanie zadań — listy, tablicy, *Moich zadań*, pojedynczego zadania, jego komentarzy, załączników i historii — z uwzględnieniem kontekstu każdego zadania, szkiców i zadań prywatnych; komentowanie widocznych zadań; zapisane widoki i własne dzienne podsumowanie. |
 | `tasks:write` | Tworzenie, zmienianie, przypisywanie, wiązanie, ustawianie przypomnień i usuwanie zadań. Wymaga `tasks:read`. |
 | `tasks:configure` | Konfigurowanie przebiegu, priorytetów, etykiet, karty na tablicy i strefy czasowej. Wymaga `tasks:read`. |
-| `tasks:see_private` | Widzenie cudzych zadań prywatnych — tylko odczyt i usuwanie, nigdy zmiana, i nigdy cudze wersje robocze. Wymaga `tasks:read`. |
+| `tasks:see_private` | Widzenie cudzych zadań prywatnych — tylko odczyt i usuwanie, nigdy zmiana, i nigdy cudze szkice. Wymaga `tasks:read`. |
 
 ## Aktualizacja z pierwszej wersji
 
@@ -423,7 +423,7 @@ zostają w swoim projekcie bez etapu — każda zmiana trafia do dziennika zmian
 
 Każda trasa jest pod `/api/v1/admin/tasks`; kształty żądań i odpowiedzi to
 schematy Zod z `@endora-commerce/contracts` (`tasks.ts`). Zadanie, którego
-pytający nie może zobaczyć — przez jego kontekst, cudzą wersję roboczą albo
+pytający nie może zobaczyć — przez jego kontekst, cudzy szkic albo
 zadanie prywatne bez `tasks:see_private` — daje `404` `TASK_NOT_FOUND`,
 dokładnie tak jak zadanie, które nie istnieje.
 
@@ -436,7 +436,7 @@ dokładnie tak jak zadanie, które nie istnieje.
 | `GET /:id` | `tasks:read` | `{ data: TaskDetail }` — z `references`, `links`, `subtaskItems`, `relatedTasks`, przypomnieniami pytającego (`reminders`) i `permissions { canChange, canDelete, canPublish }`. |
 | `PATCH /:id` | `tasks:write` | Dowolne pole treści tworzenia poza `draft`; `assigneeIds` zastępuje, `addAssigneeIds` / `removeAssigneeIds` dodają i usuwają; `parentTaskId: null` odłącza; `private` tylko autor. |
 | `POST /:id/status` | `tasks:write` | `{ to, from }` → `{ data: { task, openSubtasks } }`; `409` `TASK_TRANSITION_FORBIDDEN` (`details.allowedTargets`), `409` `TASK_TRANSITION_CONFLICT`, gdy zadanie w międzyczasie opuściło `from`, `422` `TASK_STATUS_UNKNOWN`. |
-| `POST /:id/publish` | `tasks:write` | Wersja robocza autora staje się zadaniem; `409` `TASK_ALREADY_PUBLISHED`. Cudza wersja robocza daje `404`. |
+| `POST /:id/publish` | `tasks:write` | Szkic autora staje się zadaniem; `409` `TASK_ALREADY_PUBLISHED`. Cudzy szkic daje `404`. |
 | `DELETE /:id` | `tasks:write` albo `tasks:read` z `tasks:see_private` dla zadania prywatnego | `200` `{ data: { subtasksDetached } }` — dawne podzadania, które pytający może zobaczyć. |
 | `GET /:id/history` | `tasks:read` | Ślad audytowy zadania, od najnowszego (`RecordHistoryPage`). |
 | `GET`, `POST /:id/comments`; `PATCH`, `DELETE /:id/comments/:commentId` | `tasks:read` | Komentarze od najstarszego, z rozwiązanymi odwołaniami; cudzy komentarz daje `403` `FORBIDDEN`. |
@@ -571,7 +571,7 @@ Rozwiązuj je przez `lazyPort` i deklaruj jako `degrades-without` ze zdaniem
 
 | Port | Metody |
 | --- | --- |
-| `taskReadPort` (`TaskReadPort`) | `findById`, `findByIds`, `search` (numer albo tytuł), `listInContext`, `listOpenInContext` (kategoria otwarta i nie wersja robocza — pytanie blokady zakończenia), `countInContext`. `TaskRecord` ma `status` (kod), `statusCategory`, `closed`, `assigneeIds`, `dueAt`, `draft` i `private`. Zawężane pełną regułą widoczności dla administratora — kontekst, wersje robocze, zadania prywatne — ale nie dla systemu. |
+| `taskReadPort` (`TaskReadPort`) | `findById`, `findByIds`, `search` (numer albo tytuł), `listInContext`, `listOpenInContext` (kategoria otwarta i nie szkic — pytanie blokady zakończenia), `countInContext`. `TaskRecord` ma `status` (kod), `statusCategory`, `closed`, `assigneeIds`, `dueAt`, `draft` i `private`. Zawężane pełną regułą widoczności dla administratora — kontekst, szkice, zadania prywatne — ale nie dla systemu. |
 | `taskWritePort` (`TaskWritePort`) | `createMany({ context, tasks })` — najwyżej 100 zadań, każde `{ title, description?, assigneeIds?, dueOn?, contextGroupId?, contextNote?, sourceKey? }`, opublikowane, w statusie początkowym przebiegu; jedno audytowane polecenie `tasks.task.create` i jedno zdarzenie `tasks.task.created.v1` na każde utworzone zadanie; odrzucane z `TASK_CONTEXT_INVALID`, gdy żaden włączony moduł nie jest właścicielem typu kontekstu, i z `TASK_ASSIGNEE_INVALID`, gdy osoba przypisana nie jest aktywnym administratorem — zanim cokolwiek zostanie zapisane. Czy osoba przypisana może zobaczyć rekord, rozstrzyga moduł, do którego rekord należy — projekt przypisuje każde zadanie etapu członkowi z jego rolą — więc port o to nie pyta, w przeciwieństwie do ekranów i API zadań. `deleteInContext({ contextType, contextId })` — wszystkie zadania jednego rekordu, każde przez osobne audytowane polecenie `tasks.task.delete`. |
 
 **`sourceKey` czyni tworzenie idempotentnym.** Zadanie z `sourceKey` (do 100
@@ -598,7 +598,7 @@ Wpisy w dzwonku przechodzą przez `adminNotificationRecordPort` (krawędź
 `degrades-without`), z tematem `task`, po zatwierdzeniu zapisu:
 `tasks.task.assigned`, `tasks.task.mention`, `tasks.task.comment`,
 `tasks.task.reminder` i `tasks.digest.daily`. Każdy odbiorca jest najpierw
-sprawdzany, czy może zobaczyć zadanie — `tasks:read`, wersje robocze i zadania
+sprawdzany, czy może zobaczyć zadanie — `tasks:read`, szkice i zadania
 prywatne oraz `canSeeAs` kontekstu.
 
 Wpis w dzwonku przypomnienia jest zapisywany przez **`recordWithin(em,
@@ -632,8 +632,8 @@ zapisuje wpisu audytu `tenant.escape_hatch`.
 
 Każde jest emitowane raz na polecenie, po jego zatwierdzeniu. Zmiana kilku
 rodzajów naraz — `PATCH` z nowym tytułem i nowymi osobami przypisanymi — to
-jedno polecenie na rodzaj, każde z własnym wpisem audytu. **Wersja robocza nie
-emituje żadnych zdarzeń**, dopóki nie zostanie opublikowana:
+jedno polecenie na rodzaj, każde z własnym wpisem audytu. **Szkic nie
+emituje żadnych zdarzeń**, dopóki nie zostanie opublikowany:
 `tasks.task.created.v1` jest emitowane przy publikacji, z osobami przypisanymi,
 które zadanie ma w tej chwili. Usunięcie statusu albo priorytetu przenosi jego
 zadania z jednym wpisem audytu na zadanie i bez zdarzeń.
