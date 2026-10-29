@@ -166,7 +166,13 @@ describe('TaskDetail — comments (US4)', () => {
     expect(dialog).toHaveTextContent(en('comments.delete.body'));
     await userEvent.click(within(dialog).getByRole('button', { name: core('comments.delete.confirm') }));
     await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith(`${COMMENTS_PATH}/${MINE}`));
-    await waitFor(async () => expect((await entries(section))[0]).toHaveTextContent(core('comments.removedEntry')));
+    // A synchronous query inside the `waitFor`: an awaited one would leave its
+    // retry loop dead (`test/unit/nested-async-utilities.test.ts`).
+    await waitFor(() =>
+      expect(
+        within(within(section).getByRole('list', { name: en('detail.comments') })).getAllByRole('listitem')[0],
+      ).toHaveTextContent(core('comments.removedEntry')),
+    );
   });
 
   it('lets a reader without tasks:write comment', async () => {
