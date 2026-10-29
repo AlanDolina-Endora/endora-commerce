@@ -99,7 +99,9 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
     'draft/private rule, the context\'s `canSeeAs` — of each before it is listed.',
   'services/task-write-port.ts':
     '`deleteInContext` lists the ids of one context for its owner — the module that registered the context type ' +
-    'and is deleting its own record — and hands each to the delete Command.',
+    'and is deleting its own record — and hands each to the delete Command. `createMany` looks up which of the ' +
+    'source keys it was handed that one context already holds, for the same owner, and answers their ids in their ' +
+    'place: ids of Tasks that owner created in its own record (R-19).',
 };
 
 /** One `tasks` row as every read selects it. */

@@ -284,6 +284,71 @@ describe('projects — Stage Tasks (US2)', () => {
     expect(await taskRowsOf(h, p.id)).toHaveLength(3);
   });
 
+  it('a failure part way never duplicates: after 2 of 5, three retries — two of them at once — leave exactly 5 (#450)', async () => {
+    const p = await project('Failed part way');
+    const build = stageNamed(p, 'Build');
+    const five = [
+      ...DEFINITIONS(),
+      { title: 'Order the parts', dueOffsetDays: 2 },
+      { title: 'Book the crane', dueOffsetDays: 4 },
+    ];
+    const stage = ProjectStageResponseSchema.parse((await putStageTasks(p.id, build, five)).json()).data;
+    const definitionIds = stage.stageTasks.map((t) => t.id);
+    expect(definitionIds).toHaveLength(5);
+
+    // The database fails on the n-th Task Command of a call: the Commands
+    // before it have committed, one transaction each.
+    const bus = h.container.resolve<{ run: (command: { action: string }) => Promise<unknown> }>('commandBus');
+    const failOnTaskCreate = (n: number) => {
+      const original = bus.run.bind(bus);
+      let creates = 0;
+      return vi.spyOn(bus, 'run').mockImplementation(async (command) => {
+        if (command.action === 'tasks.task.create' && ++creates === n) throw new Error('tasks store unavailable');
+        return original(command as never);
+      });
+    };
+
+    let spy = failOnTaskCreate(3);
+    let moved;
+    try {
+      moved = await moveProjectOk(h, p.id, build, p.version);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(moved.notes).toEqual(['tasks_materialize_failed']);
+    expect(await taskRowsOf(h, p.id)).toHaveLength(2);
+
+    // The first retry fails too, on its second Task: one more is created.
+    spy = failOnTaskCreate(2);
+    let first;
+    try {
+      first = await callProjects(h, 'POST', `/${p.id}/stages/${build}/materialize-tasks`);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(first.statusCode, first.body).not.toBe(200);
+    expect(await taskRowsOf(h, p.id)).toHaveLength(3);
+    expect((await getProject(h, p.id)).stages.find((s) => s.id === build)!.tasksMaterializeFailed).toBe(true);
+
+    // Two retries at once: one creates what is missing, the other is refused.
+    const [a, b] = await Promise.all([
+      callProjects(h, 'POST', `/${p.id}/stages/${build}/materialize-tasks`),
+      callProjects(h, 'POST', `/${p.id}/stages/${build}/materialize-tasks`),
+    ]);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
+
+    const rows = (await h
+      .em()
+      .getConnection()
+      .execute(`select "title", "source_key" from "tasks" where "context_type" = 'project' and "context_id" = ?`, [
+        p.id,
+      ])) as Array<{ title: string; source_key: string | null }>;
+    expect(rows).toHaveLength(5);
+    expect(rows.map((r) => r.source_key).sort()).toEqual([...definitionIds].sort());
+    expect(rows.map((r) => r.title).sort()).toEqual(five.map((t) => t.title).sort());
+    expect((await getProject(h, p.id)).stages.find((s) => s.id === build)!.tasksMaterializeFailed).toBe(false);
+  });
+
   it('GET /projects/:id/tasks lists the Project’s Tasks by Stage; with Tasks off it says they are unavailable', async () => {
     const p = await project('Tab');
     const build = stageNamed(p, 'Build');

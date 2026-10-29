@@ -1,3 +1,4 @@
+import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   calendarDateSchema,
@@ -30,7 +31,18 @@ import type { TaskWorkflowRead } from './task-workflow-read.js';
  * `createMany` runs **one `tasks.task.create` Command per Task** under the
  * ambient actor, each starting in the workflow's current initial status
  * (`specs/165-task-management/` data-model §5) and published, so each Task has its own audit row and its own
- * `tasks.task.created.v1`. Everything that can refuse the call — the batch
+ * `tasks.task.created.v1`.
+ *
+ * **Idempotent by source key** (R-19, issue #450). An entry with a
+ * `sourceKey` the context already holds is not created again: the existing
+ * Task's id stands in its place in `ids`, in input order, and the Task is left
+ * as it is. A key repeated within one call is created once. Two calls racing
+ * over the same keys are settled by the unique index on `(context_type,
+ * context_id, source_key)`: the loser's Command fails on it, rolls back whole
+ * (no audit row, no event), and the winner's id is answered — so a retry after
+ * a failure part way through a batch creates only what is missing.
+ *
+ * Everything that can refuse the call — the batch
  * size, an entry's shape, the context's owner, an assignee — is checked
  * before the first Command runs, so a refused call writes nothing. The caller
  * calls it **after its own commit** (research R-8): each Command opens its own
@@ -55,7 +67,10 @@ export interface TaskWritePortDeps {
 }
 
 /** One entry as the Command writes it, and the group it overrides the call's with. */
-type ValidEntry = Omit<NewTaskFields, 'status'> & { contextGroupId: string | null | undefined };
+type ValidEntry = Omit<NewTaskFields, 'status' | 'sourceKey'> & {
+  contextGroupId: string | null | undefined;
+  sourceKey: string | null;
+};
 
 function invalid(message: string): HttpError {
   return new HttpError(422, ERROR_CODES.VALIDATION_FAILED, message);
@@ -90,6 +105,7 @@ function validEntry(entry: NewContextTask, index: number): ValidEntry {
     dueOn,
     contextNote,
     contextGroupId: parsed.data.contextGroupId,
+    sourceKey: parsed.data.sourceKey ?? null,
   };
 }
 
@@ -113,12 +129,42 @@ export class TaskWritePortService implements TaskWritePort {
     );
     const status = (await this.deps.workflow.graph()).initial().code;
 
+    const keys = [...new Set(tasks.flatMap((task) => (task.sourceKey === null ? [] : [task.sourceKey])))];
+    const known = await this.#heldKeys(context, keys);
     const ids: string[] = [];
-    for (const { contextGroupId, ...task } of tasks) {
+    for (const { contextGroupId, sourceKey, ...task } of tasks) {
+      const existing = sourceKey === null ? undefined : known.get(sourceKey);
+      if (existing !== undefined) {
+        ids.push(existing);
+        continue;
+      }
       const where = contextGroupId === undefined ? context : { ...context, contextGroupId };
-      ids.push(await this.deps.commandBus.run(createTaskCommand(where, { ...task, status })));
+      let id: string;
+      try {
+        id = await this.deps.commandBus.run(createTaskCommand(where, { ...task, status, sourceKey }));
+      } catch (error) {
+        // Another call created this key meanwhile: the unique index refused
+        // this one, whose Command rolled back whole. Its Task is the answer.
+        if (sourceKey === null || !(error instanceof UniqueConstraintViolationException)) throw error;
+        const winner = (await this.#heldKeys(context, [sourceKey])).get(sourceKey);
+        if (winner === undefined) throw error;
+        id = winner;
+      }
+      if (sourceKey !== null) known.set(sourceKey, id);
+      ids.push(id);
     }
     return { ids };
+  }
+
+  /** Which of `keys` the context already holds, and the id of the Task holding each. */
+  async #heldKeys(context: TaskContext, keys: readonly string[]): Promise<Map<string, string>> {
+    if (keys.length === 0) return new Map();
+    const rows = (await this.deps.emFactory().execute(
+      `select "id", "source_key" from "tasks"
+        where "context_type" = ? and "context_id" = ? and "source_key" in (${keys.map(() => '?').join(', ')})`,
+      [context.contextType, context.contextId, ...keys],
+    )) as Array<{ id: string; source_key: string }>;
+    return new Map(rows.map((row) => [row.source_key, row.id]));
   }
 
   async deleteInContext(q: { contextType: string; contextId: string }): Promise<{ deleted: number }> {

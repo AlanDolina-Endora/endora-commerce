@@ -98,6 +98,12 @@ export interface NewTaskFields {
   draft?: boolean;
   /** Visible to its Creator and `tasks:see_private` holders (FR-038); the caller checked it has no context. */
   private?: boolean;
+  /**
+   * The context owner's own key for the Task (R-19), unique per context: a
+   * second Task with it fails the Command on the unique index, which the write
+   * port reads as "already created". Only the write port sets it.
+   */
+  sourceKey?: string | null;
 }
 
 /** The editable fields a `tasks.task.update` changes; `undefined` leaves one as it is. */
@@ -206,6 +212,7 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
         priorityCode: input.priorityCode ?? null,
         customFieldValues: input.customFieldValues ?? {},
         parentTaskId,
+        sourceKey: input.sourceKey ?? null,
         createdByAdminUserId: actor.actorAdminUserId,
         contextType: context?.contextType ?? null,
         contextId: context?.contextId ?? null,

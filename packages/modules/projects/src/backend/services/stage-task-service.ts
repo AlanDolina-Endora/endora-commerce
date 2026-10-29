@@ -54,6 +54,15 @@ import { responsibleRoleNote } from './task-context-descriptor.js';
  *   (`projects.project.stage_tasks_failed`); `POST …/materialize-tasks` then
  *   creates them once (`projects.project.stage_tasks_retry`), and refuses with
  *   409 `PROJECT_STAGE_TASKS_NOT_RETRYABLE` otherwise.
+ * - **No duplicates** (`specs/165-task-management/` R-19, issue #450). A
+ *   failure can come part way through — `createMany` commits one Task at a
+ *   time — so each Task carries its definition's id as its `sourceKey`, and
+ *   `createMany` answers the Task an earlier attempt created for a key instead
+ *   of creating another. A retry therefore creates only what is missing, however
+ *   many earlier attempts failed and wherever. The retry's claim (the stamp,
+ *   under the Project's lock) stays: it is what answers a second retry at once
+ *   with 409 rather than with a second, redundant pass, and the source key is
+ *   what makes a pass that does run harmless.
  *
  * Every Project is loaded through `ProjectAccess.loadVisible`, or was by the
  * caller that hands its id here; Stages, definitions and Members are read by
@@ -206,7 +215,11 @@ export class StageTaskService {
     }
   }
 
-  /** `POST /projects/:id/stages/:stageId/materialize-tasks` — once, after a recorded failure. */
+  /**
+   * `POST /projects/:id/stages/:stageId/materialize-tasks` — once, after a
+   * recorded failure. `created` counts the Stage's Tasks once it has run, those
+   * an earlier attempt created included: `createMany` answers their ids too.
+   */
   async retry(projectId: string, stageId: string): Promise<{ created: number }> {
     const visible = await this.deps.access.loadVisible(projectId);
     if (!this.deps.tasks.present()) throw new ModuleDisabledError('tasks');
@@ -337,10 +350,10 @@ export class StageTaskService {
     )) as Array<{ started_on: string | null }>;
     if (!stage) return [];
     const definitions = (await em.execute(
-      `select t."title", t."description", t."responsible_role_id", t."due_offset_days"
+      `select t."id", t."title", t."description", t."responsible_role_id", t."due_offset_days"
          from "project_stage_tasks" t where t."stage_id" = ? order by t."position", t."id"`,
       [stageId],
-    )) as Array<{ title: string; description: string; responsible_role_id: string | null; due_offset_days: number }>;
+    )) as Array<{ id: string; title: string; description: string; responsible_role_id: string | null; due_offset_days: number }>;
     if (definitions.length === 0) return [];
 
     const roleIds = [...new Set(definitions.map((d) => d.responsible_role_id).filter((id): id is string => id !== null))];
@@ -371,6 +384,8 @@ export class StageTaskService {
         dueOn: startedOn === null ? null : addDays(startedOn, definition.due_offset_days),
         assigneeIds: assignee === null ? [] : [assignee],
         contextNote: roleId && assignee === null ? responsibleRoleNote(roleId) : null,
+        // The definition's id: a retry creates only the Tasks still missing (#450).
+        sourceKey: definition.id,
       };
     });
   }

@@ -1081,18 +1081,24 @@ Every existing tasks, Projects and demo test must be green on the new shape befo
 
 **Independent Test**: `quickstart.md` §1, US10 row.
 
-- [ ] T084 [P] [US10] Extend `backend/test/integration/projects/stage-tasks.test.ts`. Force `taskWritePort.createMany` to fail after 2 of 5 Tasks: inject a failing Command on the third via the test seam the existing failure test uses (read it first). Then call `POST …/materialize-tasks` three times, including two concurrently. Assert exactly 5 Tasks, each with a distinct `source_key`.
+- [X] T084 [P] [US10] Extend `backend/test/integration/projects/stage-tasks.test.ts`. Force `taskWritePort.createMany` to fail after 2 of 5 Tasks: inject a failing Command on the third via the test seam the existing failure test uses (read it first). Then call `POST …/materialize-tasks` three times, including two concurrently. Assert exactly 5 Tasks, each with a distinct `source_key`.
+  - The existing failure test spies `createMany` whole; a failure *part way* needs the Commands, so the case spies the shared `commandBus.run` (the port holds the container's instance) and throws on the n-th `tasks.task.create`. Timeline: the move fails on the 3rd (2 exist); the first retry fails on its 2nd create (3 exist, not 200, the Stage still says failed); then two retries at once — one 200, one 409 `PROJECT_STAGE_TASKS_NOT_RETRYABLE` (the claim). Asserts 5 rows whose `source_key`s are exactly the five definition ids, the five titles, and the failure flag cleared.
+  - Seen red 2026-10-29 for the stated reason: `expected [ …(8) ] to have a length of 5 but got 8` — the port dropped `sourceKey`, so the first retry re-created from the start. Green after T086.
+  - Added at the port (`integration/tasks/write-port.test.ts`, *a source key makes creation idempotent*): a key the context holds is skipped and its id answered in input order, the Task left as it was (title, one audit row); a key repeated in one call is created once; a key is per context; two `createMany` at once with the same five keys create five and answer the same ids; and the **unique-violation path made deterministic** — a second connection holds an uncommitted Task with the key, the call waits on the unique index (observed in `pg_stat_activity`), and after that commit answers the other Task's id. All three red first (`expected '63f1…' to be 'adba…'`, and the concurrent cases); the two race cases also red with only the `catch` disabled, so the concurrent case does exercise the race.
 - [ ] T085 [P] [US10] Write failing `backend/test/integration/tasks/maintenance.test.ts`:
   - with Tasks off, delete a Project with 3 Tasks and a Stage with 2 Tasks of another Project;
   - with Tasks on, run the maintenance pass: the 3 Tasks are deleted (audit `reason: context_gone`) and the 2 lose `context_group_id`;
   - with Projects **off**, a pass deletes nothing;
   - a contributor without `existingContexts` is never cleaned;
   - a pass with nothing to do enters no scope.
-- [ ] T086 [US10] Implement the source key.
+- [X] T086 [US10] Implement the source key.
   - `T/backend/services/task-write-port.ts`: skip a `sourceKey` that already exists, return its existing id in order, and treat a unique violation as "already created".
   - `P/backend/services/stage-task-service.ts`: pass `sourceKey = definition.id`. Simplify `retry()` only where the docblock explains why the guard is no longer needed. Otherwise keep it.
 
   T084 green.
+  - Done 2026-10-29. `TaskWritePortService.createMany` reads the keys the context already holds (one `in (…)` lookup, `#heldKeys`), answers their ids in place, remembers keys it creates within the call, and passes `sourceKey` into `createTaskCommand` (`NewTaskFields.sourceKey`, written to `tasks.source_key`). A `UniqueConstraintViolationException` on a keyed entry re-reads that key and answers the winner's id (the loser's Command rolled back whole — no audit row, no event); any other error, or no winner found, is rethrown. Seam: `task-write-port.ts` reason widened in `TASK_ACCESS_READERS`, `RULE_SCOPED_READ_LEDGER` 1 → 2.
+  - Projects: `#newTasks` selects the definition's `id` and passes it as `sourceKey`. **`retry()` kept as it is**: its claim (the stamp under the Project's lock) is what answers a concurrent second retry with 409 instead of a redundant pass; the docblock now says the source key makes a pass that does run harmless. `created` in the retry's answer counts the Stage's Tasks after it ran, earlier attempts' included (`createMany` answers their ids) — documented on the method; no contract change.
+  - T084 green (stage-tasks 7/7, write-port 10/10).
 - [ ] T087 [US10] Implement the clean-up.
   - `P/backend/services/task-context-descriptor.ts`: `existingContexts`.
   - `P/backend/services/project-access.ts`: a system-mode existence query. Update the ledger.

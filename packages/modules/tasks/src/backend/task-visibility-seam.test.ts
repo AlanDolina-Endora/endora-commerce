@@ -225,7 +225,7 @@ const RULE_SCOPED_READ_LEDGER: Readonly<Record<string, number>> = {
   'services/task-service.ts': 21,
   'services/task-visibility.ts': 0,
   'services/task-reassignment.ts': 1,
-  'services/task-write-port.ts': 1,
+  'services/task-write-port.ts': 2,
   'services/workflow-config-service.ts': 2,
 };
 
