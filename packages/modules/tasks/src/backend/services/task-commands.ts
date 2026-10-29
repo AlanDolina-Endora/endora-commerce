@@ -22,7 +22,7 @@ import { assertParentFits, lockHierarchy } from './hierarchy-service.js';
 import { newlyMentioned } from './mention-service.js';
 import { dueMomentOf, followDueMoment } from './reminder-schedule.js';
 import { referenceRowsFor } from './reference-service.js';
-import { taskAssigneeInvalid, taskNotFound } from './task-errors.js';
+import { taskAlreadyPublished, taskAssigneeInvalid, taskNotFound } from './task-errors.js';
 import { nextTaskNumber } from './task-number.js';
 
 /**
@@ -42,7 +42,14 @@ import { nextTaskNumber } from './task-number.js';
  * | `tasks.task.parent_change` (`hierarchy-service.ts`) | — |
  * | `tasks.task.relate` / `.unrelate` (`relation-service.ts`) | — |
  * | `tasks.task.link` / `.unlink` (`record-link-service.ts`) | — |
+ * | `tasks.task.publish` | `tasks.task.created.v1` |
+ * | `tasks.task.privacy_change` | — |
  * | `tasks.task.delete` | `tasks.task.deleted.v1` |
+ *
+ * **A draft emits nothing** (research R-3): for every other module it does
+ * not exist until it is published, so its creation, assignee changes, status
+ * moves and deletion are audited but published as no event; publishing it
+ * emits `tasks.task.created.v1`, with the assignees it has then.
  *
  * Shared by the HTTP service and the write port, so a Task created by another
  * module is the same Command as one created on the Tasks screen. Every
@@ -85,6 +92,10 @@ export interface NewTaskFields {
   contextNote: string | null;
   /** The workflow's initial status at the moment of the call (data-model §5). */
   status: string;
+  /** Visible to its Creator only until published (FR-037); never set by the write port. */
+  draft?: boolean;
+  /** Visible to its Creator and `tasks:see_private` holders (FR-038); the caller checked it has no context. */
+  private?: boolean;
 }
 
 /** The editable fields a `tasks.task.update` changes; `undefined` leaves one as it is. */
@@ -144,7 +155,7 @@ async function rewriteDescriptionReferences(em: EntityManager, taskId: string, d
   }
 }
 
-/** `tasks.task.create` — the result is the new Task's id. Published at once (drafts arrive with US8). */
+/** `tasks.task.create` — the result is the new Task's id. Published at once unless it is a draft (R-3). */
 export function createTaskCommand(context: TaskContext | null, input: NewTaskFields): Command<string> {
   const id = randomUUID();
   let created: Task | null = null;
@@ -183,7 +194,9 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
         contextId: context?.contextId ?? null,
         contextGroupId: context?.contextGroupId ?? null,
         contextNote: input.contextNote,
-        publishedAt: now,
+        isDraft: input.draft ?? false,
+        isPrivate: input.private ?? false,
+        publishedAt: input.draft ? null : now,
       });
       const references = referenceRowsFor({ taskId: id, kind: 'description', sourceId: null }, input.description);
       const links = input.links ?? [];
@@ -217,6 +230,8 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
         before: null,
         after: {
           ...auditSnapshot(task),
+          ...(task.isDraft ? { draft: true } : {}),
+          ...(task.isPrivate ? { private: true } : {}),
           priorityCode: task.priorityCode ?? null,
           assigneeIds: [...input.assigneeIds],
           tagIds,
@@ -228,15 +243,70 @@ export function createTaskCommand(context: TaskContext | null, input: NewTaskFie
     },
     event: () => {
       const task = created!;
-      const payload: TaskCreatedEvent = {
-        ...envelope(),
-        taskId: task.id,
-        contextType: task.contextType ?? null,
-        contextId: task.contextId ?? null,
-        contextGroupId: task.contextGroupId ?? null,
-        assigneeIds: [...input.assigneeIds],
+      // A draft does not exist for other modules yet: `tasks.task.publish` announces it.
+      if (task.isDraft) return undefined;
+      return { eventName: TASKS_EVENTS.CREATED, payload: createdEvent(task, input.assigneeIds) };
+    },
+  };
+}
+
+function createdEvent(task: Task, assigneeIds: readonly string[]): TaskCreatedEvent {
+  return {
+    ...envelope(),
+    taskId: task.id,
+    contextType: task.contextType ?? null,
+    contextId: task.contextId ?? null,
+    contextGroupId: task.contextGroupId ?? null,
+    assigneeIds: [...assigneeIds],
+  };
+}
+
+/**
+ * `tasks.task.publish` — a draft becomes a normal Task (FR-037), one-way.
+ * Re-checked under the lock, so two publishes of one draft publish it once:
+ * the second is 409 `TASK_ALREADY_PUBLISHED`. Emits `tasks.task.created.v1`
+ * with the assignees it has now; telling them is the caller's, after commit.
+ * Whether the caller is its Creator is the caller's to have asked.
+ */
+export function publishTaskCommand(id: string): Command<{ assigneeIds: string[] }> {
+  let published: Task | null = null;
+  return {
+    action: 'tasks.task.publish',
+    objectType: 'task',
+    objectId: id,
+    run: async ({ em }) => {
+      const scoped = em as EntityManager;
+      const task = await lockedTask(scoped, id);
+      if (!task.isDraft) throw taskAlreadyPublished();
+      task.isDraft = false;
+      task.publishedAt = new Date();
+      published = task;
+      return {
+        result: { assigneeIds: await assigneesOf(scoped, id) },
+        before: { draft: true, publishedAt: null },
+        after: { draft: false, publishedAt: task.publishedAt.toISOString() },
       };
-      return { eventName: TASKS_EVENTS.CREATED, payload };
+    },
+    event: (result) => ({ eventName: TASKS_EVENTS.CREATED, payload: createdEvent(published!, result.assigneeIds) }),
+  };
+}
+
+/**
+ * `tasks.task.privacy_change` — the Task made private or public again by its
+ * Creator (FR-038). `false` when it already was (nothing written, nothing
+ * audited). Its having no context and no assignee but the Creator is the
+ * caller's to have checked; the database's check holds the first.
+ */
+export function changeTaskPrivacyCommand(id: string, isPrivate: boolean): Command<boolean> {
+  return {
+    action: 'tasks.task.privacy_change',
+    objectType: 'task',
+    objectId: id,
+    run: async ({ em }) => {
+      const task = await lockedTask(em as EntityManager, id);
+      if (task.isPrivate === isPrivate) return { result: false, skipAudit: true };
+      task.isPrivate = isPrivate;
+      return { result: true, before: { private: !isPrivate }, after: { private: isPrivate } };
     },
   };
 }
@@ -359,13 +429,14 @@ export function changeTaskAssigneesCommand(
   id: string,
   change: AssigneeChange,
 ): Command<{ added: string[]; removed: string[] } | undefined> {
+  let draft = false;
   return {
     action: 'tasks.task.assignees_change',
     objectType: 'task',
     objectId: id,
     run: async ({ em, actor }) => {
       const scoped = em as EntityManager;
-      await lockedTask(scoped, id);
+      draft = (await lockedTask(scoped, id)).isDraft;
       const current = await assigneesOf(scoped, id);
       const next =
         'set' in change
@@ -394,7 +465,7 @@ export function changeTaskAssigneesCommand(
       };
     },
     event: (result) => {
-      if (!result) return undefined;
+      if (!result || draft) return undefined;
       const payload: TaskAssigneesChangedEvent = { ...envelope(), taskId: id, ...result };
       return { eventName: TASKS_EVENTS.ASSIGNEES_CHANGED, payload };
     },
@@ -417,7 +488,7 @@ export interface TaskDeletion {
  * port — a former sub-task's history says why it has no parent any more.
  */
 export function deleteTaskCommand(id: string, auditLog: AuditPort): Command<TaskDeletion> {
-  let gone: { contextType: string | null; contextId: string | null } | null = null;
+  let gone: { contextType: string | null; contextId: string | null; draft: boolean } | null = null;
   return {
     action: 'tasks.task.delete',
     objectType: 'task',
@@ -428,7 +499,7 @@ export function deleteTaskCommand(id: string, auditLog: AuditPort): Command<Task
       const task = await scoped.findOne(Task, { id });
       if (!task) return { result: { deleted: false, detachedIds: [] }, skipAudit: true };
       const before = auditSnapshot(task);
-      gone = { contextType: task.contextType ?? null, contextId: task.contextId ?? null };
+      gone = { contextType: task.contextType ?? null, contextId: task.contextId ?? null, draft: task.isDraft };
       // Keyed by the Task the caller loaded: its sub-tasks, whoever may see them.
       const children = (await scoped.execute(`select "id" from "tasks" where "parent_task_id" = ? order by "id"`, [
         id,
@@ -450,8 +521,13 @@ export function deleteTaskCommand(id: string, auditLog: AuditPort): Command<Task
       };
     },
     event: (result) => {
-      if (!result.deleted || !gone) return undefined;
-      const payload: TaskDeletedEvent = { ...envelope(), taskId: id, ...gone };
+      if (!result.deleted || !gone || gone.draft) return undefined;
+      const payload: TaskDeletedEvent = {
+        ...envelope(),
+        taskId: id,
+        contextType: gone.contextType,
+        contextId: gone.contextId,
+      };
       return { eventName: TASKS_EVENTS.DELETED, payload };
     },
   };

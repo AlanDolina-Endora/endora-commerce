@@ -231,6 +231,8 @@ export const manifest = defineModuleManifest({
     { code: 'TASK_HIERARCHY_TOO_DEEP' },
     { code: 'TASK_LINK_INVALID' },
     { code: 'TASK_REMINDER_INVALID' },
+    { code: 'TASK_PRIVATE_ASSIGNEE' },
+    { code: 'TASK_ALREADY_PUBLISHED' },
   ],
   /**
    * The command palette (Principle XVI, FR-041; `contracts/admin-surfaces.md`

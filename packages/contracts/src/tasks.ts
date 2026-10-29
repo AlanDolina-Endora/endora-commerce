@@ -1031,8 +1031,13 @@ export const TASKS_ERROR_CODES = [
   'TASK_PRIVATE_ASSIGNEE',
   /** A change to someone else's private Task by a holder of `tasks:see_private` (403). */
   'TASK_PRIVATE_READ_ONLY',
-  /** Publishing someone else's draft (403). */
-  'TASK_DRAFT_ONLY_CREATOR',
+  /**
+   * Publishing a Task that is not a draft any more (409) — publishing is
+   * one-way. Somebody else's draft is not refused with a code of its own: it
+   * does not exist for them (404 `TASK_NOT_FOUND`, FR-037, SC-005), so the
+   * `TASK_DRAFT_ONLY_CREATOR` the plan named could never be raised (T078).
+   */
+  'TASK_ALREADY_PUBLISHED',
   /** A parent that would close a cycle (422). */
   'TASK_PARENT_CYCLE',
   /** A parent that would nest deeper than {@link TASK_HIERARCHY_DEPTH_MAX} (422). */

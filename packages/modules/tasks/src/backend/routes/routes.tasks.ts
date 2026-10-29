@@ -58,8 +58,9 @@ export function refuseUnofferedCustomField(error: unknown): never {
 
 /**
  * Tasks (`specs/165-task-management/contracts/admin-api.md` §1, grown from
- * 163's). Reading is `tasks:read`; creating, editing, a status move, deleting
- * and the assignee picker are `tasks:write`. A Task the caller may not see —
+ * 163's). Reading is `tasks:read`; creating, editing, a status move,
+ * publishing a draft, deleting and the assignee picker are `tasks:write` — and
+ * a holder of `tasks:see_private` may delete a private Task with `tasks:read`. A Task the caller may not see —
  * its context hidden, or another admin's draft or private Task — answers 404
  * `TASK_NOT_FOUND`, the same as a missing one, and is absent from every list.
  *
@@ -90,9 +91,11 @@ export async function registerTaskRoutes(app: FastifyInstance, deps: TaskRoutesD
       .catch(refuseUnofferedCustomField),
   }));
 
-  app.get(`${API}/lookups/assignees`, { preHandler: requireAdmin('tasks:write') }, async (request) => ({
-    data: await tasks.assignees(TaskAssigneeLookupQuerySchema.parse(request.query ?? {}).q),
-  }));
+  // For a private Task (`taskId`), its Creator alone (FR-038).
+  app.get(`${API}/lookups/assignees`, { preHandler: requireAdmin('tasks:write') }, async (request) => {
+    const query = TaskAssigneeLookupQuerySchema.parse(request.query ?? {});
+    return { data: await tasks.assignees(query.q, query.taskId) };
+  });
 
   // Who a text of a Task may mention (admin-api §3): somebody who may see it.
   app.get(`${API}/lookups/mentionable`, { preHandler: requireAdmin('tasks:read') }, async (request) => ({
@@ -161,9 +164,20 @@ export async function registerTaskRoutes(app: FastifyInstance, deps: TaskRoutesD
     }),
   );
 
+  // Publishing a draft (FR-037): `tasks:write`, and the service asks that the
+  // caller is its Creator — somebody else's draft is 404 for them.
+  app.post<{ Params: { id: string } }>(
+    `${API}/:id/publish`,
+    { preHandler: requireAdmin('tasks:write') },
+    async (request) => ({ data: await tasks.publish(request.params.id, await request.responseLanguage()) }),
+  );
+
   // 200, not 204: the answer says how many of the Task's sub-tasks the caller
-  // may see became top-level (FR-029, `TaskDeleteResponseSchema`).
-  app.delete<{ Params: { id: string } }>(`${API}/:id`, { preHandler: requireAdmin('tasks:write') }, async (request) => ({
+  // may see became top-level (FR-029, `TaskDeleteResponseSchema`). The gate is
+  // `tasks:read`: a holder of `tasks:see_private` may delete someone else's
+  // private Task without `tasks:write` (FR-041, Q1 = B), and the service
+  // refuses everyone else with the 403 the gate would have given.
+  app.delete<{ Params: { id: string } }>(`${API}/:id`, { preHandler: requireAdmin('tasks:read') }, async (request) => ({
     data: await tasks.delete(request.params.id),
   }));
 

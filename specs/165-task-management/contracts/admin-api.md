@@ -27,7 +27,7 @@
 | `POST /tasks` | W | `CreateTaskBody` | 201 `TaskDetail` |
 | `PATCH /tasks/:id` | W | `UpdateTaskBody` | `TaskDetail` |
 | `POST /tasks/:id/status` | W | `{to: code, from: code}` | `{task: TaskDetail, openSubtasks: number}`. 409 `TASK_TRANSITION_FORBIDDEN {allowedTargets}`, 409 `TASK_TRANSITION_CONFLICT`, 422 `TASK_STATUS_UNKNOWN` |
-| `POST /tasks/:id/publish` | W (Creator) | — | `TaskDetail`. 403 `TASK_DRAFT_ONLY_CREATOR`; 409 when the Task is not a draft |
+| `POST /tasks/:id/publish` | W (Creator) | — | `TaskDetail`. Somebody else's draft is 404 `TASK_NOT_FOUND`, as for any hidden Task; 409 `TASK_ALREADY_PUBLISHED` when the Task is not a draft (settled at T078; was written "403 `TASK_DRAFT_ONLY_CREATOR`", which no caller could reach without the draft first being revealed to them) |
 | `DELETE /tasks/:id` | W, or R + `tasks:see_private` on a private Task | — | 200 `{data: {subtasksDetached}}` — the former sub-tasks the caller may see (settled at T062; was written "204 … also reports") |
 | `GET /tasks/:id/history` | R | cursor | `RecordHistoryPage`; references are resolved |
 

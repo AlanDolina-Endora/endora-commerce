@@ -509,6 +509,18 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Phase 9): a reminder naming a recipient who is neither the caller nor an assignee, an eleventh ' +
       'reminder on one Task, or a reminder relative to the due moment of a Task that has none.',
   },
+  TASK_PRIVATE_ASSIGNEE: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 10): a private Task given an assignee other than its Creator, on create or on edit.',
+  },
+  TASK_ALREADY_PUBLISHED: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 10): publishing a Task that is no longer a draft — publishing is one-way.',
+  },
   PROJECT_NOT_FOUND: {
     to: 'projects',
     reason:

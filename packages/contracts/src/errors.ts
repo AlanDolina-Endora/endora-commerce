@@ -716,6 +716,10 @@ export const ERROR_CODES = {
   TASK_STATUS_IN_USE_TOO_MANY: 'TASK_STATUS_IN_USE_TOO_MANY',
   /** A change to someone else's private Task by a holder of `tasks:see_private` (R-3). */
   TASK_PRIVATE_READ_ONLY: 'TASK_PRIVATE_READ_ONLY',
+  /** A private Task given an assignee other than its Creator (R-3, FR-038). */
+  TASK_PRIVATE_ASSIGNEE: 'TASK_PRIVATE_ASSIGNEE',
+  /** Publishing a Task that is no longer a draft: publishing is one-way (R-3, FR-037). */
+  TASK_ALREADY_PUBLISHED: 'TASK_ALREADY_PUBLISHED',
   /** A Task priority code that is not configured (R-9). */
   TASK_PRIORITY_UNKNOWN: 'TASK_PRIORITY_UNKNOWN',
   /** A Task tag id that does not exist (R-10). */

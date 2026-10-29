@@ -97,7 +97,7 @@ export class TaskTransitionService {
     const row = await this.deps.access.loadVisible(id);
     this.deps.access.assertMayChange(row);
     const workflow = this.deps.workflow;
-    let applied: { from: string; toCategory: TaskStatusCategory; context: Pick<TaskStatusChangedEvent, 'contextType' | 'contextId' | 'contextGroupId'> } | undefined;
+    let applied: { from: string; draft: boolean; toCategory: TaskStatusCategory; context: Pick<TaskStatusChangedEvent, 'contextType' | 'contextId' | 'contextGroupId'> } | undefined;
 
     await this.deps.commandBus.run({
       action: 'tasks.task.status_change',
@@ -120,6 +120,7 @@ export class TaskTransitionService {
         else task.completedAt = null;
         applied = {
           from,
+          draft: task.isDraft,
           toCategory: target.category,
           context: {
             contextType: task.contextType ?? null,
@@ -130,7 +131,8 @@ export class TaskTransitionService {
         return { result: undefined, before, after: auditSnapshot(task) };
       },
       event: () => {
-        if (!applied) return undefined;
+        // A draft does not exist for other modules yet (research R-3).
+        if (!applied || applied.draft) return undefined;
         const payload: TaskStatusChangedEvent = {
           ...envelope(),
           taskId: row.id,

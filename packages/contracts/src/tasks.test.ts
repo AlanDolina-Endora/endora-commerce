@@ -491,7 +491,7 @@ describe('ports, events and error codes', () => {
       'TASK_TAG_UNKNOWN',
       'TASK_PRIVATE_ASSIGNEE',
       'TASK_PRIVATE_READ_ONLY',
-      'TASK_DRAFT_ONLY_CREATOR',
+      'TASK_ALREADY_PUBLISHED',
       'TASK_PARENT_CYCLE',
       'TASK_HIERARCHY_TOO_DEEP',
       'TASK_LINK_INVALID',

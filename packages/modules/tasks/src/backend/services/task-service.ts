@@ -1,5 +1,6 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
+  ERROR_CODES,
   foldDiacritics,
   TASK_MINE_MAX,
   mentionedAdminUserIds,
@@ -31,7 +32,8 @@ import {
   type TaskWorkflow,
   type UpdateTaskBody,
 } from '@endora-commerce/contracts';
-import type { CommandBus } from '@endora-commerce/platform/commands';
+import type { Command, CommandBus } from '@endora-commerce/platform/commands';
+import { HttpError } from '@endora-commerce/platform/http';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { TaskAdminSearchQuery, TaskAdminSearchRow } from '../admin-search-provider.js';
 import { cardFieldValues } from '../domain/board-card-fields.js';
@@ -64,16 +66,24 @@ import {
   changeTaskAssigneesCommand,
   changeTaskCustomFieldsCommand,
   changeTaskPriorityCommand,
+  changeTaskPrivacyCommand,
   changeTaskTagsCommand,
   createTaskCommand,
   deleteTaskCommand,
+  publishTaskCommand,
   updateTaskCommand,
   type AssigneeChange,
   type TaskFieldChanges,
 } from './task-commands.js';
 import { mergeTaskCustomFields } from './task-custom-fields.js';
 import type { TaskContextRegistry } from './task-context-registry.js';
-import { taskNotFound } from './task-errors.js';
+import {
+  mapDraftPrivateViolation,
+  taskAlreadyPublished,
+  taskNotFound,
+  taskPrivateAssignee,
+  taskPrivateInContext,
+} from './task-errors.js';
 import { tellAfterCommit, type TaskNotifier } from './task-notifier.js';
 import type { TaskTransitionService } from './task-transition-service.js';
 import { taskVisibilitySql, type SqlFragment, type TaskVisibility, type TaskVisibilityScope } from './task-visibility.js';
@@ -151,6 +161,16 @@ const ADMIN_PERMISSION_WILDCARD = '*';
 
 function holds(held: readonly string[], code: string): boolean {
   return held.includes(ADMIN_PERMISSION_WILDCARD) || held.includes(code);
+}
+
+/** The platform's own refusal of a write the caller's permissions do not cover (`requireAdmin`'s words). */
+function forbidden(message = 'You do not have permission to perform this action.'): HttpError {
+  return new HttpError(403, ERROR_CODES.FORBIDDEN, message);
+}
+
+/** A private Task is assigned to its Creator or to nobody (FR-038, R-3). */
+function assertPrivateAssignees(assigneeIds: readonly string[], creatorId: string | null): void {
+  if (assigneeIds.some((id) => id !== creatorId)) throw taskPrivateAssignee();
 }
 
 function personName(person: Pick<AdminUserRecord, 'firstName' | 'lastName' | 'email'>): string {
@@ -572,11 +592,16 @@ export class TaskService {
    */
   async create(body: CreateTaskBody, language: SupportedLanguage): Promise<TaskDetail> {
     const context = body.context ?? null;
+    const isDraft = body.draft ?? false;
+    const isPrivate = body.private ?? false;
+    // The schema refuses both together; this holds the rule wherever the body came from (FR-038).
+    if (isPrivate && context) throw taskPrivateInContext();
     if (context) {
       await assertContextForCaller(this.deps.contexts, context);
       await assertMayPutIn(this.deps.contexts, null, context);
     }
     const assigneeIds = [...new Set(body.assigneeIds ?? [])];
+    if (isPrivate) assertPrivateAssignees(assigneeIds, actingAdminUserId());
     await assertMayBeAssigned(this.deps.adminUsers, this.deps.permissions, assigneeIds);
     const priorityCode = body.priorityCode ?? null;
     await this.deps.priorities.assertKnown(priorityCode);
@@ -589,7 +614,7 @@ export class TaskService {
     const due = await this.#due({ dueOn: null, dueAt: null }, body);
     const description = body.description ?? '';
     const graph = await this.deps.workflow.graph();
-    const id = await this.deps.commandBus.run(
+    const id = await this.#run(
       createTaskCommand(context, {
         title: body.title,
         description,
@@ -604,13 +629,44 @@ export class TaskService {
         links,
         contextNote: null,
         status: graph.initial().code,
+        draft: isDraft,
+        private: isPrivate,
       }),
     );
     const row = await this.deps.access.rowAfterWrite(id);
     const task = await this.#detail(row, language);
-    await this.#tellAssignees(assigneeIds, row);
-    await this.deps.mentions.tell(row, mentionedAdminUserIds(description));
+    // A draft tells nobody: it is told about when it is published (FR-037).
+    if (!row.is_draft) {
+      await this.#tellAssignees(assigneeIds, row);
+      await this.deps.mentions.tell(row, mentionedAdminUserIds(description));
+    }
     return task;
+  }
+
+  /**
+   * `POST /tasks/:id/publish` — the Creator's draft becomes a normal Task, one
+   * way (FR-037, research R-3): `tasks.task.created.v1` is emitted now, and its
+   * assignees and the people its description mentions are told as for a new
+   * Task. Somebody else's draft does not exist for the caller (404, through
+   * `loadVisible`); a Task that is not a draft is 409 `TASK_ALREADY_PUBLISHED`.
+   */
+  async publish(id: string, language: SupportedLanguage): Promise<TaskDetail> {
+    const row = await this.deps.access.loadVisible(id);
+    this.deps.access.assertMayChange(row);
+    if (!row.is_draft) throw taskAlreadyPublished();
+    // Unreachable through visibility — a draft is its Creator's alone — and kept so.
+    if (row.created_by_admin_user_id !== actingAdminUserId()) throw taskNotFound();
+    const { assigneeIds } = await this.deps.commandBus.run(publishTaskCommand(row.id));
+    const written = await this.deps.access.rowAfterWrite(row.id);
+    const task = await this.#detail(written, language);
+    await this.#tellAssignees(assigneeIds, written);
+    await this.deps.mentions.tell(written, mentionedAdminUserIds(written.description));
+    return task;
+  }
+
+  /** One Command, a draft/private check the database refused answered as the service would (R-3). */
+  async #run<T>(command: Command<T>): Promise<T> {
+    return this.deps.commandBus.run(command).catch(mapDraftPrivateViolation);
   }
 
   /**
@@ -643,6 +699,26 @@ export class TaskService {
     if (assignees) {
       await assertMayBeAssigned(this.deps.adminUsers, this.deps.permissions, 'set' in assignees ? assignees.set : assignees.add);
     }
+
+    // Private (FR-038): only its Creator says so, and a private Task is in no
+    // context and assigned to nobody but its Creator — as it will be after this write.
+    const privacyChange = body.private !== undefined && body.private !== row.is_private;
+    if (privacyChange && row.created_by_admin_user_id !== actingAdminUserId()) {
+      throw forbidden('Only the administrator who created this Task can change whether it is private.');
+    }
+    if (body.private ?? row.is_private) {
+      const contextAfter = body.context !== undefined ? body.context : row.context_type;
+      if (contextAfter) throw taskPrivateInContext();
+      if (privacyChange || assignees) {
+        const current = (await this.#assigneeIds([row.id])).get(row.id) ?? [];
+        const after = !assignees
+          ? current
+          : 'set' in assignees
+            ? assignees.set
+            : [...current.filter((who) => !assignees.remove.includes(who)), ...assignees.add];
+        assertPrivateAssignees(after, row.created_by_admin_user_id);
+      }
+    }
     const priorityChange = body.priorityCode !== undefined && body.priorityCode !== row.priority_code;
     if (priorityChange) await this.deps.priorities.assertKnown(body.priorityCode ?? null);
     if (body.tagIds !== undefined) await this.deps.tags.assertKnown(body.tagIds);
@@ -651,6 +727,8 @@ export class TaskService {
         ? await mergeTaskCustomFields(this.deps.customFields, row.custom_field_values ?? {}, body.customFieldValues)
         : null;
 
+    // Made public first, so a context given in the same write lands on a public Task.
+    if (privacyChange && body.private === false) await this.#run(changeTaskPrivacyCommand(row.id, false));
     if (body.parentTaskId !== undefined) await this.deps.hierarchy.setParent(row, body.parentTaskId);
 
     const fields: TaskFieldChanges = {};
@@ -664,7 +742,7 @@ export class TaskService {
     let mentioned: string[] = [];
     if (Object.keys(fields).length > 0) {
       const reminders = { timeZone: await this.deps.timeZone(), auditLog: this.deps.auditLog };
-      mentioned = (await this.deps.commandBus.run(updateTaskCommand(row.id, fields, reminders))).mentioned;
+      mentioned = (await this.#run(updateTaskCommand(row.id, fields, reminders))).mentioned;
     }
     if (priorityChange) await this.deps.commandBus.run(changeTaskPriorityCommand(row.id, body.priorityCode ?? null));
     if (body.tagIds !== undefined) await this.deps.commandBus.run(changeTaskTagsCommand(row.id, body.tagIds));
@@ -675,11 +753,16 @@ export class TaskService {
       const changed = await this.deps.commandBus.run(changeTaskAssigneesCommand(row.id, assignees));
       added = changed?.added ?? [];
     }
+    // Made private last, once the context and the other assignees are gone.
+    if (privacyChange && body.private === true) await this.#run(changeTaskPrivacyCommand(row.id, true));
 
     const written = await this.deps.access.rowAfterWrite(row.id);
     const task = await this.#detail(written, language);
-    await this.#tellAssignees(added, written);
-    await this.deps.mentions.tell(written, mentioned);
+    // A draft tells nobody until it is published (FR-037).
+    if (!written.is_draft) {
+      await this.#tellAssignees(added, written);
+      await this.deps.mentions.tell(written, mentioned);
+    }
     return task;
   }
 
@@ -718,12 +801,20 @@ export class TaskService {
   }
 
   /**
-   * `DELETE /tasks/:id` — its sub-tasks become top-level (FR-029), and the
+   * `DELETE /tasks/:id` — by a holder of `tasks:write`, or of
+   * `tasks:see_private` when the Task is private (FR-041); anyone else is 403
+   * `FORBIDDEN`, as the route's gate would say. Its sub-tasks become top-level (FR-029), and the
    * answer says how many of them the caller may see: a sub-task hidden from
    * them is counted in no number of theirs (User Story 5 scenario 7).
    */
   async delete(id: string): Promise<TaskDeleteResult> {
+    // `tasks:write`, or `tasks:see_private` on a private Task (FR-041, Q1 = B).
+    const me = actingAdminUserId();
+    const held = me === null ? [ADMIN_PERMISSION_WILDCARD] : await this.deps.permissions.listPermissions(me);
+    const mayWrite = holds(held, 'tasks:write');
+    if (!mayWrite && !holds(held, 'tasks:see_private')) throw forbidden();
     const row = await this.deps.access.loadVisible(id);
+    if (!mayWrite && !row.is_private) throw forbidden();
     await this.deps.access.assertMayDelete(row);
     const { deleted, detachedIds } = await this.deps.commandBus.run(deleteTaskCommand(row.id, this.deps.auditLog));
     if (!deleted) throw taskNotFound();
@@ -761,11 +852,17 @@ export class TaskService {
     };
   }
 
-  /** `GET /tasks/lookups/assignees` — active administrators, by name. */
-  async assignees(q: string | undefined): Promise<TaskAssigneeOption[]> {
+  /**
+   * `GET /tasks/lookups/assignees` — active administrators, by name; for a
+   * private Task (`taskId`) its Creator alone (FR-038). A Task the caller may
+   * not see is 404.
+   */
+  async assignees(q: string | undefined, taskId?: string): Promise<TaskAssigneeOption[]> {
     const needle = foldDiacritics(q ?? '').trim().toLowerCase();
+    const task = taskId !== undefined ? await this.deps.access.loadVisible(taskId) : null;
+    const only = task?.is_private ? task.created_by_admin_user_id : null;
     return (await this.deps.adminUsers.listAll({ activeOnly: true }))
-      .filter((admin) => isActive(admin))
+      .filter((admin) => isActive(admin) && (only === null || admin.id === only))
       .map((admin) => ({ id: admin.id, name: personName(admin), email: admin.email }))
       .filter(
         (option) =>

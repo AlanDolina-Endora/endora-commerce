@@ -7423,6 +7423,15 @@
         }
       }
     },
+    "/api/v1/admin/tasks/{id}/publish": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/tasks/{id}/relations/{otherId}": {
       "delete": {
         "responses": {
