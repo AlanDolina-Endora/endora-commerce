@@ -41,7 +41,7 @@ export class MfaEnrolmentService {
   async setup(
     subject: MfaSubjectRef,
     accountLabel: string,
-  ): Promise<{ secret: string; otpauthUri: string }> {
+  ): Promise<{ secret: string; otpauthUri: string; qrSvg: string }> {
     const em = this.emFactory();
     const active = await em.findOne(MfaEnrolment, {
       subjectType: subject.subjectType,
@@ -59,7 +59,7 @@ export class MfaEnrolmentService {
     });
     for (const p of pendings) em.remove(p);
 
-    const { secret, otpauthUri } = generateSecret(accountLabel);
+    const { secret, otpauthUri, qrSvg } = generateSecret(accountLabel);
     const enc = this.cipher.encrypt(secret);
     const enrolment = em.create(MfaEnrolment, {
       subjectType: subject.subjectType,
@@ -72,7 +72,7 @@ export class MfaEnrolmentService {
     em.persist(enrolment);
     this.#audit(em, 'mfa.setup', subject);
     await em.flush();
-    return { secret, otpauthUri };
+    return { secret, otpauthUri, qrSvg };
   }
 
   /** Confirm the pending enrolment with a live code; issue recovery codes. */

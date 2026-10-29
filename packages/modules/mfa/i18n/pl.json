@@ -14,5 +14,7 @@
   "errors.MFA_DEACTIVATION_BLOCKED": "Nie można wyłączyć uwierzytelniania dwuskładnikowego, dopóki administratorzy muszą z niego korzystać. Najpierw wyłącz ustawienie „Admin UI — enforce 2FA” (mfa.admin.totp_enforced), a potem wyłącz moduł.",
   "nav.security.label": "Bezpieczeństwo konta",
   "actions.openSecurity.label": "Bezpieczeństwo konta",
-  "actions.openSecurity.description": "Skonfiguruj lub zmień własne uwierzytelnianie dwuskładnikowe"
+  "actions.openSecurity.description": "Skonfiguruj lub zmień własne uwierzytelnianie dwuskładnikowe",
+  "security.setup.qrAlt": "Kod QR do zeskanowania aplikacją uwierzytelniającą",
+  "security.setup.qrHint": "Zeskanuj ten kod QR aplikacją uwierzytelniającą albo wpisz poniższy klucz ręcznie."
 }
