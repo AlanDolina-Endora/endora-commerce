@@ -161,6 +161,10 @@ export function backendTestOptions(): NonNullable<UserConfig['test']> {
       // delete it. Re-asserted per test file here; the measurements and the
       // reason this is not 74 edits are in test/pinned-secrets-setup.ts.
       './test/pinned-secrets-setup.ts',
+      // Issue #315 — macOS's temp directory is reached through a symlink, and
+      // a script spawned from it fails its own main guard. See
+      // test/realpath-tmpdir-setup.ts.
+      './test/realpath-tmpdir-setup.ts',
     ],
     // Forces DATABASE_URL → b2b_test, auto-creates the DB on first run, and
     // applies migrations — unless the run declared BACKEND_TEST_SERVICES=none,

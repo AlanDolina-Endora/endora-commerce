@@ -273,9 +273,11 @@ for f in "${migration_files[@]}"; do
   # createTable("Foo") / table.string("orderItemId") — flag uppercase letters in
   # the identifier. The greedy [A-Z] match is enough; a false positive would
   # be a string in the SQL body, which is rare for these helper calls.
-  if grep -nP "(createTable|dropTable|addColumn|alterTable)\(\s*['\"][^'\"]*[A-Z]" "$f" >/dev/null 2>&1; then
+  # ERE with `[[:space:]]`, not `grep -P`: BSD grep has no `-P`, and with its
+  # error sent to /dev/null the rule matched nothing on macOS (issue #315).
+  if grep -nE "(createTable|dropTable|addColumn|alterTable)\([[:space:]]*['\"][^'\"]*[A-Z]" "$f" >/dev/null 2>&1; then
     red "✗ Migration $f references a non-snake_case identifier:"
-    grep -nP "(createTable|dropTable|addColumn|alterTable)\(\s*['\"][^'\"]*[A-Z]" "$f" | sed 's/^/    /'
+    grep -nE "(createTable|dropTable|addColumn|alterTable)\([[:space:]]*['\"][^'\"]*[A-Z]" "$f" | sed 's/^/    /'
     fail=1
   fi
 done
