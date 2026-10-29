@@ -64,21 +64,19 @@ export class AssetReferenceRegistry implements AssetReferenceRegistryPort {
     assetIds: string[],
   ): Promise<Map<string, AssetReference[]>> {
     const out = new Map<string, AssetReference[]>();
-    for (const id of assetIds) out.set(id, []);
-    if (assetIds.length === 0) return out;
-
-    const perDescriptor = await Promise.all(
-      this.descriptors.map((d) => d.findReferences(assetIds)),
-    );
-    for (const refs of perDescriptor) {
-      for (const ref of refs) {
-        // Each descriptor is responsible for tagging every reference with the
-        // *original* asset id it found; the registry does not try to cross-
-        // correlate. Descriptors that batch via WHERE asset_id = ANY($1) get
-        // the asset_id back from the row trivially.
-        const list = out.get((ref as AssetReference & { __assetId?: string }).__assetId ?? '');
-        if (list) list.push(ref);
-      }
+    // An `AssetReference` does not name the asset it points at, so a batched
+    // descriptor call cannot be attributed back to its asset ids. Ask once per
+    // asset instead — the same question the single-asset delete asks, so the
+    // two paths cannot disagree (issue #535: the batched version keyed on a
+    // field no descriptor set and returned empty lists, so a recursive folder
+    // delete never refused). This costs one round of descriptor queries per
+    // asset in the subtree; assets are asked sequentially so a large folder
+    // does not fan out descriptors × assets queries at once. Restoring a single
+    // batched query per descriptor is feature 166's R-6
+    // (specs/166-asset-reference-visibility/), which tags every hit with its
+    // asset id.
+    for (const id of assetIds) {
+      if (!out.has(id)) out.set(id, await this.findReferences(id));
     }
     return out;
   }
