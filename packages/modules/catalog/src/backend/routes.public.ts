@@ -412,6 +412,7 @@ export function readContext(request: FastifyRequest): {
     defaultCurrency: string;
     defaultLanguage: string;
     languages: readonly string[];
+    prefixDefaultLanguage: boolean;
   };
   audience: ProductAudience;
   preferredLanguage?: string | undefined;
@@ -440,6 +441,8 @@ export function readContext(request: FastifyRequest): {
       defaultLanguage: ch.defaultLanguage,
       // Feature 163 — the channel's content languages, from the resolved record.
       languages: ch.languages,
+      // Feature 167 — whether its default language carries a URL prefix.
+      prefixDefaultLanguage: ch.prefixDefaultLanguage,
     },
     audience: productAudienceOf(request),
     preferredLanguage,

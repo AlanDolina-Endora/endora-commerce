@@ -16,10 +16,10 @@ stated reason before its implementation task starts.
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirm the worktree is on `167-storefront-locale-path` from `origin/master` and `.specify/feature.json` points at `specs/167-storefront-locale-path`; run `pnpm run build:packages` and record the baseline of `pnpm --filter backend run test:unit:fast` and `pnpm --filter storefront run test`
-- [ ] T002 Read `specs/conventions/module-migrations.md`, `module-i18n.md`, `module-activation.md`, `check-estate.md`, `release-intent.md`, `module-documentation.md` before the first task that touches their subject
-- [ ] T003 [P] List every storefront file using `usePathname`, `useSelectedLayoutSegment(s)` or `x-pathname` into a scratch note (input to T037)
-- [ ] T004 **Spike (throwaway, never committed)**: in a scratch copy of `storefront/middleware.ts`, rewrite `/en/<path>` to `/<path>` and verify on Next 15.5: (a) what `usePathname()` returns on SSR and on the client, (b) `<Link>` prefetch of `/en/x` passes through the middleware, (c) a server action posted from `/en/x` sees the forwarded request headers, (d) `redirect('/y')` inside that action reaches the browser as `/y`. Record the four answers in research.md R-1 ("Spike result") and delete the spike
+- [X] T001 Confirm the worktree is on `167-storefront-locale-path` from `origin/master` and `.specify/feature.json` points at `specs/167-storefront-locale-path`; run `pnpm run build:packages` and record the baseline of `pnpm --filter backend run test:unit:fast` and `pnpm --filter storefront run test` *(2026-10-29: the baseline was not recorded before the first edit; suites were run after each phase instead)*
+- [X] T002 Read `specs/conventions/module-migrations.md`, `module-i18n.md`, `module-activation.md`, `check-estate.md`, `release-intent.md`, `module-documentation.md` before the first task that touches their subject
+- [X] T003 [P] List every storefront file using `usePathname`, `useSelectedLayoutSegment(s)` or `x-pathname` into a scratch note (input to T037)
+- [X] T004 **Spike (throwaway, never committed)**: in a scratch copy of `storefront/middleware.ts`, rewrite `/en/<path>` to `/<path>` and verify on Next 15.5: (a) what `usePathname()` returns on SSR and on the client, (b) `<Link>` prefetch of `/en/x` passes through the middleware, (c) a server action posted from `/en/x` sees the forwarded request headers, (d) `redirect('/y')` inside that action reaches the browser as `/y`. Record the four answers in research.md R-1 ("Spike result") and delete the spike
 
 ---
 
@@ -27,30 +27,30 @@ stated reason before its implementation task starts.
 
 ### Contracts first (Principle II)
 
-- [ ] T005 [P] RED `packages/contracts/src/storefront-language-path.test.ts` — data-model.md §4 examples table, uniqueness, prefix grammar, split aliases, default included when absent from `languages`, case-insensitive duplicate throws, `storefrontPagePath` for `/`, query + fragment preserved, unknown language throws, `storefrontDefaultPath`
-- [ ] T006 Implement `packages/contracts/src/storefront-language-path.ts` per `contracts/contracts-package.md` §1; export from `packages/contracts/src/index.ts`
-- [ ] T007 [P] RED `packages/contracts/src/product-url-keys.test.ts` — `productPath({ key, languageCode, channel })` prefixed in both setting states, never `?lang=`; `productDefaultPath`; `productKeyResolutionSchema` `redirect.permanent` required; `productPagePathsSchema.xDefault` required
-- [ ] T008 Implement `packages/contracts/src/product-url-keys.ts` (§2); replace the doc block's "later language path prefix" sentence with a pointer to this feature
-- [ ] T009 [P] RED `packages/contracts/src/sales-channels.test.ts` — `prefixDefaultLanguage` on summary/detail, create default `true`, update optional and counted by the "at least one field" refinement, `PublicSalesChannelSchema.urlLanguages` (min 1) and `urlLanguageAliases`
-- [ ] T010 Implement `packages/contracts/src/sales-channels.ts` (§3); `pnpm run build:packages`
+- [X] T005 [P] RED `packages/contracts/src/storefront-language-path.test.ts` — data-model.md §4 examples table, uniqueness, prefix grammar, split aliases, default included when absent from `languages`, case-insensitive duplicate throws, `storefrontPagePath` for `/`, query + fragment preserved, unknown language throws, `storefrontDefaultPath`
+- [X] T006 Implement `packages/contracts/src/storefront-language-path.ts` per `contracts/contracts-package.md` §1; export from `packages/contracts/src/index.ts`
+- [X] T007 [P] RED `packages/contracts/src/product-url-keys.test.ts` — `productPath({ key, languageCode, channel })` prefixed in both setting states, never `?lang=`; `productDefaultPath`; `productKeyResolutionSchema` `redirect.permanent` required; `productPagePathsSchema.xDefault` required
+- [X] T008 Implement `packages/contracts/src/product-url-keys.ts` (§2); replace the doc block's "later language path prefix" sentence with a pointer to this feature
+- [X] T009 [P] RED `packages/contracts/src/sales-channels.test.ts` — `prefixDefaultLanguage` on summary/detail, create default `true`, update optional and counted by the "at least one field" refinement, `PublicSalesChannelSchema.urlLanguages` (min 1) and `urlLanguageAliases`
+- [X] T010 Implement `packages/contracts/src/sales-channels.ts` (§3); `pnpm run build:packages`
 
 ### Kernel column, cache, migration
 
-- [ ] T011 [P] RED `packages/platform/src/kernel/sales-channels/sales-channels-cache.test.ts` — `toCachedChannel` carries `prefixDefaultLanguage`; key prefix is `sales-channels:v5:`
-- [ ] T012 [P] RED `backend/test/integration/sales_channels/prefix-default-language-migration.test.ts` — rows present before the migration read `prefix_default_language = false` (OR-10); a row inserted after it reads `true` (OR-1); on an empty database the reconciler's default channel reads `true`; column not null; `down()` drops it (mirror `anonymous-access-migration.test.ts`)
-- [ ] T013 Scaffold `pnpm --filter backend run migration:new -- --module core --name sales-channels-prefix-default-language`; write M1 (data-model.md §1: the DDL and the `update … = false` backfill in one `up()`); add `prefixDefaultLanguage` to `packages/platform/src/kernel/sales-channels/sales-channel.entity.ts` (+ `OptionalProps`), `sales-channels-cache.ts` (v5 + version log line), `default-channel-reconciler.ts`; run `pnpm --filter backend run composer:generate` and commit the regenerated registries
+- [X] T011 [P] RED `packages/platform/src/kernel/sales-channels/sales-channels-cache.test.ts` — `toCachedChannel` carries `prefixDefaultLanguage`; key prefix is `sales-channels:v5:`
+- [X] T012 [P] RED `backend/test/integration/sales_channels/prefix-default-language-migration.test.ts` — rows present before the migration read `prefix_default_language = false` (OR-10); a row inserted after it reads `true` (OR-1); on an empty database the reconciler's default channel reads `true`; column not null; `down()` drops it (mirror `anonymous-access-migration.test.ts`)
+- [X] T013 Scaffold `pnpm --filter backend run migration:new -- --module core --name sales-channels-prefix-default-language`; write M1 (data-model.md §1: the DDL and the `update … = false` backfill in one `up()`); add `prefixDefaultLanguage` to `packages/platform/src/kernel/sales-channels/sales-channel.entity.ts` (+ `OptionalProps`), `sales-channels-cache.ts` (v5 + version log line), `default-channel-reconciler.ts`; run `pnpm --filter backend run composer:generate` and commit the regenerated registries
 
 ### Channel admin write and public read
 
-- [ ] T014 [P] RED `backend/test/contract/sales_channels/admin-crud-lifecycle.contract.test.ts` — create without the field → `true`; PATCH `prefixDefaultLanguage: false` with `sales_channels:write` → 200, exactly one audit entry with before/after, cached channel dropped (next resolve reads `false`); with `sales_channels:read` only → 403
-- [ ] T015 Implement `packages/modules/sales_channels/src/backend/commands/identity.command.ts` (create sets `true` explicitly; update; audit snapshot) and `routes.admin.ts` (summary/detail mapping)
-- [ ] T016 [P] RED `backend/test/contract/sales_channels/storefront-public-read.contract.test.ts` — `urlLanguages` / `urlLanguageAliases` for `pl-PL,en-US` and `pl-PL,en-US,en-GB` in both setting states; validates against `PublicSalesChannelResponseSchema`
-- [ ] T017 Implement `packages/modules/sales_channels/src/backend/routes.storefront.ts` with `channelUrlLanguages` / `channelUrlLanguageAliases`
+- [X] T014 [P] RED `backend/test/contract/sales_channels/admin-crud-lifecycle.contract.test.ts` — create without the field → `true`; PATCH `prefixDefaultLanguage: false` with `sales_channels:write` → 200, exactly one audit entry with before/after, cached channel dropped (next resolve reads `false`); with `sales_channels:read` only → 403
+- [X] T015 Implement `packages/modules/sales_channels/src/backend/commands/identity.command.ts` (create sets `true` explicitly; update; audit snapshot) and `routes.admin.ts` (summary/detail mapping)
+- [X] T016 [P] RED `backend/test/contract/sales_channels/storefront-public-read.contract.test.ts` — `urlLanguages` / `urlLanguageAliases` for `pl-PL,en-US` and `pl-PL,en-US,en-GB` in both setting states; validates against `PublicSalesChannelResponseSchema`
+- [X] T017 Implement `packages/modules/sales_channels/src/backend/routes.storefront.ts` with `channelUrlLanguages` / `channelUrlLanguageAliases`
 
 ### Existing `productPath` callers
 
-- [ ] T018 [P] RED update expectations in the catalog and seo tests that assert `?lang=` paths (find them with `command grep -rn "lang=" packages/modules/catalog packages/modules/seo backend/test storefront/test`) to the prefixed shape for both setting states, including the admin URL-keys panel's `effective[].url`
-- [ ] T019 Implement the new call in `packages/modules/catalog/src/backend/services/catalog-query.service.ts` (`#pagePaths`), `url-key-resolution.service.ts`, `url-key.service.ts`, `packages/modules/seo/src/backend/services/sitemap-generator.service.ts`, passing the resolved/cached channel as `ChannelUrlFacts`; `pnpm -r run typecheck` must find no other caller
+- [X] T018 [P] RED update expectations in the catalog and seo tests that assert `?lang=` paths (find them with `command grep -rn "lang=" packages/modules/catalog packages/modules/seo backend/test storefront/test`) to the prefixed shape for both setting states, including the admin URL-keys panel's `effective[].url`
+- [X] T019 Implement the new call in `packages/modules/catalog/src/backend/services/catalog-query.service.ts` (`#pagePaths`), `url-key-resolution.service.ts`, `url-key.service.ts`, `packages/modules/seo/src/backend/services/sitemap-generator.service.ts`, passing the resolved/cached channel as `ChannelUrlFacts`; `pnpm -r run typecheck` must find no other caller *(done; `xDefault` was implemented here as well, because T008 makes it required — T051's code, T050's test still to come)*
 
 **Checkpoint**: shapes, column, cache, admin write and public read are live; emitted product paths are prefixed.
 

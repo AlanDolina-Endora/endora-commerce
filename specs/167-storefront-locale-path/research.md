@@ -64,6 +64,29 @@ middleware; (c) a server action posted from `/en/x` runs with the forwarded head
 that compare `usePathname()` against a route must go through `stripLocalePrefix()` — the 20 files
 are listed by the spike and fixed in US1.
 
+**Spike result (T004, 2026-10-29, Next 15.5.27, `next build && next start`, Chromium via
+Playwright; the spike app lived outside the tree and was deleted)**. Middleware rewrote `/en/<p>` to
+`/<p>` with `x-lang` and `x-pathname` on the forwarded request headers:
+
+- **(a)** `usePathname()` returns the **browser** path, prefixed, both in the server-rendered HTML
+  (`/en/x`) and on the client after hydration (`/en/x`). Components comparing it against a route
+  therefore go through `stripLocalePrefix()`; the server sees the logical path only through
+  `x-pathname`.
+- **(b)** The `<Link prefetch>` of `/en/y` is requested as `GET /en/y?_rsc=…` and passes through the
+  middleware (logged), so it is rewritten like a document request.
+- **(c)** A server action posted from `/en/x` arrives as `POST /en/x` with `next-action`, passes
+  through the middleware and runs with the forwarded headers (`x-lang=en`, `x-pathname=/x`).
+- **(d)** `redirect('/y?…')` inside that action reaches the browser as `/y?…` — exactly as written,
+  no prefix added — and the follow-up `GET /y` passes through the middleware again. So every
+  server-side redirect must be localized by the caller (`localeRedirect`), which is the design.
+
+Files using `usePathname`, `useSelectedLayoutSegment(s)` or `x-pathname` (T003): `app/layout.tsx`,
+`components/analytics/PageViewTracker.tsx`, `components/CartCounterBadge.tsx`,
+`components/CatalogToolbar.tsx`, `components/HeaderSwitch.tsx`, `components/mobile/MobileTabBar.tsx`,
+`components/NavigationFeedback.tsx`, `components/rfq/RfqDraftBadge.tsx`,
+`components/RouteTransition.tsx`, `components/ShoppingListHeartBadge.tsx`,
+`lib/seo/robots-directive.ts` (11 files today, not 20).
+
 ## R-2 — Prefix derivation, and where it lives
 
 **Decision**: one pure function in `packages/contracts/src/storefront-language-path.ts`:

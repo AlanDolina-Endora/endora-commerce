@@ -11,7 +11,7 @@ import type { SalesChannel } from './sales-channel.entity.js';
  *   1. Per-process LRU (cap {@link LRU_MAX}, entries older than
  *      {@link SALES_CHANNELS_LRU_TTL_MS} ignored) — absorbs intra-request
  *      bursts and removes the Redis hop entirely on warm processes.
- *   2. Redis (`sales-channels:v4:<code>`, TTL {@link TTL_SECONDS}) —
+ *   2. Redis (`sales-channels:v5:<code>`, TTL {@link TTL_SECONDS}) —
  *      cross-process consistency in multi-instance deployments.
  *
  * Invalidation flows write → drop in Redis → drop in LRU → announce. It is the
@@ -41,8 +41,10 @@ import type { SalesChannel } from './sales-channel.entity.js';
 // v4 (issue #492): the price-visibility flag removed with its column — the
 // display-mode chain decides who sees prices. Bumped so a process still running
 // the v3 code never reads an entry without the flag it reads.
+// v5 (feature 167): `prefixDefaultLanguage` added, read by every storefront URL
+// emitter. A process still running the v4 code never meets an entry without it.
 /** Shared with the operator-facing cache-clear surface, so the two cannot drift. */
-export const SALES_CHANNELS_CACHE_KEY_PREFIX = 'sales-channels:v4:';
+export const SALES_CHANNELS_CACHE_KEY_PREFIX = 'sales-channels:v5:';
 export const SALES_CHANNELS_CACHE_NAMESPACE = 'sales_channels';
 
 /** Maximum age of an entry in the per-process layer; see `SETTINGS_LRU_TTL_MS`. */
@@ -61,6 +63,8 @@ export interface CachedChannel {
   active: boolean;
   /** May an anonymous request use this channel (feature 154)? Read by the access step. */
   anonymousAccess: boolean;
+  /** Does the default language carry its URL prefix (feature 167)? Read by every storefront URL emitter. */
+  prefixDefaultLanguage: boolean;
   systemDefault: boolean;
   defaultLanguage: string;
   defaultCurrency: string;
@@ -78,6 +82,7 @@ export function toCachedChannel(channel: SalesChannel): CachedChannel {
     name: channel.name,
     active: channel.active,
     anonymousAccess: channel.anonymousAccess,
+    prefixDefaultLanguage: channel.prefixDefaultLanguage,
     systemDefault: channel.systemDefault,
     defaultLanguage: channel.defaultLanguage,
     defaultCurrency: channel.defaultCurrency,

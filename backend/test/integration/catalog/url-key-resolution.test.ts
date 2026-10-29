@@ -31,6 +31,9 @@ import { errorBodyOf, setChannelStatus } from '../../helpers/product-scope-fixtu
  * Keys are written through the admin PUT (the Command of Phase 16); the channel
  * pair is this suite's own, both offering `en-US` (default) and `pl-PL`.
  */
+/** Every channel this file inserts: en-US default, pl-PL, created after feature 167's migration (prefixed). */
+const CHANNEL_URL_FACTS = { languages: ['en-US', 'pl-PL'], defaultLanguage: 'en-US', prefixDefaultLanguage: true };
+
 describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
   let h: BackendServerHandle;
   const run = randomUUID().slice(0, 8);
@@ -126,8 +129,11 @@ describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
       kind: 'redirect',
       key: to,
       languageCode: language,
-      // The target is the one helper's answer — channels default to en-US here.
-      path: productPath({ key: to, languageCode: language, channelDefaultLanguage: 'en-US' }),
+      // The target is the one helper's answer — channels default to en-US here and,
+      // created after feature 167's migration, prefix it.
+      path: productPath({ key: to, languageCode: language, channel: CHANNEL_URL_FACTS }),
+      // A former key, or another current key of L: a property of the URL (308).
+      permanent: true,
     });
   }
 
@@ -359,12 +365,12 @@ describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
 
     const atC1pl = await pdp(c1, 'pl-PL');
     expect(atC1pl.slug).toBe(k('klucz'));
-    expect(atC1pl.paths.canonical).toBe(`/p/${k('klucz')}?lang=pl-PL`);
+    expect(atC1pl.paths.canonical).toBe(`/pl/p/${k('klucz')}`);
     expect([...atC1pl.paths.alternates].sort((a, b) => a.languageCode.localeCompare(b.languageCode))).toEqual([
-      { languageCode: 'en-US', path: `/p/${k('wrench')}` },
-      { languageCode: 'pl-PL', path: `/p/${k('klucz')}?lang=pl-PL` },
+      { languageCode: 'en-US', path: `/en/p/${k('wrench')}` },
+      { languageCode: 'pl-PL', path: `/pl/p/${k('klucz')}` },
     ]);
-    expect((await pdp(c2, 'pl-PL')).paths.canonical).toBe(`/p/${k('klucz-c2')}?lang=pl-PL`);
+    expect((await pdp(c2, 'pl-PL')).paths.canonical).toBe(`/pl/p/${k('klucz-c2')}`);
     expect((await pdp(c1, 'en-US')).slug).toBe(k('wrench'));
 
     // An alternate is listed only where the product is available to the anonymous audience.
@@ -375,7 +381,7 @@ describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
     );
     try {
       const atC1en = await pdp(c1, 'en-US');
-      expect(atC1en.paths.alternates).toEqual([{ languageCode: 'en-US', path: `/p/${k('wrench')}` }]);
+      expect(atC1en.paths.alternates).toEqual([{ languageCode: 'en-US', path: `/en/p/${k('wrench')}` }]);
     } finally {
       await sql(`delete from product_channel_language_scopes where product_id = ?`, [p]);
     }

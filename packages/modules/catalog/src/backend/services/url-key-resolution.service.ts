@@ -15,6 +15,7 @@ import { Product } from '../entities/product.entity.js';
 import { ProductUrlKey } from '../entities/product-url-key.entity.js';
 import { ProductUrlRedirect } from '../entities/product-url-redirect.entity.js';
 import type { CatalogQueryContext } from './catalog-query.service.js';
+import { channelUrlFactsOf } from './channel-url-facts.js';
 import { inIdChunks } from './sql-id-arrays.js';
 
 /**
@@ -170,7 +171,10 @@ export class UrlKeyResolutionService {
       kind: 'redirect',
       key: effective,
       languageCode,
-      path: productPath({ key: effective, languageCode, channelDefaultLanguage: channel.defaultLanguage }),
+      path: productPath({ key: effective, languageCode, channel: channelUrlFactsOf(ctx.resolvedChannel) }),
+      // A former key, or another current key of L that is not the effective one:
+      // a property of the URL, answered 308 by the storefront.
+      permanent: true,
     };
   }
 }

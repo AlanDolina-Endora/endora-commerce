@@ -58,7 +58,7 @@ describe('GET /api/v1/catalog/sitemap.xml', () => {
     expect(res.body).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
     // Seeded category slug "widgets" + at least one seeded product slug.
     expect(res.body).toContain('http://test.local/c/widgets');
-    expect(res.body).toMatch(/http:\/\/test\.local\/p\/[a-z0-9-]+/);
+    expect(res.body).toMatch(/http:\/\/test\.local\/[a-z]{2,3}\/p\/[a-z0-9-]+/);
     expect(res.body).toContain('</urlset>');
   });
 
@@ -120,7 +120,7 @@ describe('GET /api/v1/catalog/sitemap.xml', () => {
     await em.flush();
   });
 
-  it('lists one URL per live language on the effective key there, `?lang` off the default (163 T112, FR-074)', async () => {
+  it('lists one URL per live language on the effective key there, prefixed per the channel setting, never ?lang= (163 T112, FR-074; 167 FR-031)', async () => {
     const run = randomUUID().slice(0, 8);
     const conn = h.em().getConnection();
     const channelId = randomUUID();
@@ -157,9 +157,26 @@ describe('GET /api/v1/catalog/sitemap.xml', () => {
       });
       expect(regen.statusCode, regen.body).toBe(200);
       const res = await h.app.inject({ method: 'GET', url: '/api/v1/catalog/sitemap.xml', headers: { 'x-sales-channel': code } });
-      expect(res.body).toContain(`<loc>http://test.local/p/drill-${run}</loc>`);
-      expect(res.body).toContain(`<loc>http://test.local/p/wiertarka-${run}?lang=pl-PL</loc>`);
-      expect(res.body).not.toContain(`/p/drill-${run}?lang=pl-PL`);
+      // Inserted after feature 167's migration: the default language is prefixed too.
+      expect(res.body).toContain(`<loc>http://test.local/en/p/drill-${run}</loc>`);
+      expect(res.body).toContain(`<loc>http://test.local/pl/p/wiertarka-${run}</loc>`);
+      expect(res.body).not.toContain('lang=');
+      expect(res.body).not.toContain(`/pl/p/drill-${run}`);
+
+      // Setting off: the default language is unprefixed, every other language keeps its prefix.
+      await conn.execute(`update sales_channels set prefix_default_language = false where id = ?`, [channelId]);
+      await h.salesChannels.cache.invalidateAll();
+      const regenOff = await h.app.inject({
+        method: 'POST',
+        url: `/api/v1/admin/seo/sitemap/${code}/regenerate`,
+        cookies: { b2b_session: 'stub-admin-session' },
+        headers: { 'x-sales-channel': code },
+      });
+      expect(regenOff.statusCode, regenOff.body).toBe(200);
+      const off = await h.app.inject({ method: 'GET', url: '/api/v1/catalog/sitemap.xml', headers: { 'x-sales-channel': code } });
+      expect(off.body).toContain(`<loc>http://test.local/p/drill-${run}</loc>`);
+      expect(off.body).toContain(`<loc>http://test.local/pl/p/wiertarka-${run}</loc>`);
+      expect(off.body).not.toContain('lang=');
     } finally {
       await conn.execute(`delete from sitemap_cache where key = ?`, [code]);
       await conn.execute(`delete from sales_channel_products where product_id = ?`, [productId]);

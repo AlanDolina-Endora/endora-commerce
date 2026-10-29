@@ -45,6 +45,7 @@ export class SalesChannel {
     | 'currencies'
     | 'active'
     | 'anonymousAccess'
+    | 'prefixDefaultLanguage'
     | 'systemDefault'
     | 'version';
 
@@ -91,6 +92,16 @@ export class SalesChannel {
    */
   @Property({ type: 'boolean' })
   anonymousAccess: boolean = true;
+
+  /**
+   * Does the default language carry its path prefix in storefront URLs
+   * (`specs/167-storefront-locale-path/`, OR-1)? Every other channel language is
+   * always prefixed. On for new channels; the feature's migration switched every
+   * channel that existed at upgrade off so its URLs did not move (OR-10). The
+   * prefixes themselves are derived, never stored (`channelUrlLanguages`).
+   */
+  @Property({ type: 'boolean' })
+  prefixDefaultLanguage: boolean = true;
 
   /** True for exactly one row platform-wide (partial unique index in migration 025). */
   @Property({ type: 'boolean' })

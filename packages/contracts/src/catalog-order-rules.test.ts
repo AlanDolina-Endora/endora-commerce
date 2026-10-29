@@ -171,7 +171,7 @@ describe('packaging-unit and product DTOs', () => {
       openGraph: { title: 'Bolt', description: '', imageUrl: null },
     },
     // Feature 163 — the page's paths, required on the detail since then.
-    paths: { canonical: '/p/bolt', alternates: [] },
+    paths: { canonical: '/p/bolt', alternates: [], xDefault: '/p/bolt' },
     structuredDataJsonLd: {},
   };
 

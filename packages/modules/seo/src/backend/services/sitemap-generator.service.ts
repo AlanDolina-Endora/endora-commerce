@@ -198,7 +198,8 @@ export class SitemapGeneratorService {
       for (const languageCode of availability.get(p.id)?.liveLanguages ?? []) {
         const key = productKeys?.get(languageCode) ?? p.slug;
         urls.push({
-          loc: `${baseUrl}${productPath({ key, languageCode, channelDefaultLanguage: channel.defaultLanguage })}`,
+          // Feature 167 — under the language's path prefix, never `?lang=`.
+          loc: `${baseUrl}${productPath({ key, languageCode, channel })}`,
           lastmod: p.updatedAt,
           changefreq: 'daily',
           priority: 0.8,
