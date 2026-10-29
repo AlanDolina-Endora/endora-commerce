@@ -29,7 +29,7 @@
   "adminRoles.owners": "dostępne, dopóki włączone są moduły: {modules}",
   "adminRoles.page.descriptionPrefix": "Zestawy uprawnień przypisywane w",
   "adminRoles.page.title": "Role",
-  "adminRoles.permission.admin:read": "Podgląd powiadomień administratora",
+  "adminRoles.permission.admin:read": "Podgląd powiadomień wysyłanych do wszystkich administratorów",
   "adminRoles.permission.admin_users:manage": "Zarządzanie użytkownikami admina i rolami",
   "adminRoles.permission.analytics:read": "Wyświetlanie analityki",
   "adminRoles.permission.assets.read": "Przeglądanie biblioteki zasobów",

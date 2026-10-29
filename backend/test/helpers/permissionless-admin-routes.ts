@@ -191,6 +191,27 @@ export const PERMISSIONLESS_ADMIN_ROUTES: Readonly<Record<string, Permissionless
       'The command palette list, which the service filters by the permissions the caller ' +
       'holds: each administrator is answered with what they may open and nothing more.',
   },
+  // Issue #518 (owner ruling, option A) — the notification bell. Personal
+  // notifications are recorded for any administrator a Task or a CRM record
+  // names, whatever their role, so reading them cannot take a code.
+  'GET /api/v1/admin/notifications': {
+    guard: 'session',
+    reason:
+      "The caller's own notification feed: rows addressed to the session's admin, plus the " +
+      '`all_admins` broadcasts only when the caller holds `admin:read`, which the handler checks.',
+  },
+  'POST /api/v1/admin/notifications/:id/read': {
+    guard: 'session',
+    reason:
+      "Acknowledging one entry of the caller's own feed. Another admin's entry, and a broadcast " +
+      'for a caller without `admin:read`, answer 404 — the same as an id that names nothing.',
+  },
+  'POST /api/v1/admin/notifications/mark-all-read': {
+    guard: 'session',
+    reason:
+      "Acknowledging the caller's own feed: their own rows, and the broadcasts only when the " +
+      'caller holds `admin:read`, which the handler checks.',
+  },
   // `specs/150-admin-global-search/` research R-4, R-20 — the command palette's
   // record search. A single code would grant a lookup into every record type
   // regardless of the role's read permissions; instead each record type is

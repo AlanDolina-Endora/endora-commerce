@@ -106,6 +106,10 @@ nikogo nie powiadamia. Nikt też nie dostaje powiadomienia o zadaniu, którego n
 może zobaczyć: o zadaniu projektu dowiaduje się tylko ktoś, kto może zobaczyć
 ten projekt. Gdy moduł **Powiadomienia administratora** jest wyłączony,
 przypisywanie działa tak samo, a nikt nie dostaje powiadomienia.
+Każdy administrator ma dzwonek i czyta w nim własne powiadomienia, niezależnie
+od roli: nie potrzebuje do tego żadnego uprawnienia. Uprawnienie *Podgląd
+powiadomień wysyłanych do wszystkich administratorów* dodaje jedynie
+powiadomienia kierowane jednocześnie do wszystkich administratorów.
 
 **Moje zadania** to twoja otwarta praca: zadania przypisane tobie, które nie
 mają statusu `done` ani `cancelled`, najpierw te z najbliższym terminem, na
