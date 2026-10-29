@@ -30,7 +30,8 @@ import { CmsPageReadService } from './services/cms-page-read-port.js';
 import { lazyPort, type ModuleContext } from '@endora-commerce/platform/kernel';
 import { effectiveState } from '@endora-commerce/platform/kernel';
 import { rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
-import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
+import type { RequireAdminFactory, SalesChannelResolutionPort } from '@endora-commerce/platform/kernel';
+import { channelLanguagePrefixes } from './services/channel-language-prefixes.js';
 import type { CommandBus } from '@endora-commerce/platform/commands';
 import type { EventBase, EventBus } from '@endora-commerce/platform/events';
 import { StorefrontRevalidator } from '@endora-commerce/platform/http';
@@ -421,6 +422,14 @@ export function registerModule(ctx: ModuleContext): void {
          * that state anyway: the manifest declares `defaultValue: []`, so the
          * store answers the empty list without an error.
          */
+        // Feature 167 (FR-040) — every channel's language prefixes and split aliases,
+        // asked per save through the kernel's channel port, so a language added to a
+        // channel reserves its prefix at once.
+        result.handle.setLanguagePrefixesResolver(async () =>
+          channelLanguagePrefixes(
+            await lazyPort<SalesChannelResolutionPort>(ctx, 'salesChannelResolutionPort').listAll(),
+          ),
+        );
         result.handle.setReservedSlugSegmentsResolver(async () => {
           const { settingsReadPort } = ctx.cradle<CmsCradle>();
           return settingsReadPort.get(

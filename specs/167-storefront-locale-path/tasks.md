@@ -146,11 +146,11 @@ US1 and US2 ship together: the middleware that makes the path win is the one tha
 
 ## Phase 8: US7 — CMS slugs never collide with a prefix (P3)
 
-- [ ] T074 [P] [US7] RED `packages/modules/cms` service test — slug `en`, `en/o-nas`, `en-gb/x` refused with `409 CMS_SLUG_RESERVED` `{ segment }` when any channel has that prefix or alias; a prefix of no channel is accepted, even when it is a platform language's (`de` with no German channel — OR-12); the existing reserved-segment Setting still applies
-- [ ] T075 [US7] Implement in `packages/modules/cms/src/backend/services/cms-page-service.ts` (`assertSlugNotReserved`) and `index.ts` wiring through the kernel channel resolution port
-- [ ] T076 [P] [US7] RED cms admin list contract test — `shadowedByLanguagePrefix` (prefix + channel codes) on a page whose first segment is a channel prefix; absent otherwise
-- [ ] T077 [US7] Implement the marker (contracts field on the cms admin list item, service, admin badge) with `pl`/`en` strings in `packages/modules/cms/i18n/{en,pl}.json`
-- [ ] T078 [US7] Off-state test: with `cms` off, a channel language edit succeeds and the storefront's language handling is unaffected (`backend/test/integration/cms/` or the module-activation off-state suite)
+- [X] T074 [P] [US7] RED `packages/modules/cms` service test — slug `en`, `en/o-nas`, `en-gb/x` refused with `409 CMS_SLUG_RESERVED` `{ segment }` when any channel has that prefix or alias; a prefix of no channel is accepted, even when it is a platform language's (`de` with no German channel — OR-12); the existing reserved-segment Setting still applies
+- [X] T075 [US7] Implement in `packages/modules/cms/src/backend/services/cms-page-service.ts` (`assertSlugNotReserved`) and `index.ts` wiring through the kernel channel resolution port
+- [X] T076 [P] [US7] RED cms admin list contract test — `shadowedByLanguagePrefix` (prefix + channel codes) on a page whose first segment is a channel prefix; absent otherwise
+- [X] T077 [US7] Implement the marker (contracts field on the cms admin list item, service, admin badge) with `pl`/`en` strings in `packages/modules/cms/i18n/{en,pl}.json`
+- [X] T078 [US7] Off-state test: with `cms` off, a channel language edit succeeds and the storefront's language handling is unaffected (`backend/test/integration/cms/` or the module-activation off-state suite)
 
 ---
 

@@ -63,6 +63,15 @@ export const cmsPageSummarySchema = z.object({
    * changes address. The resulting path is `cmsPagePublicPaths`'s answer.
    */
   parentPathInUrl: z.boolean(),
+  /**
+   * Feature 167 (FR-041) — present when the page's first slug segment is a storefront
+   * language prefix (or split alias) of a sales channel: `/<prefix>/…` is that
+   * language's page, so the page is not reachable at its own address there. Saves
+   * refuse such a slug; this marks a page that predates the language.
+   */
+  shadowedByLanguagePrefix: z
+    .object({ prefix: z.string(), channelCodes: z.array(z.string()) })
+    .optional(),
 });
 export type CmsPageSummary = z.infer<typeof cmsPageSummarySchema>;
 

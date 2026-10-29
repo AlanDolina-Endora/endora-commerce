@@ -129,6 +129,8 @@
   "hooksList.title": "Hooki CMS",
   "pagesList.cardTitle": "Strony",
   "pagesList.description": "Twórz i publikuj treści Page Builder ograniczone kanałem sprzedaży i językiem.",
+  "pagesList.shadowedByLanguagePrefix": "Zasłonięta prefiksem języka /{prefix}",
+  "pagesList.shadowedByLanguagePrefixHint": "/{prefix} to prefiks języka sklepu w tych kanałach sprzedaży: {channels}. Strona nie jest tam dostępna pod własnym adresem; zmień jej slug.",
   "pagesList.empty": "Nie znaleziono stron.",
   "pagesList.loading": "Ładowanie stron CMS...",
   "pagesList.new": "Nowa strona",

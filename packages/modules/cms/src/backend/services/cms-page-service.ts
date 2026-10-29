@@ -142,6 +142,23 @@ export class CmsPageService {
   }
 
   /**
+   * Feature 167 (FR-040, FR-041) — every sales channel's storefront language
+   * prefixes and split aliases, each with the codes of the channels using it. Read
+   * through the kernel's channel port (`sales_channels` is non-deactivatable); absent
+   * until `registerModule` installs it, which reserves nothing.
+   */
+  private languagePrefixesResolver: (() => Promise<ReadonlyMap<string, readonly string[]>>) | null = null;
+
+  setLanguagePrefixesResolver(resolver: (() => Promise<ReadonlyMap<string, readonly string[]>>) | null): void {
+    this.languagePrefixesResolver = resolver;
+  }
+
+  /** The channels' language prefixes → channel codes (feature 167). */
+  async languagePrefixes(): Promise<ReadonlyMap<string, readonly string[]>> {
+    return this.languagePrefixesResolver ? this.languagePrefixesResolver() : new Map();
+  }
+
+  /**
    * The deployment's reserved first path segments — the **one** value the
    * save-time refusal below and the editor's inline warning both read
    * (FR-033). Two lists would be two answers waiting to disagree, and a warning
@@ -170,7 +187,11 @@ export class CmsPageService {
     const segment = firstSlugSegment(slug);
     if (segment.length === 0) return;
     const reserved = await this.reservedSegments();
-    if (!reserved.includes(segment)) return;
+    // Feature 167 (FR-040, OR-5, OR-12) — a language prefix of any channel is the
+    // storefront's too: the URL `/<prefix>/…` is that language's page, never the
+    // CMS page. A prefix of a language no channel serves is an ordinary segment.
+    const languagePrefix = (await this.languagePrefixes()).has(segment.toLowerCase());
+    if (!reserved.includes(segment) && !languagePrefix) return;
     throw new HttpError(
       409,
       ERROR_CODES.CMS_SLUG_RESERVED,
@@ -420,7 +441,14 @@ export class CmsPageService {
       params,
     )) as PageRow[];
 
-    const data = await Promise.all(rows.map((row) => this.toSummary(row)));
+    const summaries = await Promise.all(rows.map((row) => this.toSummary(row)));
+    // Feature 167 (FR-041) — mark a page shadowed by a channel language prefix.
+    const prefixes = await this.languagePrefixes();
+    const data = summaries.map((page) => {
+      const segment = firstSlugSegment(page.slug).toLowerCase();
+      const channelCodes = prefixes.get(segment);
+      return channelCodes ? { ...page, shadowedByLanguagePrefix: { prefix: segment, channelCodes: [...channelCodes] } } : page;
+    });
     return { data, nextCursor: null };
   }
 
