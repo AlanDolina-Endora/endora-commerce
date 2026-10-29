@@ -29,11 +29,13 @@ otherwise; every price names its currency either way. A malformed code is refuse
 | `GET /api/v1/catalog/categories/:id/content` | storefront | One category's page content, resolved to the caller's language |
 | `GET /api/v1/catalog/filters` | storefront | Filterable attributes for the active Sales Channel |
 | `GET /api/v1/catalog/sitemap.xml` | crawlers | SEO sitemap |
-| `GET /api/v1/admin/catalog/products?includeArchived` | admin | Admin product list (includes drafts; archived rows opt-in) |
+| `GET /api/v1/admin/catalog/products?status&archived` | admin | Admin product list. `status` is `active` or `inactive` (any other value: `400 VALIDATION_FAILED`); `archived` is `exclude` (default), `include` or `only` — the legacy `includeArchived=1` means `include`. `counts` is `{ all, active, inactive, archived }` — see *Product status and archiving* |
 | `GET /api/v1/admin/catalog/products/:id` | admin | Product detail |
 | `POST /api/v1/admin/catalog/products` | admin | Create product (`type` immutable post-create; `sku` is editable) |
 | `PATCH /api/v1/admin/catalog/products/:id` | admin | Update (incl. `sku`); writes an audit row with stateBefore / stateAfter; refuses with `409 sku_in_use` if the new SKU already belongs to another product |
-| `DELETE /api/v1/admin/catalog/products/:id` | admin | Archive (soft) |
+| `DELETE /api/v1/admin/catalog/products/:id` | admin | Delete (soft) — not the Archive action |
+| `POST /api/v1/admin/catalog/products/:id/archive` | admin (`catalog:write`) | Archive one product — see *Product status and archiving* |
+| `POST /api/v1/admin/catalog/products/:id/restore` | admin (`catalog:write`) | Restore one archived product |
 | `GET`, `POST /api/v1/admin/catalog/products/list-views`; `PATCH`, `DELETE …/list-views/:id` | admin | Saved views on the product list — see *Saved views* below |
 | `GET /api/v1/admin/catalog/attributes` | admin | List attributes |
 | `GET /api/v1/admin/catalog/attributes/by-flag?flag=isPromoRule\|isComparable\|...` | admin | Picker payload — every attribute carrying the requested flag |
@@ -52,7 +54,99 @@ otherwise; every price names its currency either way. A malformed code is refuse
 | `DELETE /api/v1/admin/catalog/categories/:id` | admin | Soft-delete; rejects with 409 if any active child still references the row |
 | `GET /api/v1/admin/catalog/categories/:id/content` | admin | The category's page content — one Page Builder document per language ([Category page content](./catalog/category-content.md)) |
 | `PUT /api/v1/admin/catalog/categories/:id/content` | admin | Replace the category's page content; `null` clears it |
-| `PUT /api/v1/catalog/products/by-sku/:sku` | API key | Idempotent upsert (PIM sync) |
+| `PUT /api/v1/catalog/products/by-sku/:sku` | API key | Idempotent upsert (PIM sync); an update is audited as `product.update` naming the key (`apiKeyId`) and is never checked for completeness |
+
+## Product status and archiving
+
+A product's **status** is `active` or `inactive`, globally and as an override per
+Sales Channel and per channel × language. `inactive` at any scope is plain **off**
+there: the product is not listed, not searchable, not orderable and its page answers as
+a product that does not exist. Switching a product off never archives it. New and
+duplicated products start `inactive`. Any other status value is refused with
+`400 VALIDATION_FAILED` — on the admin API, the API-key upsert
+`PUT /api/v1/catalog/products/by-sku/:sku` and an import; archiving is not a status.
+
+**Archiving** is a separate, product-wide action, offered as **Archive** and
+**Restore** (`POST …/products/:id/archive`, `…/restore`) and gated by `catalog:write`.
+Archive sets the product's archived time and takes it out of every channel; Restore
+clears it. Neither changes the status at any scope, and each writes one audit entry
+with the archived time before and after. Archiving an archived product, or restoring
+one that is not archived, answers `200` and changes nothing — no audit entry, no event.
+
+- **Bulk.** `POST /api/v1/admin/catalog/products/bulk-update` with
+  `fields: { archived: true }` archives every selected product, `false` restores them,
+  each through the same action and audit entry. `archived` must be the only field of
+  its request. Large selections run as a background bulk operation, and the
+  operation's undo puts every product back as it was. A background operation audits
+  each product with the admin who requested it, as a direct one does. Archive and
+  Restore lock the product, so two concurrent Archives of one product archive it once.
+- **Setting `active` never restores.** An archived product stays archived whatever its
+  status; only Restore brings it back. Restoring an `inactive` product leaves it off.
+- **Products archived before this change.** Until this release a product was archived by
+  setting it `inactive`. Every product `inactive` at the upgrade therefore stays
+  archived (keeping its archived time, or its last-update time when it had none), and
+  **needs an explicit Restore** to come back — setting it `active` alone leaves it
+  archived.
+- **The product page.** An archived product's page answers `410 PRODUCT_ARCHIVED`
+  ("gone"), but only to a buyer who could otherwise see it there: the check takes the
+  archive away and reads the global status as `active`, while every channel and channel
+  × language status, the membership, the channel's languages, the publication window and
+  the audience still apply. Everywhere else, and for any product that is off without
+  being archived, the page answers `404` exactly as for a product that does not exist.
+- **The admin list.** Archived products are hidden by default, whatever their status;
+  `archived=only` lists them and `archived=include` lists them beside the rest. The
+  `inactive` count and filter cover products that are off but not archived.
+  On the product list the **Archived** tab has its own address,
+  `/catalog/products/archived`, so the browser's Back button and a reload return to it, and
+  the command palette (⌘K / CTRL+K) opens it as **Archived products** — search for
+  "archived" or "archiwum".
+  With a selection, its bar offers Restore, Bulk edit and Delete; **Edit price** is shown
+  on the other tabs but disabled, because prices are set in price books.
+- **From the admin assistant.** The assistant's `catalog.archive_product` and
+  `catalog.restore_product` tools (`catalog:write`) archive and restore products after
+  you confirm the plan it shows, through the same action and audit entry, with you as
+  the actor; larger selections run as the bulk operation above. Its status tool,
+  `catalog.set_product_status`, only switches products on or off and never archives or
+  restores, and its product search lists archived products and says which they are.
+
+### Status per channel and language, in bulk
+
+`POST /api/v1/admin/catalog/products/bulk-update` with
+`fields: { scopedStatus: { channelId, languageCode, value } }` sets the status of every
+selected product at one scope — the Sales Channel (`languageCode: null`) or one
+channel × language — to `active` or `inactive`, or removes the override there with
+`inherit`. Only that scope changes on each product; every other scope and the global
+status stay as they were. A product that is not in the channel, or a language the
+channel does not offer, is skipped and reported as `scope_invalid` — the product is
+never added to the channel. `scopedStatus` cannot be combined with `status` in one
+request. Each product's change is one audit entry naming the scope; large selections
+run as a background bulk operation whose undo puts every scope back as it was and
+reports any product changed since.
+
+### Completeness check when switching a product on
+
+When an operator's **status change** switches a product on for a sales channel and
+language — the global status, a channel or channel × language status, single or in
+bulk — the product must have, in that language: a **name** (its own name in that
+language, or a name overridden for that channel; a name in another language does not
+count), a **URL key** (the global key counts) and every **required** language-dependent
+attribute of its attribute set. The setting **Completeness check when switching a
+product on** (`catalog.scope_completeness_gate`, one value for the whole platform)
+decides what happens when something is missing:
+
+- **`warn`** (the default) — the change is saved and the answer lists what is missing
+  per channel and language (`warnings`, kind `completeness`).
+- **`refuse`** — the change is not saved: `422 SCOPE_INCOMPLETE` names every channel and
+  language with what it lacks. A change that would switch the product on in several
+  places is refused as a whole if any of them fails. In a bulk edit the products that
+  pass are changed and the others are skipped as `completeness_gate`.
+
+Only a status change is checked. A product that goes live because it joins a channel,
+a channel gains a language, its publication window opens, its audience changes, or it
+is restored is not checked; the **scope overview** of the product editor shows what is
+missing at every channel and language instead. Setting an archived product `active` is
+checked like any status change, although the product stays archived. Imports, PIM
+synchronisation and the API-key upsert are never checked.
 
 ## Prices
 
@@ -247,15 +341,18 @@ modules are present. The payload is sent whole; the strict schemas are
 | --- | --- | --- |
 | `product.created.v1` | A product is created — in the Admin UI, through the API-key upsert, by an import or a PIM synchronisation, or by duplicating another product. | `productId` (UUID), `sku` — the SKU it was created with; it can change later, `productId` cannot. |
 | `product.updated.v1` | A product is written, or one of its variants is created, changed or deleted. | `productId`, `changedFields` — the names of the product fields the write addressed (`name`, `status`, `categoryIds`, …; `variants` for a variant write). Names only, an open list, and it may be empty. |
-| `product.archived.v1` | A product's status moves to `inactive` from another status. Once per transition: editing a product that is already inactive does not send it again. | `productId` |
+| `product.archived.v1` | A product is archived by the Archive action — for one product or in bulk. Once per transition: archiving an archived product sends nothing. A status change never sends it: `inactive` is plain off. | `productId` |
 
-- **Order.** The archiving write sends `product.updated.v1` (with `status` in
-  `changedFields`) and then `product.archived.v1`, on every path that can
-  archive a product: the Admin UI, the API-key upsert, a bulk edit, an import.
-- **Reactivation has no event of its own.** A product that leaves `inactive`
-  sends `product.updated.v1` with `status` in `changedFields` and nothing else —
-  the same signal as any other status change, a draft being published
-  included. To tell them apart, read the product: its `status` is the answer.
+- **Order.** Archive sends `product.updated.v1` (with `archivedAt` in
+  `changedFields`) and then `product.archived.v1`, for one product and for each
+  product of a bulk Archive.
+- **Restore has no event of its own.** Restore sends `product.updated.v1` with
+  `archivedAt` in `changedFields` and nothing else. Switching a product on or
+  off sends `product.updated.v1` with `status`. To tell them apart, read the
+  product: its `status` and `archivedAt` are the answer.
+- **Undo.** Undoing a bulk edit sends `product.updated.v1` for every product it
+  put back, naming the fields it restored, and `product.archived.v1` where it
+  archives a product again.
 - **Deletion is not delivered.** Deleting a product emits `product.deleted.v1`
   on the in-process event bus only; it is not offered to webhooks, and no
   `product.archived.v1` is sent for it. A receiver that mirrors the catalogue
@@ -280,6 +377,9 @@ modules are present. The payload is sent whole; the strict schemas are
   context, and every price it renders is resolved for that channel; new gating
   (e.g. customer-segment-specific catalogs) is added by composing into
   `catalog-query.service.ts`.
+- **Product editor zones** — the editor mounts admin zones other modules contribute to;
+  `product.editor.seo.after`, at the end of the SEO tab (props: `productId`), is where the
+  SEO module puts its link to the meta-tag editor, so the catalog never names that module.
 - **Slug uniqueness** — the slug is unique across all Sales Channels by
   default; override the slugifier in `catalog-admin.service.ts` if locale
   collisions become a concern.
@@ -346,6 +446,19 @@ The value is **recorded on each order line when the order is placed**
 order already placed. A line whose product could not be read at placement is
 recorded as not returnable. What the Returns module does with the recorded
 value is on its own page.
+
+### Per sales channel
+
+Both rules can be overridden for one sales channel — **Order rules** per channel in the
+product's scopes (`PATCH /api/v1/admin/catalog/products/:id/scopes`, `minOrderQuantity` and
+`returnable` on a channel entry; `null` uses the global value again). The channel's value
+applies wherever a basket, an order or a quote request belongs to that channel: adding to
+the basket, the basket view, submitting for approval, the checkout preview, placement, the
+admin order preview, quote requests and the buyer's quick-order import. A channel minimum
+of 1 means no minimum in that channel, whatever the global value. Placement records the
+order channel's returnable flag on each line, so returns follow the channel the order was
+placed in. The storefront product detail and listing report the minimum of the request's
+channel.
 
 ### Audit and copies
 
@@ -572,4 +685,4 @@ The admin's global search (the command palette, ⌘K / Ctrl+K) finds products an
 | Category: Name | yes |
 | Category: URL key (slug) | yes |
 
-Names match in every language and are shown in the admin's language. Drafts and inactive products are found and show their status; deleted products and categories are not. A category result opens the category tree with that category highlighted. Both appear for a role holding `catalog:read`.
+Names match in every language and are shown in the admin's language. Inactive and archived products are found and show their status; deleted products and categories are not. A category result opens the category tree with that category highlighted. Both appear for a role holding `catalog:read`.

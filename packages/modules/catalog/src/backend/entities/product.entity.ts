@@ -33,7 +33,9 @@ export class Product {
     | 'fulfilmentStrategy'
     | 'fulfilmentStrategyWarehouseOrder'
     | 'minOrderQuantity'
-    | 'returnable';
+    | 'returnable'
+    | 'publishFrom'
+    | 'publishUntil';
 
   @PrimaryKey({ type: 'uuid' })
   id: string = randomUUID();
@@ -50,9 +52,15 @@ export class Product {
   @Property({ type: 'string', length: 16 })
   type!: 'simple' | 'configurable' | 'grouped' | 'bundle' | 'virtual';
 
+  /**
+   * Feature 163 (FR-010, FR-019, FR-110) — `active` | `inactive`; `inactive` is
+   * plain off and never archives. Archiving is `archivedAt`, written only by the
+   * Archive / Restore action. New and duplicated products start `inactive` (Q1-d);
+   * the database refuses any other value (`products_status_check`).
+   */
   @Property({ type: 'string', length: 16 })
   @Index()
-  status: 'draft' | 'active' | 'inactive' = 'draft';
+  status: 'active' | 'inactive' = 'inactive';
 
   @Property({ type: 'json' })
   name!: Record<string, string>;
@@ -241,4 +249,17 @@ export class Product {
     nullable: true,
   })
   readonly adminSearchKeyPl?: string;
+
+  /**
+   * Feature 163 (FR-023) — the global publication window, inclusive at both
+   * ends; `null` = open on that side. A channel may replace the pair
+   * (`product_channel_scopes.window_overridden`). Never changes `status`: the
+   * window is evaluated at read time (A-4).
+   */
+  @Property({ type: 'datetime', nullable: true })
+  publishFrom?: Date | null;
+
+  /** Feature 163 (FR-023) — the end of the global publication window, inclusive. */
+  @Property({ type: 'datetime', nullable: true })
+  publishUntil?: Date | null;
 }

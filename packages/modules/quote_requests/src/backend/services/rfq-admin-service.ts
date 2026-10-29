@@ -5,6 +5,7 @@ import {
   QUOTE_REQUEST_HISTORY_EVENT_WINDOW,
   RFQ_CREATED_BY_ADMIN_EVENT,
   type AdminCreateQuoteRequest,
+  type AdminQuoteRequestWarning,
   type AdminPatchQuoteRequest,
   type QuoteRequest as RfqDto,
   type QuoteRequestHistory,
@@ -12,7 +13,9 @@ import {
   customFieldFilterUnavailable,
   isCustomFieldValidationFailure,
   type AdminUserReadPort,
+  type CatalogProductAvailabilityPort,
   type CatalogProductReadPort,
+  type CatalogProductRecord,
   type CustomerAccountReadPort,
   type CustomerAccountRecord,
   type CustomFieldFilters,
@@ -27,6 +30,7 @@ import type { EventBase, EventBus } from '@endora-commerce/platform/events';
 import { HttpError } from '@endora-commerce/platform/http';
 import { recordAuditFromContext } from '@endora-commerce/platform/commands';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
+import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import { orgConstraintFor } from '@endora-commerce/platform/tenancy';
 import type {
   QuoteRequestAdminSearchQuery,
@@ -37,7 +41,7 @@ import { QuoteRequestItem } from '../entities/quote-request-item.entity.js';
 import { QuoteRequestItemGroup } from '../entities/quote-request-item-group.entity.js';
 import { underRowLock } from './transition-lock.js';
 import type { RfqService} from './rfq-service.js';
-import { type RfqEventBus, type RfqEvents } from './rfq-service.js';
+import { isNotArchived, rfqAudience, type RfqEventBus, type RfqEvents } from './rfq-service.js';
 import type { RfqEventService } from './rfq-event-service.js';
 import type { RfqRevisionService } from './rfq-revision-service.js';
 import type { RfqNotificationService } from './rfq-notification-service.js';
@@ -131,6 +135,17 @@ export interface RfqAdminServiceDeps {
    * published ports the same reads fail closed with their owners.
    */
   catalogProducts: CatalogProductReadPort;
+  /**
+   * Feature 163 (FR-018) — `catalog`'s availability answer, asked about an
+   * operator's lines only to warn: `createOnBehalf` accepts them either way.
+   */
+  catalogAvailability: Pick<CatalogProductAvailabilityPort, 'filterAvailable' | 'effectiveNames'>;
+  /**
+   * Feature 163 (security review M1) — the kernel's membership port: the channels an
+   * Organization is assigned to, which an operator's on-behalf request may be raised on —
+   * the channel it names, or the one the admin request resolved when it names none.
+   */
+  channelMembership: Pick<SalesChannelMembershipPort, 'listChannelsForEntity'>;
   customerAccounts: CustomerAccountReadPort;
   organizations: OrganizationDetailsPort;
   adminUsers: AdminUserReadPort;
@@ -714,13 +729,12 @@ export class RfqAdminService {
       }
 
       if (body.items) {
-        const products = await this.deps.catalogProducts.findByIds(
-        body.items.map((it) => it.productId),
-      );
-        const productById = new Map(products.map((p) => [p.id, p]));
-        if (productById.size !== new Set(body.items.map((it) => it.productId)).size) {
-          throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
-        }
+        // Feature 163, P-3 = A / P-3b = A — an archived product is refused,
+        // and the operator is told why (`409 PRODUCT_ARCHIVED`).
+        const productById = operatorLineProducts(
+          await this.deps.catalogProducts.findByIds(body.items.map((it) => it.productId)),
+          body.items.map((it) => it.productId),
+        );
         // In display order — the order the operator saw, which the pairing's
         // last rule (by order) relies on — with the stored groups.
         const { lines: existing, groups: storedGroups } = await loadArrangedQuoteLines(em, rfq.id);
@@ -763,6 +777,13 @@ export class RfqAdminService {
         await em.removeAndFlush(existing);
         const groupIds = await writeLineGroups(em, rfq.id, storedGroups, plan);
         const items: QuoteRequestItem[] = [];
+        // Feature 163 (FR-017 d, N2) — a line the operator adds is named at the
+        // request channel's default language; a stored line keeps its snapshot.
+        const lineNames = await this.deps.rfqService.lineNames(
+          [...productById.values()],
+          rfq.salesChannelId ?? null,
+          null,
+        );
         for (const [index, lineInput] of body.items.entries()) {
           const product = productById.get(lineInput.productId)!;
           // Feature 159 (research N-33) — a new line split off a stored line of
@@ -780,7 +801,7 @@ export class RfqAdminService {
             em.create(QuoteRequestItem, {
               quoteRequestId: rfq.id,
               productId: product.id,
-              productName: row?.productName ?? anyLocaleValue(product.name),
+              productName: row?.productName ?? lineNames.get(product.id) ?? anyLocaleValue(product.name),
               productSlug: product.slug,
               variantId,
               variantLabel:
@@ -879,6 +900,44 @@ export class RfqAdminService {
   // Create on behalf (US4)
   // -------------------------------------------------------------------------
 
+  /**
+   * Feature 163 (FR-018) — the lines of an operator-created request whose
+   * product is not available to the Organization at the request's channel, in
+   * the channel's default language (N2), now. Accepted regardless: this is a
+   * warning for the operator, never a refusal (the exemption of
+   * {@link createOnBehalf} stands). The channel is {@link onBehalfChannelId}'s,
+   * the one `createOnBehalf` checked and stored; a request with no channel was
+   * refused there, so the `[]` below only answers a direct caller (FR-007).
+   */
+  async onBehalfWarnings(
+    body: Pick<AdminCreateQuoteRequest, 'organizationId' | 'items' | 'salesChannelId'>,
+  ): Promise<AdminQuoteRequestWarning[]> {
+    const channelId = this.onBehalfChannelId(body);
+    if (channelId === null) return [];
+    const productIds = Array.from(new Set(body.items.map((it) => it.productId)));
+    if (productIds.length === 0) return [];
+    const available = await this.deps.catalogAvailability.filterAvailable(productIds, {
+      channelId,
+      languageCode: null,
+      // The customer the operator names: the request's own actor is the operator.
+      audience: rfqAudience({ organizationId: body.organizationId }),
+    });
+    return productIds
+      .filter((productId) => !available.has(productId))
+      .map((productId) => ({ productId, code: 'PRODUCT_UNAVAILABLE_IN_SCOPE' as const }));
+  }
+
+  /**
+   * Feature 163 (T155 §1.5c, owner decision 2026-10-29 "A") — the channel an
+   * operator's on-behalf request is raised on: the one the body names, else the
+   * one the admin request resolved (the resolver's step-4 system default, or
+   * `X-Sales-Channel`); `null` outside a request scope. One answer for the check,
+   * the stored row and the warnings, so they cannot speak about two channels.
+   */
+  private onBehalfChannelId(body: Pick<AdminCreateQuoteRequest, 'salesChannelId'>): string | null {
+    return body.salesChannelId ?? raisedOnChannelId();
+  }
+
   async createOnBehalf(
     ctx: AdminContext,
     body: AdminCreateQuoteRequest,
@@ -906,6 +965,35 @@ export class RfqAdminService {
       );
     }
 
+    // Feature 163 (T155 §1.5c, security review M1, owner decision 2026-10-29 "A")
+    // — the request is raised on the channel the operator names, else on the one
+    // the admin's own request resolved (the resolver's step-4 system default, or
+    // `X-Sales-Channel`), and **either way** that channel must be one of the
+    // Organization's active channels: the ones its members may shop on, and the
+    // set the create screen offers. The server is the sole enforcer, so omitting
+    // the id is not a way around the check. Exactly that channel — a stale,
+    // foreign or inactive id is refused, never replaced by another. No channel at
+    // all (no request scope: a CLI or in-process caller) is refused as well:
+    // there is no "no-channel" quote request (Constitution XII), and on the HTTP
+    // route the resolver always answers one.
+    const channelId = this.onBehalfChannelId(body);
+    if (channelId === null) {
+      throw new HttpError(
+        422,
+        ERROR_CODES.RFQ_SALES_CHANNEL_NOT_ALLOWED,
+        'No sales channel to raise this quote request on: name salesChannelId.',
+        { code: 'no_channel' },
+      );
+    }
+    const channels = await this.deps.channelMembership.listChannelsForEntity('organization', body.organizationId);
+    if (!channels.some((c) => c.id === channelId && c.active)) {
+      throw new HttpError(
+        422,
+        ERROR_CODES.RFQ_SALES_CHANNEL_NOT_ALLOWED,
+        "This sales channel is not one of the organization's active sales channels.",
+      );
+    }
+
     // **Neither scoping axis is applied to these lines, and that is the
     // decision rather than the gap.** `RfqService.createForCustomer` filters by
     // `isProductVisibleTo` (issue #227) and by the request's channel assortment
@@ -921,25 +1009,29 @@ export class RfqAdminService {
     // `quick_order`'s `'unrestricted'` import arm says of itself.
     //
     // The channel this quote *is* raised on is recorded below and is the
-    // honest answer to "where did this come from", not a filter.
-    const products = await this.deps.catalogProducts.findByIds(
+    // honest answer to "where did this come from", not a filter of its lines
+    // (the channel itself is checked above; the lines on it are not).
+    //
+    // **One exception, by owner decisions P-3 = A and P-3b = A (feature 163,
+    // 2026-10-26)**: an archived product is refused here as it is on the
+    // buyer's paths, before anything is numbered or written — but with
+    // `409 PRODUCT_ARCHIVED`, so the operator is told why. The availability
+    // warnings below stay warnings for every other reason.
+    const productById = operatorLineProducts(
+      await this.deps.catalogProducts.findByIds(body.items.map((it) => it.productId)),
       body.items.map((it) => it.productId),
     );
-    const productById = new Map(products.map((p) => [p.id, p]));
-    if (productById.size !== new Set(body.items.map((it) => it.productId)).size) {
-      throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
-    }
 
     const businessId = await this.deps.rfqService.generateBusinessId(em);
     const rfq = em.create(QuoteRequest, {
       ...(businessId ? { businessId } : {}),
       organizationId: body.organizationId,
       customerAccountId: body.customerAccountId,
-      // The channel the admin's own request resolved to. Admin paths take the
-      // resolver's step-4 fallback unless the SPA sends `X-Sales-Channel`, so
-      // this is the system default until it does — which is the honest answer
-      // for "where was this raised", not a channel this module picked.
-      salesChannelId: raisedOnChannelId(),
+      // The channel checked above: the one the operator named (feature 163,
+      // T155 §1.5c), else the one the admin's own request resolved to — the
+      // resolver's step-4 fallback, the system default — which is the honest
+      // answer for "where was this raised", not a channel this module picked.
+      salesChannelId: channelId,
       createdByAdminUserId: ctx.adminUserId,
       assignedAdminUserId: ctx.adminUserId,
       status: 'Created from admin' satisfies QuoteRequestStatus,
@@ -966,13 +1058,20 @@ export class RfqAdminService {
     });
     const groupIds = await writeLineGroups(em, rfq.id, [], plan);
     const items: QuoteRequestItem[] = [];
+    // Feature 163 (FR-017 d, N2) — an operator's lines are named at the
+    // request channel's default language.
+    const lineNames = await this.deps.rfqService.lineNames(
+      [...productById.values()],
+      rfq.salesChannelId ?? null,
+      null,
+    );
     for (const [index, lineInput] of body.items.entries()) {
       const product = productById.get(lineInput.productId)!;
       items.push(
         em.create(QuoteRequestItem, {
           quoteRequestId: rfq.id,
           productId: product.id,
-          productName: anyLocaleValue(product.name),
+          productName: lineNames.get(product.id) ?? anyLocaleValue(product.name),
           productSlug: product.slug,
           variantId: lineInput.variantId ?? null,
           quantity: lineInput.quantity,
@@ -1150,4 +1249,36 @@ async function writeLineGroups(
   }
   await em.flush();
   return (group) => (group === null ? null : group.kind === 'existing' ? group.id : (createdByKey.get(group.key) ?? null));
+}
+
+/**
+ * The products an operator's quote lines name, by id — or the refusal
+ * (feature 163, owner decisions P-3 = A and P-3b = A). An id that does not
+ * exist answers `404 PRODUCT_NOT_FOUND`, as before. An archived product answers
+ * `409 PRODUCT_ARCHIVED`, catalog's code and sentence: the operator is told why
+ * the line is refused, where a buyer's path gives the absent id's byte-equal
+ * 404 so nothing is disclosed. 409 because the product exists and the request
+ * conflicts with its state — the status this module answers for a state
+ * conflict, and the one convert gives a product archived since approval.
+ * `details.productIds` names the archived products (checkpoint F, B-3).
+ *
+ * Exported for its unit test only.
+ */
+export function operatorLineProducts<P extends Pick<CatalogProductRecord, 'id' | 'archivedAt'>>(
+  records: readonly P[],
+  productIds: readonly string[],
+): Map<string, P> {
+  const found = new Map(records.map((p) => [p.id, p]));
+  if (found.size !== new Set(productIds).size) {
+    throw new HttpError(404, ERROR_CODES.PRODUCT_NOT_FOUND, 'One or more products do not exist.');
+  }
+  // Checkpoint F (B-3): an edit sends every line, so the refusal names which products
+  // are archived — in `details`, the sentence stays catalog's.
+  const archivedIds = records.filter((p) => !isNotArchived(p)).map((p) => p.id);
+  if (archivedIds.length > 0) {
+    throw new HttpError(409, ERROR_CODES.PRODUCT_ARCHIVED, 'Product is archived.', {
+      productIds: [...new Set(archivedIds)],
+    });
+  }
+  return found;
 }

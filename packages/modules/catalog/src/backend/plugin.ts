@@ -8,6 +8,7 @@ import {
   type AssetReadPort,
   type SearchQueryPort,
   type AdminUserReadPort,
+  type CatalogProductAvailabilityPort,
   type EmailMailerPort,
   type LanguageReadPort,
   type ListingPriceOrderPort,
@@ -21,14 +22,14 @@ import {
 } from '@endora-commerce/contracts';
 import type { EventBus } from '@endora-commerce/platform/events';
 import type { StorefrontRevalidator } from '@endora-commerce/platform/http';
-import type { PlatformLogger } from '@endora-commerce/platform/kernel';
+import type { AdminPermissionChecker, PlatformLogger } from '@endora-commerce/platform/kernel';
 import {
   createBulkOperationQueue,
   createBulkOperationWorker,
   BULK_OPERATION_JOB_NAME,
 } from './services/bulk-operation-queue.js';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
-import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
+import type { SalesChannelMembershipPort, SettingsReadPort } from '@endora-commerce/platform/kernel';
 import { CatalogQueryService, type CatalogCursorSeal } from './services/catalog-query.service.js';
 import {
   CatalogAdminService,
@@ -60,9 +61,17 @@ import { BundleService } from './services/bundle.service.js';
 import { ProductEditorPreferencesService } from './services/product-editor-preferences.service.js';
 import { ProductListViewService } from './services/product-list-view-service.js';
 import { ProductOverridesService } from './services/product-overrides.service.js';
+import { ProductScopesService } from './services/product-scopes.service.js';
+import { UrlKeyService } from './services/url-key.service.js';
+import { ScopeOverviewService, type ListSeoProductScopes } from './services/scope-overview.service.js';
+import { composeCompletenessGate } from './services/scope-completeness.js';
+import { AttributeScopePreviewService } from './services/attribute-scope-preview.js';
 import { ProductScopeContextService } from './services/product-scope-context.service.js';
 import { ProductValueResolverService } from './services/product-value-resolver.service.js';
-import { registerCatalogPublicRoutes } from './routes.public.js';
+import { readContext as readCatalogContext, registerCatalogPublicRoutes } from './routes.public.js';
+import { registerCatalogUrlKeyPublicRoutes } from './routes.public.url-keys.js';
+import { UrlKeyResolutionService } from './services/url-key-resolution.service.js';
+import type { ResolveSeoProductMeta } from './services/catalog-query.service.js';
 import { registerCatalogAdminRoutes } from './routes.admin.js';
 import { registerCatalogApiKeyRoutes } from './routes.api-key.js';
 import { registerCatalogExternalRoutes } from './routes.external.js';
@@ -136,6 +145,18 @@ export interface CatalogModuleOptions {
    */
   resolveExternalAvailability?: ResolveAvailabilityPort;
   /**
+   * Feature 163 (R13) — `seo`'s product metadata per sales channel × language for
+   * the product page; answers `null` while `seo` is not effectively present.
+   * Optional: without it the page serves its derived metadata.
+   */
+  resolveSeoProductMeta?: ResolveSeoProductMeta;
+  /**
+   * Feature 163 (T118c) — `seo`'s scopes of a product for the scope overview; answers
+   * `[]` while `seo` is not effectively present. Optional: without it the overview lists
+   * no SEO field.
+   */
+  listSeoProductScopes?: ListSeoProductScopes;
+  /**
    * Feature 075 — `organizations`' read port. The external namespace's price
    * decoration resolves the calling organisation through it, where it used to
    * run `em.findOne(Organization, …)` against another module's table.
@@ -144,6 +165,9 @@ export interface CatalogModuleOptions {
    * the caller's own price is the caller's organisation's, and the one field
    * the pricing engine needs beyond the id — the customer group a
    * group-targeted list is selected by — lives on that row.
+   *
+   * Feature 163 (owner decision U1) — the product scopes answer names the
+   * organizations its audience rules name, best effort.
    */
   organizations?: OrganizationDetailsPort;
   /**
@@ -152,6 +176,11 @@ export interface CatalogModuleOptions {
    */
   adminUsers?: AdminUserReadPort;
   /**
+   * Feature 163, checkpoint F (S-3) — `admin_roles`' `permissionService`: a queued
+   * bulk operation re-checks, at worker start, that its requester may still write.
+   */
+  permissionChecker?: AdminPermissionChecker;
+  /**
    * Feature 005 / T027 — when provided, every newly-created Product is
    * automatically bound to the system-default Sales Channel unless it
    * already had memberships set through some other path (FR-011).
@@ -159,6 +188,12 @@ export interface CatalogModuleOptions {
    * pre-feature-005 fixtures.
    */
   salesChannelMembership?: SalesChannelMembershipPort;
+  /**
+   * Feature 163 — this module's own `catalogProductAvailabilityPort` (the
+   * registered instance), for the external bulk-price probe (W5 = A). The
+   * external namespace is not mounted without it.
+   */
+  productAvailability?: Pick<CatalogProductAvailabilityPort, 'filterAvailable'>;
   /**
    * Issue #185 — `inventory`'s per-warehouse threshold copy, used by product
    * duplication. Contributed as a presence-decided closure rather than resolved
@@ -174,6 +209,12 @@ export interface CatalogModuleOptions {
    * the new admin endpoints are NOT registered.
    */
   languageService?: LanguageReadPort;
+  /**
+   * Feature 163 (FR-060) — the platform's settings read, for the completeness
+   * gate's mode (`catalog.scope_completeness_gate`). Optional: when omitted no
+   * operator write is gated.
+   */
+  settingsReadPort?: Pick<SettingsReadPort, 'get'>;
   /**
    * In-app (bell) notifications — used by the queued bulk-edit path to
    * tell the requester their background operation finished. Optional;
@@ -322,6 +363,19 @@ export function catalogModule(options: CatalogModuleOptions) {
       // No scan-budget log on this instance, as before.
       undefined,
       options.cursorSeal,
+      // Feature 163 — the page's metadata through `seo`, presence-probed by the caller.
+      options.resolveSeoProductMeta,
+    );
+    // Feature 163 (FR-060, FR-061) — the completeness gate, composed into the
+    // operator's admin services only (this file); the integration ports registered in
+    // `index.ts` are built without it, so imports and connectors are never gated (A-6).
+    const completenessGate = composeCompletenessGate(
+      {
+        membership: options.salesChannelMembership,
+        attributeRead: attributeReadService,
+        settings: options.settingsReadPort,
+      },
+      options.log ?? app.log,
     );
     const adminService = new CatalogAdminService(
       options.emFactory,
@@ -332,12 +386,27 @@ export function catalogModule(options: CatalogModuleOptions) {
       attributeReadService,
       options.customFieldsPort,
       options.copyWarehouseThresholds,
+      completenessGate,
     );
+    // Feature 163 — scoped values per channel and channel × language. Needs the
+    // membership accessor for FR-014 and the C4 warning, like the overrides.
+    // Owner decision U1 — `organizations` names the audience's organizations in the answer.
+    const scopesService = options.salesChannelMembership
+      ? new ProductScopesService(
+          options.emFactory,
+          options.salesChannelMembership,
+          options.commandBus,
+          options.organizations,
+          completenessGate,
+        )
+      : undefined;
     const bulkUpdateService = new CatalogBulkUpdateService(
       options.emFactory,
       adminService,
       options.salesChannelMembership,
       options.auditLogService,
+      // Feature 163 (FR-050) — bulk scoped status runs the operator's scope write.
+      scopesService,
     );
 
     // Queued bulk-edit (Principle X): large selections persist as `pending`
@@ -349,11 +418,14 @@ export function catalogModule(options: CatalogModuleOptions) {
       ? createBulkOperationQueue(options.redis)
       : undefined;
     const bulkOperationService = new BulkOperationService(options.emFactory, bulkUpdateService, {
+      // Feature 163 (R30.3) — an undo announces what it reverted.
+      events: options.eventBus as CatalogEventBus,
       ...(options.adminNotificationService
         ? { notificationService: options.adminNotificationService }
         : {}),
       ...(options.mailer ? { mailer: options.mailer } : {}),
       ...(options.adminUsers ? { adminUsers: options.adminUsers } : {}),
+      ...(options.permissionChecker ? { permissionChecker: options.permissionChecker } : {}),
       ...(options.reindexSearchIndexes
         ? { reindexRunner: options.reindexSearchIndexes }
         : {}),
@@ -374,6 +446,8 @@ export function catalogModule(options: CatalogModuleOptions) {
     if (options.reindexSearchIndexes) {
       const queue = bulkOperationService;
       adminService.setSearchReindexEnqueuer(async ({ actorAdminUserId }) => {
+        // Exempt from the known-requester rule by design (S-L3): a reindex writes no
+        // product, and the flip that enqueues it may have no admin behind it.
         await queue.create({
           type: BULK_OPERATION_TYPES.SEARCH_REINDEX,
           requestedByAdminUserId:
@@ -395,6 +469,13 @@ export function catalogModule(options: CatalogModuleOptions) {
       // Feature 086 / FR-016 — the route's own refusal reads the page's display
       // mode off the same container the ordering comes from.
       ...(options.pricingService ? { listingPriceOrder: options.pricingService } : {}),
+    });
+    // Feature 163 (R12) — which product a storefront key names at (C, L). It asks
+    // the product page's own reachability decision, so a key never resolves to a
+    // product the page would refuse.
+    await registerCatalogUrlKeyPublicRoutes(app, {
+      resolutionService: new UrlKeyResolutionService(options.emFactory, queryService),
+      readContext: readCatalogContext,
     });
     const categoryAdminService = new CategoryAdminService(
       options.emFactory,
@@ -419,11 +500,13 @@ export function catalogModule(options: CatalogModuleOptions) {
       options.emFactory,
       options.commandBus,
       options.assets,
+      options.salesChannelMembership,
     );
     const attachmentService = new AttachmentService(
       options.emFactory,
       options.commandBus,
       options.assets,
+      options.salesChannelMembership,
     );
     const packagingUnitService = new PackagingUnitService(options.emFactory, options.commandBus);
     const productLinkService = new ProductLinkService(
@@ -454,13 +537,15 @@ export function catalogModule(options: CatalogModuleOptions) {
       // Issue #185 — the assortment check goes through the channel-membership
       // accessor, so the namespace is not mounted without it rather than
       // falling back to a hand-written bridge read.
-      options.salesChannelMembership
+      options.salesChannelMembership &&
+      // Feature 163 (W5 = A) — the bulk-price probe asks availability.
+      options.productAvailability
     ) {
       const decorator = new CatalogOrgPriceDecorator({
         emFactory: options.emFactory,
         pricingService: options.pricingService,
         organizations: options.organizations,
-        channelMembership: options.salesChannelMembership,
+        availability: options.productAvailability,
         ...(options.resolveExternalAvailability
           ? { resolveAvailability: options.resolveExternalAvailability }
           : {}),
@@ -506,6 +591,27 @@ export function catalogModule(options: CatalogModuleOptions) {
         )
       : undefined;
 
+    // Feature 163 — the scope overview (US4) reads membership through the kernel
+    // accessor and, for a product in no channel, the active platform languages.
+    const scopeOverviewService =
+      options.salesChannelMembership && options.languageService && attributeReadService
+        ? new ScopeOverviewService(
+            options.emFactory,
+            options.salesChannelMembership,
+            options.languageService,
+            attributeReadService,
+            options.listSeoProductScopes,
+          )
+        : undefined;
+    // Feature 163 — the FR-090 preview of an attribute's scope-flag change.
+    const attributeScopePreviewService = attributeReadService
+      ? new AttributeScopePreviewService(options.emFactory, attributeReadService)
+      : undefined;
+    // Feature 163 — URL keys per language and channel × language, and their redirects.
+    const urlKeyService = options.salesChannelMembership
+      ? new UrlKeyService(options.emFactory, options.salesChannelMembership, options.commandBus)
+      : undefined;
+
     await registerCatalogAdminRoutes(app, {
       adminService,
       categoryAdminService,
@@ -532,6 +638,10 @@ export function catalogModule(options: CatalogModuleOptions) {
       productListViewService: listViewService,
       ...(valueResolverService ? { productValueResolverService: valueResolverService } : {}),
       ...(overridesService ? { productOverridesService: overridesService } : {}),
+      ...(scopesService ? { productScopesService: scopesService } : {}),
+      ...(scopeOverviewService ? { scopeOverviewService } : {}),
+      ...(attributeScopePreviewService ? { attributeScopePreviewService } : {}),
+      ...(urlKeyService ? { urlKeyService } : {}),
     });
 
     // Consumer side (Principle X). The BullMQ worker claims each queued

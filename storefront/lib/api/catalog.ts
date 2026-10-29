@@ -1,9 +1,11 @@
+import { CATALOG_PRODUCT_STOREFRONT_CACHE_TAGS } from '@endora-commerce/contracts';
 import type {
   CategoryNode,
   CategoryPageContent,
   FilterDefinition,
   Pagination,
   ProductDetail,
+  ProductKeyResolution,
   ProductListCapabilities,
   ProductListSort,
   ProductSummary,
@@ -118,7 +120,44 @@ export async function getProductBySlug(
   const res = await apiGetForViewer<{ data: ProductDetail }>(
     withQuery(`/api/v1/catalog/products/${encodeURIComponent(slug)}`, params),
     ctx,
-    { revalidate: 60, tags: ['catalog:product', `catalog:product:${slug}`] },
+    { revalidate: 60, tags: productCacheTags(slug) },
+  );
+  return res.data;
+}
+
+/**
+ * Feature 163 (checkpoint E security review, I4; T155 finding CACHE-1) — a product
+ * read's cache tags: the shared tag, and the per-key tag of the key it was asked by
+ * while it fits Next's tag limit (the key comes from the URL, so it can be any length).
+ * `catalog` drops a product's per-key tags — its id, slug, URL keys and former keys —
+ * after every write that can change whether or where it is available
+ * (`CATALOG_PRODUCT_STOREFRONT_CACHE_TAGS`): Next keeps only a `200`, so the time-based
+ * window alone would go on serving a product that has since become unavailable.
+ */
+export function productCacheTags(key: string, shared: string = CATALOG_PRODUCT_STOREFRONT_CACHE_TAGS.product): string[] {
+  const keyed = CATALOG_PRODUCT_STOREFRONT_CACHE_TAGS.productKey(key);
+  return keyed.length <= CATALOG_PRODUCT_STOREFRONT_CACHE_TAGS.maxLength ? [shared, keyed] : [shared];
+}
+
+/**
+ * Feature 163 (`specs/163-product-data-scopes/contracts/url-keys-and-redirects.md`
+ * §4) — which product the key a product page was opened by names at the
+ * request's channel and language, or the path it redirects to.
+ *
+ * Asked as the viewer: the answer depends on who may see the product (an
+ * unavailable one is not found, for a redirect too), so a signed-in buyer's
+ * answer never enters the shared Data Cache — `apiGetForViewer`'s rule, as for
+ * the product read it precedes. A redirect is answered `200` with
+ * `kind: 'redirect'`; the page turns it into a permanent redirect.
+ */
+export async function resolveProductKey(
+  key: string,
+  ctx: RequestContext,
+): Promise<ProductKeyResolution> {
+  const res = await apiGetForViewer<{ data: ProductKeyResolution }>(
+    `/api/v1/catalog/products/resolve/${encodeURIComponent(key)}`,
+    ctx,
+    { revalidate: 60, tags: productCacheTags(key) },
   );
   return res.data;
 }
@@ -215,7 +254,7 @@ export async function getProductLinks(
     }>(
       withQuery(`/api/v1/catalog/products/${encodeURIComponent(productIdOrSlug)}/links`, linkParams),
       ctx,
-      { revalidate: 60, tags: ['catalog:links', `catalog:product:${productIdOrSlug}`] },
+      { revalidate: 60, tags: productCacheTags(productIdOrSlug, 'catalog:links') },
     );
     return res.data;
   } catch {

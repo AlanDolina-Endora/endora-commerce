@@ -28,11 +28,13 @@ w obu przypadkach każda cena podaje swoją walutę. Niepoprawny kod jest odrzuc
 | `GET /api/v1/catalog/categories/:id/content` | storefront | Treść strony jednej kategorii, dobrana do języka wywołującego |
 | `GET /api/v1/catalog/filters` | storefront | Atrybuty, po których można filtrować w aktywnym kanale sprzedaży |
 | `GET /api/v1/catalog/sitemap.xml` | roboty wyszukiwarek | Mapa witryny dla SEO |
-| `GET /api/v1/admin/catalog/products?includeArchived` | administrator | Lista produktów w panelu (ze szkicami; wiersze zarchiwizowane na żądanie) |
+| `GET /api/v1/admin/catalog/products?status&archived` | administrator | Lista produktów w panelu. `status` to `active` albo `inactive` (każda inna wartość: `400 VALIDATION_FAILED`); `archived` to `exclude` (domyślnie), `include` albo `only` — dawne `includeArchived=1` oznacza `include`. `counts` to `{ all, active, inactive, archived }` — zob. *Status produktu i archiwizacja* |
 | `GET /api/v1/admin/catalog/products/:id` | administrator | Szczegóły produktu |
 | `POST /api/v1/admin/catalog/products` | administrator | Utworzenie produktu (`type` nie można zmienić po utworzeniu; `sku` można edytować) |
 | `PATCH /api/v1/admin/catalog/products/:id` | administrator | Aktualizacja (łącznie z `sku`); zapisuje wpis audytu ze stateBefore / stateAfter; odrzuca z `409 sku_in_use`, gdy nowe SKU należy już do innego produktu |
-| `DELETE /api/v1/admin/catalog/products/:id` | administrator | Archiwizacja (usunięcie miękkie) |
+| `DELETE /api/v1/admin/catalog/products/:id` | administrator | Usunięcie (miękkie) — to nie jest akcja Archiwizuj |
+| `POST /api/v1/admin/catalog/products/:id/archive` | administrator (`catalog:write`) | Archiwizacja jednego produktu — zob. *Status produktu i archiwizacja* |
+| `POST /api/v1/admin/catalog/products/:id/restore` | administrator (`catalog:write`) | Przywrócenie jednego zarchiwizowanego produktu |
 | `GET`, `POST /api/v1/admin/catalog/products/list-views`; `PATCH`, `DELETE …/list-views/:id` | administrator | Zapisane widoki listy produktów — zob. *Zapisane widoki* niżej |
 | `GET /api/v1/admin/catalog/attributes` | administrator | Lista atrybutów |
 | `GET /api/v1/admin/catalog/attributes/by-flag?flag=isPromoRule\|isComparable\|...` | administrator | Dane do listy wyboru — wszystkie atrybuty z żądaną flagą |
@@ -51,7 +53,106 @@ w obu przypadkach każda cena podaje swoją walutę. Niepoprawny kod jest odrzuc
 | `DELETE /api/v1/admin/catalog/categories/:id` | administrator | Usunięcie miękkie; odrzucane z 409, gdy odwołuje się do niej aktywna kategoria podrzędna |
 | `GET /api/v1/admin/catalog/categories/:id/content` | administrator | Treść strony kategorii — jeden dokument Page Buildera na język ([Treść strony kategorii](./catalog/category-content.md)) |
 | `PUT /api/v1/admin/catalog/categories/:id/content` | administrator | Zastąpienie treści strony kategorii; `null` ją czyści |
-| `PUT /api/v1/catalog/products/by-sku/:sku` | klucz API | Idempotentne utworzenie lub aktualizacja (synchronizacja PIM) |
+| `PUT /api/v1/catalog/products/by-sku/:sku` | klucz API | Idempotentne utworzenie lub aktualizacja (synchronizacja PIM); aktualizacja jest audytowana jako `product.update` ze wskazaniem klucza (`apiKeyId`) i nigdy nie podlega kontroli kompletności |
+
+## Status produktu i archiwizacja
+
+**Status** produktu to `active` albo `inactive` — globalnie oraz jako nadpisanie dla kanału
+sprzedaży i dla pary kanał × język. `inactive` w dowolnym zakresie oznacza po prostu
+**wyłączenie** w tym zakresie: produkt nie jest wyświetlany na listach, nie da się go wyszukać
+ani zamówić, a jego strona odpowiada tak jak dla produktu, który nie istnieje. Wyłączenie
+produktu nigdy go nie archiwizuje. Nowe i powielone produkty zaczynają jako `inactive`. Każda
+inna wartość statusu jest odrzucana z `400 VALIDATION_FAILED` — w API panelu, przy zapisie
+kluczem API `PUT /api/v1/catalog/products/by-sku/:sku` i w imporcie; archiwizacja nie jest
+statusem.
+
+**Archiwizacja** to osobna akcja obejmująca cały produkt, dostępna jako **Archiwizuj** i
+**Przywróć** (`POST …/products/:id/archive`, `…/restore`) i wymagająca uprawnienia
+`catalog:write`. Archiwizuj ustawia czas archiwizacji produktu i wycofuje go ze wszystkich
+kanałów; Przywróć go czyści. Żadna z nich nie zmienia statusu w żadnym zakresie, a każda
+zapisuje jeden wpis audytu z czasem archiwizacji przed i po. Archiwizacja produktu już
+zarchiwizowanego albo przywrócenie produktu, który nie jest zarchiwizowany, odpowiada `200` i
+niczego nie zmienia — bez wpisu audytu i bez zdarzenia.
+
+- **Zbiorczo.** `POST /api/v1/admin/catalog/products/bulk-update` z
+  `fields: { archived: true }` archiwizuje każdy zaznaczony produkt, a `false` je przywraca —
+  każdy tą samą akcją i z własnym wpisem audytu. `archived` musi być jedynym polem żądania.
+  Duże zaznaczenia działają jako zbiorcza operacja w tle, a jej cofnięcie przywraca każdy
+  produkt do poprzedniego stanu. Operacja w tle zapisuje w audycie każdego produktu
+  administratora, który jej zażądał, tak jak operacja wykonana od razu. Archiwizacja i
+  przywracanie blokują produkt, więc dwie równoczesne archiwizacje jednego produktu
+  archiwizują go raz.
+- **Ustawienie `active` nigdy nie przywraca.** Zarchiwizowany produkt pozostaje zarchiwizowany
+  niezależnie od statusu; przywraca go tylko Przywróć. Przywrócenie produktu `inactive`
+  pozostawia go wyłączonym.
+- **Produkty zarchiwizowane przed tą zmianą.** Do tego wydania produkt archiwizowało się,
+  ustawiając go jako `inactive`. Każdy produkt, który w chwili aktualizacji jest `inactive`,
+  pozostaje więc zarchiwizowany (z zachowanym czasem archiwizacji albo, gdy go nie miał, z
+  czasem ostatniej zmiany) i **wymaga jawnego Przywróć**, aby wrócić — samo ustawienie `active`
+  pozostawia go zarchiwizowanym.
+- **Strona produktu.** Strona zarchiwizowanego produktu odpowiada `410 PRODUCT_ARCHIVED`
+  („usunięty”), ale tylko kupującemu, który w przeciwnym razie mógłby go tam zobaczyć:
+  sprawdzenie pomija archiwizację i czyta status globalny jako `active`, a wszystkie statusy
+  kanału i pary kanał × język, przynależność do kanału, języki kanału, okno publikacji i
+  odbiorcy nadal obowiązują. Wszędzie indziej, a także dla każdego produktu wyłączonego bez
+  archiwizacji, strona odpowiada `404` dokładnie tak jak dla produktu, który nie istnieje.
+- **Lista w panelu.** Zarchiwizowane produkty są domyślnie ukryte niezależnie od statusu;
+  `archived=only` pokazuje tylko je, a `archived=include` pokazuje je obok pozostałych. Licznik
+  i filtr `inactive` obejmują produkty wyłączone, ale niezarchiwizowane.
+  Na liście produktów karta **Zarchiwizowane** ma własny adres, `/catalog/products/archived`,
+  więc przycisk Wstecz przeglądarki i odświeżenie strony do niej wracają, a paleta poleceń
+  (⌘K / CTRL+K) otwiera ją jako **Zarchiwizowane produkty** — wystarczy wpisać „archiwum” lub
+  „archived”. Przy zaznaczeniu jej
+  pasek oferuje Przywróć, Edycję zbiorczą i Usuń; **Edytuj cenę** jest widoczne na pozostałych
+  kartach, ale nieaktywne, bo ceny ustawia się w cennikach.
+- **Z asystenta AI panelu.** Narzędzia asystenta `catalog.archive_product` i
+  `catalog.restore_product` (`catalog:write`) archiwizują i przywracają produkty po
+  zatwierdzeniu pokazanego planu — tą samą akcją i z tym samym wpisem audytu, z Tobą jako
+  wykonawcą; większe zaznaczenia działają jako opisana wyżej operacja zbiorcza. Narzędzie
+  statusu, `catalog.set_product_status`, tylko włącza i wyłącza produkty, nigdy ich nie
+  archiwizuje ani nie przywraca, a wyszukiwanie produktów asystenta pokazuje także
+  zarchiwizowane i oznacza je.
+
+### Status dla kanału i języka, zbiorczo
+
+`POST /api/v1/admin/catalog/products/bulk-update` z
+`fields: { scopedStatus: { channelId, languageCode, value } }` ustawia status każdego
+zaznaczonego produktu w jednym zakresie — kanale sprzedaży (`languageCode: null`) albo
+jednej parze kanał × język — na `active` lub `inactive`, albo usuwa tam nadpisanie
+wartością `inherit`. W każdym produkcie zmienia się tylko ten zakres; pozostałe zakresy
+i status globalny zostają bez zmian. Produkt, który nie należy do kanału, albo język,
+którego kanał nie oferuje, jest pomijany i raportowany jako `scope_invalid` — produkt
+nigdy nie zostaje dodany do kanału. `scopedStatus` nie może wystąpić razem ze `status`
+w jednym żądaniu. Zmiana każdego produktu to jeden wpis audytu z nazwą zakresu; duże
+zaznaczenia wykonują się jako operacja zbiorcza w tle, której cofnięcie przywraca każdy
+zakres i raportuje produkty zmienione w międzyczasie.
+
+### Kontrola kompletności przy włączaniu produktu
+
+Gdy **zmiana statusu** dokonana przez operatora włącza produkt w kanale sprzedaży i
+języku — status globalny, status kanału albo pary kanał × język, pojedynczo lub
+zbiorczo — produkt musi mieć w tym języku: **nazwę** (własną nazwę w tym języku albo
+nazwę nadpisaną dla tego kanału; nazwa w innym języku się nie liczy), **klucz URL**
+(liczy się klucz globalny) oraz każdy **wymagany** atrybut zależny od języka ze swojego
+zestawu atrybutów. Ustawienie **Completeness check when switching a product on**
+(`catalog.scope_completeness_gate`, jedna wartość dla całej platformy) decyduje, co się
+dzieje, gdy czegoś brakuje:
+
+- **`warn`** (domyślnie) — zmiana zostaje zapisana, a odpowiedź wymienia braki dla
+  każdego kanału i języka (`warnings`, rodzaj `completeness`).
+- **`refuse`** — zmiana nie zostaje zapisana: `422 SCOPE_INCOMPLETE` wymienia każdy
+  kanał i język wraz z brakami. Zmiana, która włączyłaby produkt w kilku miejscach, jest
+  odrzucana w całości, jeśli którekolwiek z nich nie spełnia warunków. W edycji
+  zbiorczej produkty spełniające warunki zostają zmienione, a pozostałe są pomijane jako
+  `completeness_gate`.
+
+Sprawdzana jest wyłącznie zmiana statusu. Produkt, który staje się dostępny, bo
+dołącza do kanału, kanał zyskuje język, otwiera się jego okno publikacji, zmienia się
+jego grupa odbiorców albo zostaje przywrócony z archiwum, nie jest sprawdzany — braki w
+każdym kanale i języku pokazuje wtedy **przegląd zakresów** w edytorze produktu.
+Ustawienie `active` dla zarchiwizowanego produktu jest sprawdzane jak każda zmiana
+statusu, choć produkt pozostaje zarchiwizowany. Importy, synchronizacja z PIM i upsert
+przez klucz API nigdy nie są sprawdzane.
 
 ## Ceny
 
@@ -226,15 +327,17 @@ w całości; ścisłe schematy to `CATALOG_WEBHOOK_EVENT_SCHEMAS` w `@endora-com
 | --- | --- | --- |
 | `product.created.v1` | Utworzono produkt — w panelu administracyjnym, przez zapis kluczem API, przez import albo synchronizację z PIM, albo przez powielenie innego produktu. | `productId` (UUID), `sku` — SKU, z którym produkt utworzono; może się później zmienić, `productId` nie. |
 | `product.updated.v1` | Zapisano produkt albo utworzono, zmieniono lub usunięto jeden z jego wariantów. | `productId`, `changedFields` — nazwy pól produktu, których dotyczył zapis (`name`, `status`, `categoryIds`, …; `variants` przy zapisie wariantu). Same nazwy, lista otwarta, może być pusta. |
-| `product.archived.v1` | Status produktu zmienia się na `inactive` z innego statusu. Raz na każdą taką zmianę: edycja produktu, który już jest nieaktywny, nie wysyła go ponownie. | `productId` |
+| `product.archived.v1` | Produkt zarchiwizowano akcją Archiwizuj — pojedynczo albo zbiorczo. Raz na każdą taką zmianę: archiwizacja produktu już zarchiwizowanego niczego nie wysyła. Zmiana statusu nigdy go nie wysyła: `inactive` to zwykłe wyłączenie. | `productId` |
 
-- **Kolejność.** Zapis archiwizujący wysyła `product.updated.v1` (ze `status` w `changedFields`), a
-  potem `product.archived.v1` — na każdej ścieżce, która może zarchiwizować produkt: w panelu
-  administracyjnym, przy zapisie kluczem API, w edycji zbiorczej i w imporcie.
-- **Ponowna aktywacja nie ma własnego zdarzenia.** Produkt, który przestaje być `inactive`, wysyła
-  `product.updated.v1` ze `status` w `changedFields` i nic więcej — to ten sam sygnał co przy każdej
-  innej zmianie statusu, także przy opublikowaniu szkicu. Aby je rozróżnić, odczytaj produkt:
-  odpowiedzią jest jego `status`.
+- **Kolejność.** Archiwizuj wysyła `product.updated.v1` (z `archivedAt` w `changedFields`), a
+  potem `product.archived.v1` — dla pojedynczego produktu i dla każdego produktu archiwizacji
+  zbiorczej.
+- **Przywrócenie nie ma własnego zdarzenia.** Przywróć wysyła `product.updated.v1` z `archivedAt`
+  w `changedFields` i nic więcej. Włączenie albo wyłączenie produktu wysyła `product.updated.v1`
+  ze `status`. Aby je rozróżnić, odczytaj produkt: odpowiedzią są jego `status` i `archivedAt`.
+- **Cofnięcie.** Cofnięcie edycji zbiorczej wysyła `product.updated.v1` dla każdego produktu,
+  który przywróciło, z nazwami przywróconych pól, oraz `product.archived.v1` tam, gdzie ponownie
+  archiwizuje produkt.
 - **Usunięcie nie jest dostarczane.** Usunięcie produktu emituje `product.deleted.v1` wyłącznie na
   działającej w procesie szynie zdarzeń; webhookom się go nie oferuje i nie jest przy tym wysyłane
   `product.archived.v1`. Odbiorca odwzorowujący katalog dowiaduje się o usunięciu z odczytu: API
@@ -256,6 +359,9 @@ w całości; ścisłe schematy to `CATALOG_WEBHOOK_EVENT_SCHEMAS` w `@endora-com
 - **Listy w poszczególnych kanałach sprzedaży** — usługa zapytań dostaje kontekst kanału sprzedaży,
   a każda pokazywana cena jest wyceniana dla tego kanału; nowe ograniczenia (np. katalogi dla
   segmentów klientów) dodaje się przez kompozycję w `catalog-query.service.ts`.
+- **Strefy edytora produktu** — edytor montuje strefy panelu, do których dokładają się inne
+  moduły; `product.editor.seo.after`, na końcu karty SEO (właściwości: `productId`), to miejsce,
+  w którym moduł SEO umieszcza link do edytora metatagów, dzięki czemu katalog go nie wymienia.
 - **Unikalność sluga** — slug jest domyślnie unikalny we wszystkich kanałach sprzedaży; jeśli kolizje
   między językami staną się problemem, nadpisz mechanizm tworzenia slugów w
   `catalog-admin.service.ts`.
@@ -316,6 +422,20 @@ Wartość jest **zapisywana na każdej pozycji zamówienia w chwili jego złoże
 zamówienia. Pozycja, której produktu nie dało się odczytać przy składaniu zamówienia, jest
 zapisywana jako niepodlegająca zwrotowi. To, co moduł Returns robi z zapisaną wartością, opisuje
 jego własna strona.
+
+### Dla kanału sprzedaży
+
+Obie zasady można nadpisać dla jednego kanału sprzedaży — **Zasady zamawiania** kanału w
+zakresach produktu (`PATCH /api/v1/admin/catalog/products/:id/scopes`, pola
+`minOrderQuantity` i `returnable` wpisu kanału; `null` przywraca wartość globalną).
+Wartość kanału obowiązuje wszędzie, gdzie koszyk, zamówienie albo zapytanie ofertowe należy
+do tego kanału: przy dodawaniu do koszyka, w widoku koszyka, przy przekazaniu do akceptacji,
+w podglądzie zamówienia, przy składaniu zamówienia, w podglądzie zamówienia tworzonego przez
+operatora, w zapytaniach ofertowych i w imporcie szybkiego zamówienia przez kupującego.
+Minimum kanału równe 1 oznacza brak minimum w tym kanale niezależnie od wartości globalnej.
+Przy składaniu zamówienia na każdej pozycji zapisywana jest flaga zwrotu z kanału
+zamówienia, więc zwroty podążają za kanałem, w którym złożono zamówienie. Karta produktu i
+lista produktów w sklepie podają minimum kanału żądania.
 
 ### Audyt i kopie
 
@@ -512,4 +632,4 @@ Wyszukiwanie globalne w panelu administracyjnym (paleta poleceń, ⌘K / Ctrl+K)
 | Kategoria: Nazwa | tak |
 | Kategoria: Klucz URL (slug) | tak |
 
-Nazwy są dopasowywane we wszystkich językach i wyświetlane w języku administratora. Produkty robocze i nieaktywne są znajdowane i pokazują swój status; usunięte produkty i kategorie nie są znajdowane. Wynik kategorii otwiera drzewo kategorii z wyróżnioną tą kategorią. Oba typy pojawiają się dla roli z uprawnieniem `catalog:read`.
+Nazwy są dopasowywane we wszystkich językach i wyświetlane w języku administratora. Produkty nieaktywne i zarchiwizowane są znajdowane i pokazują swój status; usunięte produkty i kategorie nie są znajdowane. Wynik kategorii otwiera drzewo kategorii z wyróżnioną tą kategorią. Oba typy pojawiają się dla roli z uprawnieniem `catalog:read`.

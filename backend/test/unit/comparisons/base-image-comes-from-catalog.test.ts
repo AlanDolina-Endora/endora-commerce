@@ -8,7 +8,6 @@ import type {
 } from '@endora-commerce/contracts';
 import { ModuleDisabledError } from '../../../src/kernel/lifecycle/plugin-helpers.js';
 import type { SettingsService } from '../../../src/kernel/settings/settings.service.js';
-import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
 import { ComparableAttributeProjection } from '../../../../packages/modules/comparisons/src/backend/services/comparable-attribute-projection.js';
 import { ComparisonService } from '../../../../packages/modules/comparisons/src/backend/services/comparison-service.js';
 import { ShareTokenGenerator } from '../../../../packages/modules/comparisons/src/backend/services/share-token-generator.js';
@@ -93,14 +92,18 @@ const attributePortStub: CatalogAttributeReadPort = {
   optionLabelIndex: async () => new Map(),
 };
 
-const refusingChannelMembership = new Proxy(
-  {},
-  {
-    get: (_target, property) => () => {
-      throw new Error(`comparisons unexpectedly called the channel bridge.${String(property)}`);
-    },
-  },
-) as SalesChannelMembershipPort;
+/**
+ * Feature 163 — `catalog`'s availability answer, which replaced the channel
+ * bridge in this service: every column is available, so the cases here read
+ * as they did.
+ */
+const availableEverywhere = {
+  filterAvailable: async (ids: readonly string[]) => new Set(ids),
+  // Feature 163 (FR-100) — no channel rule here: each record's own minimum stands.
+  effectiveOrderRules: async () => new Map<string, { minOrderQuantity: number | null; returnable: boolean }>(),
+  // Feature 163 (SEC-2) — consulted only for an id `filterAvailable` dropped, and it drops none here.
+  describeChannelAvailability: async () => new Map(),
+};
 
 const catalogProducts = {
   findById: async () => null,
@@ -124,7 +127,7 @@ function serviceWith(gallery: CatalogGalleryPort, bridgeRows: unknown[]): Compar
     new ComparableAttributeProjection(),
     new ShareTokenGenerator(),
     catalogProducts,
-    refusingChannelMembership,
+    availableEverywhere,
     gallery,
     settingsStub,
     attributePortStub,
@@ -180,7 +183,8 @@ describe('comparisons — the base image arrives over catalogGalleryPort', () =>
     ]).buildOwnerView(COMPARISON, 'channel-1');
 
     expect(baseImageUrls).toHaveBeenCalledTimes(1);
-    expect(baseImageUrls).toHaveBeenCalledWith([PRODUCT_A, PRODUCT_B]);
+    // Feature 163 (MED-1 = A) — the base image as the viewer's resolved channel shows it.
+    expect(baseImageUrls).toHaveBeenCalledWith([PRODUCT_A, PRODUCT_B], 'channel-1');
     expect(view.products.map((p) => p.primaryAssetUrl)).toEqual([
       'https://cdn.test/a.png',
       null,

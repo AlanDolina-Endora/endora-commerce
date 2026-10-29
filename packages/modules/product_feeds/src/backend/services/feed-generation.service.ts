@@ -687,6 +687,8 @@ export class FeedGenerationService {
     const em = this.deps.emFactory();
     const idPages = this.deps.selection.iterateProductIds({
       salesChannelId: prepared.salesChannelId,
+      // Feature 163 — the feed's language decides availability (FR-001).
+      languageCode: prepared.feed.languageCode,
       selectionRule: prepared.feed.selectionRule,
       // A price criterion resolves against exactly the prices this run emits
       // (FR-025, FR-028) — same currency, same list, or none of it happens.
@@ -790,7 +792,9 @@ export class FeedGenerationService {
     // catalogue. The edge binds, exactly as the two reads above it do: a feed
     // assembled out of a module the platform is not serving is worse than a run
     // that stops and records why.
-    const galleryRows = await this.deps.catalogGallery.listForProducts(productIds);
+    // Feature 163 (FR-076, owner decision MED-1 = A) — the gallery as the feed's channel
+    // shows it: an image hidden there never reaches the feed.
+    const galleryRows = await this.deps.catalogGallery.listForProducts(productIds, salesChannelId);
     const publicUrls = await this.deps.resolvePublicImageUrls([
       ...new Set(galleryRows.map((r) => r.assetId)),
     ]);

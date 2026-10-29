@@ -290,5 +290,5 @@ See "Repo map" above.
 
 ## Recent Changes
 - 165-task-management
+- feat/163-product-data-scopes
 - 164-admin-user-preferences
-- 163-projects-and-tasks

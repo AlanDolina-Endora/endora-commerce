@@ -1,6 +1,9 @@
-import { isProductVisibleTo, type CatalogProductReadPort } from '@endora-commerce/contracts';
-import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kernel';
-import { productIdsInRequestChannel } from '@endora-commerce/platform/kernel';
+import {
+  isProductVisibleTo,
+  type CatalogProductAvailabilityPort,
+  type CatalogProductReadPort,
+} from '@endora-commerce/contracts';
+import { currentSalesChannel } from '@endora-commerce/platform/kernel';
 import type {
   ProductLike,
   QuickOrderCatalogLookup,
@@ -27,10 +30,12 @@ export class CatalogPortLookup implements QuickOrderCatalogLookup {
   constructor(
     private readonly catalogProducts: CatalogProductReadPort,
     /**
-     * The sanctioned bridge accessor (Constitution XII), for the channel half
-     * of the same answer (issue #259).
+     * Feature 163 — `catalog`'s availability answer, which holds the channel
+     * half of the same answer (issue #259, through the sanctioned bridge
+     * accessor) together with the effective status at (channel, L), the
+     * window and the effective audience.
      */
-    private readonly channelMembership: SalesChannelMembershipPort,
+    private readonly availability: Pick<CatalogProductAvailabilityPort, 'filterAvailable' | 'effectiveOrderRules'>,
   ) {}
 
   /**
@@ -51,14 +56,46 @@ export class CatalogPortLookup implements QuickOrderCatalogLookup {
   async #publishedHere(
     audience: QuickOrderImportAudience,
     productIds: string[],
+    salesChannelId: string | undefined,
   ): Promise<ReadonlySet<string> | null> {
     if (audience === 'unrestricted') return null;
-    return productIdsInRequestChannel(this.channelMembership, productIds);
+    // Feature 163 — the buyer's route names the channel it resolved, so its
+    // paste is always asked at a channel. Outside a request, with no channel
+    // named, there is none to ask about (FR-007); the audience filter the
+    // callers apply first is the whole answer there, as before.
+    const channelId = salesChannelId ?? currentSalesChannel()?.id ?? null;
+    if (channelId === null) return null;
+    if (productIds.length === 0) return new Set();
+    // Feature 163 — the channel's default language: a pasted list carries no
+    // language of its own.
+    return this.availability.filterAvailable(productIds, {
+      channelId,
+      languageCode: null,
+      audience,
+    });
+  }
+
+  /**
+   * Feature 163 (FR-100) — the buyer's channel's effective minimum per product,
+   * from `catalog`. The operator's import has no channel yet and keeps the global
+   * minimum (a warning only, judged again by the build at the chosen channel).
+   */
+  async channelMinimums(
+    productIds: string[],
+    audience: QuickOrderImportAudience,
+    salesChannelId?: string,
+  ): Promise<ReadonlyMap<string, number | null>> {
+    if (audience === 'unrestricted' || productIds.length === 0) return new Map();
+    const channelId = salesChannelId ?? currentSalesChannel()?.id ?? null;
+    if (channelId === null) return new Map();
+    const rules = await this.availability.effectiveOrderRules(productIds, channelId);
+    return new Map([...rules].map(([productId, rule]) => [productId, rule.minOrderQuantity]));
   }
 
   async findProductsBySku(
     skus: string[],
     audience: QuickOrderImportAudience,
+    salesChannelId?: string,
   ): Promise<ProductLike[]> {
     if (skus.length === 0) return [];
     const products = (await this.catalogProducts.findBySkus(skus)).filter(
@@ -67,6 +104,7 @@ export class CatalogPortLookup implements QuickOrderCatalogLookup {
     const publishedHere = await this.#publishedHere(
       audience,
       products.map((p) => p.id),
+      salesChannelId,
     );
     return products
       .filter((p) => publishedHere === null || publishedHere.has(p.id))
@@ -75,6 +113,8 @@ export class CatalogPortLookup implements QuickOrderCatalogLookup {
         sku: p.sku,
         status: p.status,
         deletedAt: p.deletedAt,
+        // Feature 163 — what `product_archived` reads.
+        archivedAt: p.archivedAt,
         // Feature 155 (R12.1) — what the preview's minimum evaluation reads.
         type: p.type,
         minOrderQuantity: p.minOrderQuantity,
@@ -84,6 +124,7 @@ export class CatalogPortLookup implements QuickOrderCatalogLookup {
   async findVariantsBySku(
     skus: string[],
     audience: QuickOrderImportAudience,
+    salesChannelId?: string,
   ): Promise<VariantBySku[]> {
     if (skus.length === 0) return [];
     const variants = await this.catalogProducts.findVariantsBySkus(skus);
@@ -119,6 +160,7 @@ export class CatalogPortLookup implements QuickOrderCatalogLookup {
     const publishedHere = await this.#publishedHere(
       audience,
       visibleParents.map((p) => p.id),
+      salesChannelId,
     );
     const acquirableParents = new Set(
       visibleParents

@@ -6,6 +6,7 @@ import type {
   AdminUserReadPort,
   BuyerLinePricePort,
   CartWritePort,
+  CatalogProductAvailabilityPort,
   CatalogProductReadPort,
   CustomerAccountReadPort,
   CustomFieldListFilterPort,
@@ -103,6 +104,8 @@ export interface QuoteRequestsModuleOptions {
    * six module edges above.
    */
   channelMembership: SalesChannelMembershipPort;
+  /** Feature 163 — `catalog`'s availability answer for every quote-line seam. */
+  catalogAvailability: Pick<CatalogProductAvailabilityPort, 'filterAvailable' | 'effectiveNames' | 'effectiveOrderRules'>;
   customerAccounts: CustomerAccountReadPort;
   organizations: OrganizationDetailsPort;
   adminUsers: AdminUserReadPort;
@@ -202,6 +205,7 @@ export function quoteRequestsModule(options: QuoteRequestsModuleOptions): {
     salesRepAssignment,
     catalogProducts: options.catalogProducts,
     channelMembership: options.channelMembership,
+    catalogAvailability: options.catalogAvailability,
     customerAccounts: options.customerAccounts,
     adminUsers: options.adminUsers,
     carts: options.carts,
@@ -216,6 +220,7 @@ export function quoteRequestsModule(options: QuoteRequestsModuleOptions): {
 
   const adminService = new RfqAdminService({
     emFactory: options.emFactory,
+    channelMembership: options.channelMembership,
     events: options.eventBus as RfqEventBus,
     rfqService,
     eventService,
@@ -223,6 +228,7 @@ export function quoteRequestsModule(options: QuoteRequestsModuleOptions): {
     notificationService,
     salesRepAssignment,
     catalogProducts: options.catalogProducts,
+    catalogAvailability: options.catalogAvailability,
     customerAccounts: options.customerAccounts,
     organizations: options.organizations,
     adminUsers: options.adminUsers,

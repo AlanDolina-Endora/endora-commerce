@@ -21,6 +21,11 @@ export interface ProductLike {
   sku: string;
   status: string;
   deletedAt?: Date | null;
+  /**
+   * Feature 163 — set when the product is archived (the Archive action). The one
+   * reading of "archived": the status is not one (FR-010, FR-019).
+   */
+  archivedAt?: Date | null;
   /** Feature 155 — the product type; minimums apply to `simple` / `configurable` only. */
   type?: string;
   /** Feature 155 — the pieces minimum; `null` or absent = none. */
@@ -96,6 +101,13 @@ export interface QuickOrderCatalogLookup {
   findProductsBySku(
     skus: string[],
     audience: QuickOrderImportAudience,
+    /**
+     * Feature 163 — the channel the buyer's route resolved, asked explicitly so
+     * a buyer paste is never answered by audience alone. Absent only for a
+     * caller outside a request (a worker, a fixture), which reads the request
+     * scope and, finding none, falls back to the audience filter.
+     */
+    salesChannelId?: string,
   ): Promise<ProductLike[]>;
   /**
    * Variants whose own SKU matches one of `skus` (row referenced a variant
@@ -105,9 +117,23 @@ export interface QuickOrderCatalogLookup {
   findVariantsBySku(
     skus: string[],
     audience: QuickOrderImportAudience,
+    /** As {@link findProductsBySku}. */
+    salesChannelId?: string,
   ): Promise<VariantBySku[]>;
   /** All variants under the given parent products (for attribute-column resolution). */
   findVariantsByParent(productIds: string[]): Promise<Array<VariantLike & { parentProductId: string }>>;
+  /**
+   * Feature 163 (FR-100) — the minimum order quantity of each product in the
+   * buyer's channel, where it differs from nothing: the channel's effective
+   * value. Empty for the operator (`'unrestricted'`, no channel at import time)
+   * and outside a request with no channel named, where the global minimum stands.
+   */
+  channelMinimums(
+    productIds: string[],
+    audience: QuickOrderImportAudience,
+    /** As {@link findProductsBySku}. */
+    salesChannelId?: string,
+  ): Promise<ReadonlyMap<string, number | null>>;
 }
 
 interface Candidate {
@@ -129,9 +155,11 @@ interface ResolvedLine {
 }
 
 function isPurchasable(product: ProductLike): boolean {
-  // Feature 032 renamed the withdrawn product status `archived` → `inactive`.
-  // The `product_archived` rejection reason code is kept for contract stability.
-  return product.status !== 'inactive' && !product.deletedAt;
+  // Feature 163 (FR-010, FR-019) — `product_archived` means archived: `archivedAt`
+  // is set, whatever the status. A product merely switched off (`inactive`) is not
+  // judged here — on a channel the lookup's availability filter answers it
+  // not-found, like any product the buyer may not acquire there.
+  return !product.archivedAt && !product.deletedAt;
 }
 
 /**
@@ -147,7 +175,12 @@ export class QuickOrderImportPipeline {
 
   async run(
     parse: ParseOutcome,
-    opts: { maxRows?: number; audience: QuickOrderImportAudience },
+    opts: {
+      maxRows?: number;
+      audience: QuickOrderImportAudience;
+      /** Feature 163 — the channel the buyer's route resolved (see `findProductsBySku`). */
+      salesChannelId?: string;
+    },
   ): Promise<QuickOrderImportResponse> {
     const rejected: RejectedQuickOrderItem[] = [];
     // Feature 155 — the operator's summary always carries `warningCount`.
@@ -178,8 +211,8 @@ export class QuickOrderImportPipeline {
 
     const skus = Array.from(new Set(candidates.map((c) => c.sku)));
     const [products, variantsBySku] = await Promise.all([
-      this.lookup.findProductsBySku(skus, opts.audience),
-      this.lookup.findVariantsBySku(skus, opts.audience),
+      this.lookup.findProductsBySku(skus, opts.audience, opts.salesChannelId),
+      this.lookup.findVariantsBySku(skus, opts.audience, opts.salesChannelId),
     ]);
     const productBySku = new Map(products.map((p) => [p.sku, p]));
     const variantBySku = new Map(variantsBySku.map((v) => [v.sku, v]));
@@ -268,6 +301,12 @@ export class QuickOrderImportPipeline {
       if (!rules.has(variant.parentProductId) && variant.parent) {
         rules.set(variant.parentProductId, ruleOf(variant.parentProductId, variant.parent));
       }
+    }
+    // Feature 163 (FR-100) — the buyer's channel's minimum replaces the global one.
+    const channelMinimums = await this.lookup.channelMinimums([...rules.keys()], opts.audience, opts.salesChannelId);
+    for (const [productId, minOrderQuantity] of channelMinimums) {
+      const rule = rules.get(productId);
+      if (rule) rules.set(productId, { ...rule, minOrderQuantity });
     }
     const judged = this.judgeMinimums(merged, rules, opts.audience);
     rejected.push(...judged.rejected);
