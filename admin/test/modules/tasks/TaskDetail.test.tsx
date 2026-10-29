@@ -15,6 +15,8 @@ import {
   historyPage,
   renderTasks,
   taskDetail,
+  STATUS,
+  workflow,
 } from './tasks-fixtures';
 
 /**
@@ -30,6 +32,7 @@ import {
  */
 
 const getSpy = vi.fn();
+const postSpy = vi.fn();
 const patchSpy = vi.fn();
 const deleteSpy = vi.fn();
 
@@ -41,7 +44,7 @@ vi.mock('@endora-commerce/admin-kit/lib', async () => {
     ...actual,
     apiClient: {
       get: (...args: unknown[]) => getSpy(...args),
-      post: vi.fn(),
+      post: (...args: unknown[]) => postSpy(...args),
       put: vi.fn(),
       patch: (...args: unknown[]) => patchSpy(...args),
       delete: (...args: unknown[]) => deleteSpy(...args),
@@ -53,15 +56,17 @@ const { ApiError } = await import('@endora-commerce/admin-kit/lib');
 const { TaskDetail } = await import('../../../../packages/modules/tasks/src/admin/pages/TaskDetail');
 
 const TASK_PATH = `/api/v1/admin/tasks/${TASK_ID}`;
+const WORKFLOW_PATH = '/api/v1/admin/tasks/workflow';
 
 let current: TaskDetailData = taskDetail();
 
 beforeEach(() => {
   setMobileViewport(false);
-  for (const spy of [getSpy, patchSpy, deleteSpy]) spy.mockReset();
+  for (const spy of [getSpy, postSpy, patchSpy, deleteSpy]) spy.mockReset();
   current = taskDetail();
   getSpy.mockImplementation((path: string) => {
     if (path === TASK_PATH) return Promise.resolve({ data: current });
+    if (path === WORKFLOW_PATH) return Promise.resolve({ data: workflow() });
     if (path.startsWith(`${TASK_PATH}/history`)) {
       return Promise.resolve(
         historyPage([
@@ -84,12 +89,29 @@ async function renderPage(permissions?: readonly string[]): Promise<void> {
 }
 
 const contextCard = (): HTMLElement => screen.getByRole('region', { name: en('detail.context') });
+const MOVE_LABEL = core('kanban.moveTo.label', { title: 'Order the racking' });
+/** The status control: the kit's *Move to…* menu, the board's own (WCAG 3.2.2 — a move is one deliberate press). */
+const moveMenu = (): HTMLElement => screen.getByRole('button', { name: MOVE_LABEL });
+async function openMoveMenu(): Promise<string[]> {
+  await userEvent.click(await screen.findByRole('button', { name: MOVE_LABEL }));
+  const list = screen.getByRole('group', { name: MOVE_LABEL });
+  return within(list)
+    .getAllByRole('button')
+    .map((button) => button.textContent ?? '');
+}
+async function moveTo(status: string): Promise<void> {
+  await openMoveMenu();
+  await userEvent.click(within(screen.getByRole('group', { name: MOVE_LABEL })).getByRole('button', { name: status }));
+}
+const statusGroup = (): HTMLElement => screen.getByRole('group', { name: en('field.status') });
 
 describe('TaskDetail — the header and the context card', () => {
   it('names the Task, its number and its status', async () => {
     await renderPage();
     expect(screen.getAllByText('TSK-000001').length).toBeGreaterThan(0);
-    expect((screen.getByLabelText(en('field.status')) as HTMLSelectElement).value).toBe('todo');
+    expect(within(statusGroup()).getByText(STATUS.todo.name)).toBeInTheDocument();
+    // No native select: arrow keys on one would write a move per keypress (WCAG 3.2.2).
+    expect(screen.queryByRole('combobox', { name: en('field.status') })).toBeNull();
   });
 
   it('links the context card to the Project, with its Stage and the owner note', async () => {
@@ -138,14 +160,57 @@ describe('TaskDetail — the header and the context card', () => {
 });
 
 describe('TaskDetail — writing', () => {
-  it('changes the status at once, and shows the answer', async () => {
-    patchSpy.mockResolvedValue({ data: taskDetail({ status: 'in_progress' }) });
+  it('changes the status through the Move to… menu, the workflow move, and shows the answer', async () => {
+    postSpy.mockResolvedValue({ data: { task: taskDetail({ status: STATUS.in_progress }), openSubtasks: 0 } });
     await renderPage();
-    await userEvent.selectOptions(screen.getByLabelText(en('field.status')), 'in_progress');
-    expect(patchSpy).toHaveBeenCalledWith(TASK_PATH, { status: 'in_progress' });
-    await waitFor(() =>
-      expect((screen.getByLabelText(en('field.status')) as HTMLSelectElement).value).toBe('in_progress'),
+    await moveTo(STATUS.in_progress.name);
+    expect(postSpy).toHaveBeenCalledTimes(1);
+    expect(postSpy).toHaveBeenCalledWith(`${TASK_PATH}/status`, { from: 'todo', to: 'in_progress' });
+    await waitFor(() => expect(within(statusGroup()).getByText(STATUS.in_progress.name)).toBeInTheDocument());
+    // The chosen target unmounted with the list: focus is back on the menu's trigger (WCAG 2.4.3).
+    await waitFor(() => expect(moveMenu()).toHaveFocus());
+  });
+
+  it('offers only the moves the workflow permits from the current status (165 US2 scenario 5)', async () => {
+    getSpy.mockImplementation((path: string) => {
+      if (path === TASK_PATH) return Promise.resolve({ data: current });
+      if (path === WORKFLOW_PATH) {
+        const flow = workflow();
+        return Promise.resolve({
+          data: { ...flow, transitions: flow.transitions.filter((edge) => !(edge.from === 'todo' && edge.to === 'done')) },
+        });
+      }
+      if (path.startsWith(`${TASK_PATH}/history`)) return Promise.resolve(historyPage([]));
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    await renderPage();
+    expect(await openMoveMenu()).toEqual([STATUS.in_progress.name, STATUS.cancelled.name]);
+  });
+
+  it('shows the server’s refusal of a move and then offers only the targets it named', async () => {
+    postSpy.mockRejectedValue(
+      new ApiError(409, {
+        error: {
+          code: 'TASK_TRANSITION_FORBIDDEN',
+          message: 'The task workflow does not allow this move. It can move to: Cancelled.',
+          details: { allowedTargets: ['cancelled'] },
+        },
+      }),
     );
+    await renderPage();
+    await moveTo(STATUS.done.name);
+    expect(await screen.findByText('The task workflow does not allow this move. It can move to: Cancelled.')).toBeTruthy();
+    expect(within(statusGroup()).getByText(STATUS.todo.name)).toBeInTheDocument();
+    await waitFor(() => expect(moveMenu()).toBeEnabled());
+    expect(await openMoveMenu()).toEqual([STATUS.cancelled.name]);
+  });
+
+  it('moves focus into the editor when it opens and back to Edit when it closes (WCAG 2.4.3)', async () => {
+    await renderPage();
+    await userEvent.click(screen.getByRole('button', { name: en('detail.edit') }));
+    await waitFor(() => expect(screen.getByLabelText(new RegExp(en('field.title')))).toHaveFocus());
+    await userEvent.click(screen.getByRole('button', { name: core('common.action.cancel') }));
+    await waitFor(() => expect(screen.getByRole('button', { name: en('detail.edit') })).toHaveFocus());
   });
 
   it('edits the details in place and sends only what changed', async () => {
@@ -158,14 +223,15 @@ describe('TaskDetail — writing', () => {
     await userEvent.click(screen.getByRole('button', { name: core('common.action.save') }));
     expect(patchSpy).toHaveBeenCalledWith(TASK_PATH, { title: 'Order the galvanised racking' });
     expect(await screen.findByRole('heading', { name: /Order the galvanised racking/ })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('button', { name: en('detail.edit') })).toHaveFocus());
   });
 
   it('assigns the Task to the caller in one step', async () => {
-    current = taskDetail({ assignee: null });
-    patchSpy.mockResolvedValue({ data: taskDetail({ assignee: { id: ME_ID, name: 'Ada Min', active: true } }) });
+    current = taskDetail({ assignees: [] });
+    patchSpy.mockResolvedValue({ data: taskDetail({ assignees: [{ id: ME_ID, name: 'Ada Min', active: true }] }) });
     await renderPage();
     await userEvent.click(screen.getByRole('button', { name: en('detail.assignToMe') }));
-    expect(patchSpy).toHaveBeenCalledWith(TASK_PATH, { assignedAdminUserId: ME_ID });
+    expect(patchSpy).toHaveBeenCalledWith(TASK_PATH, { addAssigneeIds: [ME_ID] });
   });
 
   it("shows a refusal in the server's words", async () => {
@@ -177,7 +243,7 @@ describe('TaskDetail — writing', () => {
         },
       }),
     );
-    current = taskDetail({ assignee: null });
+    current = taskDetail({ assignees: [] });
     await renderPage();
     await userEvent.click(screen.getByRole('button', { name: en('detail.assignToMe') }));
     expect(
@@ -186,7 +252,8 @@ describe('TaskDetail — writing', () => {
   });
 
   it('deletes the Task after a confirmation and returns to the list', async () => {
-    deleteSpy.mockResolvedValue(undefined);
+    // `DELETE /tasks/:id` answers how many sub-tasks became top-level (165 US5).
+    deleteSpy.mockResolvedValue({ data: { subtasksDetached: 0 } });
     await renderPage();
     await userEvent.click(screen.getByRole('button', { name: en('detail.delete') }));
     const dialog = await screen.findByRole('dialog', { name: en('delete.title') });
@@ -206,8 +273,8 @@ describe('TaskDetail — writing', () => {
 
   it('is read-only for a reader: no status control, no edit, no delete', async () => {
     await renderPage(['tasks:read']);
-    expect(screen.queryByLabelText(en('field.status'))).toBeNull();
-    expect(screen.getAllByText(en('status.todo')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: MOVE_LABEL })).toBeNull();
+    expect(screen.getAllByText(STATUS.todo.name).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: en('detail.edit') })).toBeNull();
     expect(screen.queryByRole('button', { name: en('detail.delete') })).toBeNull();
     expect(screen.getByText(en('detail.readOnly'))).toBeTruthy();
@@ -225,6 +292,7 @@ describe('TaskDetail — history and the zone', () => {
   it('shows what each entry changed, field by field, and reads earlier entries a page at a time (kit RecordHistory)', async () => {
     getSpy.mockImplementation((path: string) => {
       if (path === TASK_PATH) return Promise.resolve({ data: current });
+      if (path === WORKFLOW_PATH) return Promise.resolve({ data: workflow() });
       if (path.startsWith(`${TASK_PATH}/history`)) {
         const second = path.includes('cursor=');
         return Promise.resolve({
@@ -249,11 +317,42 @@ describe('TaskDetail — history and the zone', () => {
     const history = screen.getByRole('region', { name: en('detail.history') });
     expect(await within(history).findByRole('heading', { name: en('auditLog.tasks.task.status_change') })).toBeTruthy();
     expect(within(history).getByText(en('history.field.status'))).toBeTruthy();
-    expect(within(history).getByText(en('status.done'))).toBeTruthy();
+    // The workflow's own name for the code the entry stored (165 R-1).
+    expect(await within(history).findByText(STATUS.done.name)).toBeTruthy();
     // An identifier is never a row.
     expect(within(history).queryByText(PROJECT_ID)).toBeNull();
     await userEvent.click(within(history).getByRole('button', { name: core('history.more') }));
     expect(await within(history).findByRole('heading', { name: en('auditLog.tasks.task.create') })).toBeTruthy();
+  });
+
+  it('shows a due moment once, without seconds, and not its derived due date beside it (T095)', async () => {
+    const dueAt = '2026-10-30T09:00:00.000Z';
+    getSpy.mockImplementation((path: string) => {
+      if (path === TASK_PATH) return Promise.resolve({ data: current });
+      if (path === WORKFLOW_PATH) return Promise.resolve({ data: workflow() });
+      if (path.startsWith(`${TASK_PATH}/history`)) {
+        return Promise.resolve(
+          historyPage([historyEntry({ id: 'h1', after: { title: 'Approve the drawings', dueOn: '2026-10-30', dueAt } })]),
+        );
+      }
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    await renderPage();
+    const history = screen.getByRole('region', { name: en('detail.history') });
+    expect(await within(history).findByText(en('history.field.dueAt'))).toBeTruthy();
+    expect(within(history).queryByText(en('history.field.dueOn'))).toBeNull();
+    expect(
+      within(history).getByText(
+        new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(dueAt)),
+      ),
+    ).toBeTruthy();
+    // The entry's own time too.
+    expect(
+      within(history).getByText(
+        new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date('2026-10-20T10:00:00.000Z')),
+        { exact: false },
+      ),
+    ).toBeTruthy();
   });
 
   it('mounts the task.detail.after zone with the Task id, naming no contributor', () => {

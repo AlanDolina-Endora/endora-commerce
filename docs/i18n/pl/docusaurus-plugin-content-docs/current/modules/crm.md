@@ -1440,9 +1440,16 @@ Nic nie ginie: po ponownym włączeniu powiązania znów pokazują swoje dokumen
 Wartość wyliczana uwzględni zapytania ofertowe przy najbliższym przeliczeniu.
 
 Moduł **Zadania** jest opcjonalny w ten sam sposób. Gdy jest wyłączony, zadanie
-wspomniane w tekście jest pokazywane jako *Zadanie niedostępne*, a lista
-dokumentów pod `@@` nie proponuje zadań; po ponownym włączeniu wzmianki znów
-pokazują swoje zadania.
+wspomniane w tekście jest pokazywane jako *Zadanie niedostępne*, lista
+dokumentów pod `@@` nie proponuje zadań, a ekran szansy nie pokazuje panelu
+*Zadania*; po ponownym włączeniu wzmianki znów pokazują swoje zadania. Gdy moduł
+jest włączony, panel *Zadania* na końcu ekranu szansy wymienia powiązane z nią
+zadania, które możesz zobaczyć — opisuje go strona modułu Zadania.
+
+Tak samo moduł **Projekty**: gdy jest wyłączony, projekt wspomniany w tekście
+jest pokazywany jako *Projekt niedostępny*, a lista dokumentów pod `@@` nie
+proponuje projektów; po ponownym włączeniu wzmianki znów pokazują swoje
+projekty.
 
 ### W Admin UI
 
@@ -1731,22 +1738,25 @@ znaczników — to, co pokazuje e-mail, powiadomienie albo historia zmian.
 Limity długości liczą zapisany ciąg razem ze znacznikami: opis do 20 000
 znaków, notatka albo wiadomość do 10 000, opis wydarzenia do 5000.
 
-## Odwołania do produktów, zamówień, zapytań ofertowych i zadań
+## Odwołania do produktów, zamówień, zapytań ofertowych, zadań, szans sprzedażowych i projektów
 
 Opis szansy sprzedażowej, notatka i wiadomość mogą wspominać **produkt**,
-**zamówienie**, **zapytanie ofertowe** albo **zadanie**. Wzmianka to znacznik w
-tekście:
+**zamówienie**, **zapytanie ofertowe**, **zadanie**, inną **szansę
+sprzedażową** albo **projekt**. Wzmianka to znacznik w tekście:
 
 ```text
 [[product:<identyfikator produktu>]]
 [[order:<identyfikator zamówienia>]]
 [[quote_request:<identyfikator zapytania ofertowego>]]
 [[task:<identyfikator zadania>]]
+[[opportunity:<identyfikator szansy sprzedażowej>]]
+[[project:<identyfikator projektu>]]
 ```
 
-To ten sam standard odwołań, którego używa moduł Projekty, więc tekst czyta się
-tak samo na obu ekranach. Teksty napisane, zanim można było wspominać zapytania
-ofertowe i zadania, pozostają bez zmian: ich znaczniki są podzbiorem powyższych.
+To ten sam standard odwołań, którego używają moduły Projekty i Zadania, więc
+tekst czyta się tak samo na każdym ekranie. Teksty napisane, zanim można było
+wspominać zapytania ofertowe, zadania, szanse sprzedażowe i projekty, pozostają
+bez zmian: ich znaczniki są podzbiorem powyższych.
 
 Tekst jest zapisywany i zwracany dokładnie tak, jak został napisany — jako ciąg
 znaków ze znacznikami odwołań i formatowania z sekcji *Tekst sformatowany*,
@@ -1765,10 +1775,12 @@ w kolejności występowania, każdy raz.
 ```
 
 - `label` to **aktualna** nazwa produktu w języku czytającego albo numer
-  zamówienia, zapytania ofertowego lub zadania — sprawdzane przy każdym odczycie
-  tekstu, więc produkt po zmianie nazwy pokazuje nową nazwę.
+  zamówienia, zapytania ofertowego, zadania, szansy sprzedażowej lub projektu —
+  sprawdzane przy każdym odczycie tekstu, więc produkt po zmianie nazwy pokazuje
+  nową nazwę.
 - `url` to miejsce, do którego wzmianka prowadzi w Admin UI — `/catalog/products/…`,
-  `/orders/…`, `/quote-requests/…` albo `/tasks/…`.
+  `/orders/…`, `/quote-requests/…`, `/tasks/…`, `/crm/opportunities/…` albo
+  `/projects/…`.
 - Dostępne **zamówienie** ma także obiekt `order`: to, co czytający widzi obok
   jego numeru.
 
@@ -1792,14 +1804,18 @@ w kolejności występowania, każdy raz.
   `status` to kod statusu zamówienia, `total` — jego kwota jako ciąg dziesiętny,
   `customerName` — firma z danych do faktury, a gdy jej nie ma, odbiorca
   z danych do faktury; `null`, gdy nie ma żadnego z nich. Produkt, zapytanie
-  ofertowe, zadanie i osoba nie mają takiego obiektu.
+  ofertowe, zadanie, szansa sprzedażowa, projekt i osoba nie mają takiego
+  obiektu.
 - Produkt, który już nie istnieje, zamówienie organizacji niedostępnej dla
   czytającego, zapytanie ofertowe albo zadanie, które zniknęło lub którego
   czytający nie może zobaczyć, a także zapytanie ofertowe albo zadanie, gdy moduł
   Zapytania ofertowe albo Zadania jest wyłączony, wracają z `"available": false`,
-  **bez nazwy i bez odnośnika**. Wzmianka zostaje w tekście; nic o jej celu nie
-  jest pokazywane. Zadanie jest ukryte także wtedy, gdy rekord, do którego
-  należy — na przykład projekt — jest niedostępny dla czytającego.
+  **bez nazwy i bez odnośnika**. Tak samo szansa sprzedażowa, która zniknęła,
+  oraz projekt, który zniknął, którego czytający nie może zobaczyć albo którego
+  moduł jest wyłączony. Wzmianka zostaje w tekście; nic o jej celu nie jest
+  pokazywane. Zadanie jest ukryte także wtedy, gdy rekord, do którego należy —
+  na przykład projekt — jest niedostępny dla czytającego, a cudze zadanie
+  prywatne i cudzy szkic — zawsze.
 
 Znacznik, który nie jest poprawny — nieznany typ, coś, co nie jest
 identyfikatorem — jest po prostu tekstem.
@@ -1816,11 +1832,14 @@ jako małą etykietę, a znacznik jest tylko tym, co zostaje zapisane. Po zapisa
 tekst pokazuje w tym miejscu tę nazwę jako odnośnik, a dla celu, który zniknął
 albo którego nie możesz zobaczyć — *Produkt niedostępny* /
 *Zamówienie niedostępne* / *Zapytanie ofertowe niedostępne* /
-*Zadanie niedostępne* — zarówno w zapisanym tekście, jak i w polu otwartym
+*Zadanie niedostępne* / *Szansa sprzedażowa niedostępna* /
+*Projekt niedostępny* — zarówno w zapisanym tekście, jak i w polu otwartym
 do edycji; to, czego nie widzisz, jest zapisywane z powrotem bez zmian. Nazwę
 widzi tylko osoba, która mogłaby otworzyć sam cel: numer zamówienia wymaga
 `orders:read`, numer zapytania ofertowego — `rfqs:handle`, numer zadania —
-`tasks:read`, a nazwa produktu — `catalog:read`.
+`tasks:read`, numer szansy sprzedażowej — `crm:read`, numer projektu —
+`projects:read` i widoczności samego projektu, a nazwa produktu —
+`catalog:read`.
 
 **Zamówienie mówi więcej przy odczycie.** W zapisanym tekście wspomniane
 zamówienie jest pokazywane jako jego numer — odnośnik otwierający zamówienie
@@ -1832,17 +1851,21 @@ ekranu — która otwiera je w nowej karcie.
 
 *Wstaw produkt* przeszukuje katalog i widzi go rola, która ma także
 `catalog:read`. *Wstaw dokument* przeszukuje **jedną listę dokumentów**,
-pogrupowaną **Zamówienia · Zapytania ofertowe · Zadania** — tę samą, którą
-oferuje moduł Projekty:
+pogrupowaną **Zamówienia · Zapytania ofertowe · Zadania · Szanse sprzedażowe ·
+Projekty** — tę samą, którą oferują moduły Projekty i Zadania:
 
 - **Zamówienia** i **Zapytania ofertowe** wyłącznie organizacji tej szansy —
   na formularzu tworzenia organizacji tam wybranej; bez niej żadna z tych grup
   nie jest proponowana;
 - **Zadania** — każde, które możesz zobaczyć;
-- każda grupa tylko dla roli, która ma także uprawnienie, z jakim czyta ją jej
-  moduł — `orders:read`, `rfqs:handle`, `tasks:read` — i tylko wtedy, gdy ten
-  moduł jest włączony. Rola bez żadnego z tych trzech uprawnień nie widzi
-  przycisku.
+- **Szanse sprzedażowe** — każda, po numerze albo tytule — to własne rekordy
+  tego modułu;
+- **Projekty** — każdy, który możesz zobaczyć, po numerze albo tytule;
+- każda grupa poza *Szansami sprzedażowymi* tylko dla roli, która ma także
+  uprawnienie, z jakim czyta ją jej moduł — `orders:read`, `rfqs:handle`,
+  `tasks:read`, `projects:read` — i tylko wtedy, gdy ten moduł jest włączony.
+  Rola bez żadnego z tych czterech uprawnień nie widzi przycisku, a więc nie
+  widzi też grupy *Szanse sprzedażowe*.
 
 Znacznik wpisany albo wklejony ręcznie jest zapisywany bez żadnego z tych
 uprawnień, a osobie bez uprawnienia pokazuje się jako niedostępny.
@@ -1855,13 +1878,14 @@ klawiatury:
 | Wpisz | Aby wspomnieć | Dostępne dla |
 | --- | --- | --- |
 | `@` | **osobę** — użytkownika Admin UI, który może czytać szanse sprzedażowe | każdego, kto pisze tekst |
-| `@@` | **dokument** — zamówienie albo zapytanie ofertowe organizacji tej szansy albo zadanie — z pogrupowanej listy opisanej wyżej | roli, która ma także `orders:read`, `rfqs:handle` albo `tasks:read`; każdą grupę tylko z jej własnym uprawnieniem |
+| `@@` | **dokument** — zamówienie albo zapytanie ofertowe organizacji tej szansy, zadanie, szansę sprzedażową albo projekt — z pogrupowanej listy opisanej wyżej | roli, która ma także `orders:read`, `rfqs:handle`, `tasks:read` albo `projects:read`; każdą grupę tylko z jej własnym uprawnieniem |
 | `@@@` | **produkt** | roli, która ma także `catalog:read` |
 
 Wpisz `@` na początku tekstu albo po spacji, a lista otworzy się **tam, gdzie
 piszesz** — pod tym wierszem albo nad nim, gdy poniżej nie ma miejsca; pisz
-dalej, aby ją zawęzić — imię, nazwisko, numer zamówienia, zapytania ofertowego
-albo zadania, tytuł zadania, nazwa albo SKU produktu. **Strzałki** poruszają po liście, **Enter** albo **Tab** wybiera,
+dalej, aby ją zawęzić — imię, nazwisko, numer zamówienia, zapytania ofertowego,
+zadania, szansy sprzedażowej albo projektu, tytuł zadania, szansy albo
+projektu, nazwa albo SKU produktu. **Strzałki** poruszają po liście, **Enter** albo **Tab** wybiera,
 **Escape** zamyka ją i zostawia to, co wpisano. Wybór zastępuje `@` i litery
 po nim wzmianką — pokazywaną jako **@Tomasz Nowak**, jako numer dokumentu albo
 jako nazwa produktu — a zdanie pisze się dalej:
@@ -2370,7 +2394,7 @@ której się wybiera.
 | `GET /api/v1/admin/crm/lookups/mentionable?q=…&organizationId=…` | `crm:write` | Aktywni administratorzy z uprawnieniem `crm:read` — osoby, które można wspomnieć w tekście: `id`, `name`. |
 | `GET /api/v1/admin/crm/lookups/contacts?organizationId=…&q=…` | `crm:write` | Członkowie jednej organizacji widocznej dla pytającego: `id`, `name`, `email`. |
 | `GET /api/v1/admin/crm/lookups/quote-requests?organizationId=…&q=…` | `crm:write` i `rfqs:handle` | Zapytania ofertowe jednej organizacji widocznej dla pytającego, które można powiązać: otwarte oraz to, którego numer wpisano w całości. `id`, `number`, `status`. Gdy moduł Zapytania ofertowe jest wyłączony, odpowiedzią jest `503`. |
-| `GET /api/v1/admin/crm/lookups/documents?opportunityId=…&q=…` | `crm:write` | Lista dokumentów pod `@@`: `{ "groups": [{ "kind": "order" \| "quote_request" \| "task", "items": [{ "id", "label", "sublabel"? }] }] }`, najwyżej dziesięć w grupie. Zamówienia i zapytania ofertowe organizacji szansy (`organizationId=…` zamiast tego, zanim szansa powstanie); zadania widoczne dla pytającego, z tytułem zadania w `sublabel`. Grupa jest obecna tylko dla pytającego z odpowiednio `orders:read`, `rfqs:handle` albo `tasks:read` i tylko wtedy, gdy jej moduł jest włączony. Szansa niedostępna dla pytającego daje `404`. Ten sam kształt co `GET /api/v1/admin/projects/lookups/documents` modułu Projekty. |
+| `GET /api/v1/admin/crm/lookups/documents?opportunityId=…&q=…` | `crm:write` | Lista dokumentów pod `@@`: `{ "groups": [{ "kind": "order" \| "quote_request" \| "task" \| "opportunity" \| "project", "items": [{ "id", "label", "sublabel"? }] }] }`, najwyżej dziesięć w grupie, w tej kolejności. Zamówienia i zapytania ofertowe organizacji szansy (`organizationId=…` zamiast tego, zanim szansa powstanie); zadania, szanse sprzedażowe i projekty widoczne dla pytającego, z tytułem w `sublabel`. Grupa `opportunity` jest obecna zawsze; każda inna tylko dla pytającego z odpowiednio `orders:read`, `rfqs:handle`, `tasks:read` albo `projects:read` i tylko wtedy, gdy jej moduł jest włączony. Szansa niedostępna dla pytającego daje `404`. Ten sam kształt co `GET /api/v1/admin/projects/lookups/documents` modułu Projekty. |
 
 Waluty proponowane przy tworzeniu szansy to te, w których sprzedają aktywne
 kanały sprzedaży.

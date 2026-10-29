@@ -8,6 +8,7 @@ import { anyRowExists as priceListsAnyRowExists } from '../../../../packages/mod
 import { anyRowExists as productFeedsAnyRowExists } from '../../../../packages/modules/product_feeds/src/backend/services/scheduled-work-probe.js';
 import { anyRowExists as projectsAnyRowExists } from '../../../../packages/modules/projects/src/backend/services/scheduled-work-probe.js';
 import { anyRowExists as quoteRequestsAnyRowExists } from '../../../../packages/modules/quote_requests/src/backend/services/scheduled-work-probe.js';
+import { anyRowExists as tasksAnyRowExists } from '../../../../packages/modules/tasks/src/backend/services/scheduled-work-probe.js';
 
 /**
  * Issue #120 — the question a scheduled tick asks **outside any tenant scope**
@@ -46,6 +47,10 @@ const PROBES = [
   { module: 'price_lists', file: 'services/price-list-status-worker.ts', method: 'hasDueTransitions' },
   { module: 'quote_requests', file: 'services/rfq-expiry-worker.ts', method: 'hasExpirable' },
   { module: 'projects', file: 'services/stage-alert-service.ts', method: 'hasSweepWork' },
+  // One worker, three passes (`specs/165-task-management/` R-17 – R-19): each pass has its own probe.
+  { module: 'tasks', file: 'services/reminder-service.ts', method: 'hasWork' },
+  { module: 'tasks', file: 'services/digest-service.ts', method: 'hasWork' },
+  { module: 'tasks', file: 'services/maintenance-service.ts', method: 'hasWork' },
 ] as const;
 
 const HELPER = 'services/scheduled-work-probe.ts';
@@ -105,7 +110,7 @@ describe('scheduled work probes answer one bit (issue #120)', () => {
       .filter((entry) => existsSync(join(MODULES, entry.name, 'src', 'backend', HELPER)))
       .map((entry) => entry.name);
 
-    expect(copies.sort()).toEqual(PROBES.map((probe) => probe.module).sort());
+    expect(copies.sort()).toEqual([...new Set(PROBES.map((probe) => probe.module))].sort());
   });
 
   it('the per-module copies of the helper are identical', () => {
@@ -122,6 +127,7 @@ describe('scheduled work probes answer one bit (issue #120)', () => {
     ['price_lists', priceListsAnyRowExists],
     ['quote_requests', quoteRequestsAnyRowExists],
     ['projects', projectsAnyRowExists],
+    ['tasks', tasksAnyRowExists],
   ] as const)('anyRowExists (%s)', (_module, anyRowExists) => {
     const emAnswering = (rows: unknown) => ({ execute: vi.fn(async () => rows) });
 

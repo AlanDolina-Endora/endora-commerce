@@ -413,6 +413,116 @@ export const MINTED_ERROR_CODES: MintedErrorCodes = {
       'Minted with the `tasks` module (`specs/163-projects-and-tasks/`, Phase 2A): a Task assigned ' +
       'to somebody who is not an active administrator.',
   },
+  TASK_STATUS_UNKNOWN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 2): a status change to a code the operator’s workflow does not hold.',
+  },
+  TASK_TRANSITION_FORBIDDEN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 2): a status change the operator’s workflow does not permit from the Task’s current ' +
+      'status.',
+  },
+  TASK_TRANSITION_CONFLICT: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 2): a status change from a status the Task has since left.',
+  },
+  TASK_WORKFLOW_INVALID: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 4): a workflow configuration write that breaks a rule — one initial open status, a done ' +
+      'and a cancelled status, moves between known statuses, a free code, a category changed under ' +
+      'Tasks, a removal in use without a replacement. From Phase 11 also the priority list’s two ' +
+      'refusals of that shape (`priority_code_taken`, `priority_replacement_required`).',
+  },
+  TASK_STATUS_IN_USE_TOO_MANY: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 4): removing a status that more Tasks are in than one Command moves to its replacement; ' +
+      'from Phase 11 also a priority, `details.code: priority` keying its sentence.',
+  },
+  TASK_PRIVATE_READ_ONLY: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 2): a change to another administrator’s private Task by a holder of ' +
+      '`tasks:see_private`, who may only read and delete it.',
+  },
+  TASK_PRIORITY_UNKNOWN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 3): a Task given a priority code the operator’s priority list does not hold.',
+  },
+  TASK_TAG_UNKNOWN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 3): a Task given a tag id that does not exist.',
+  },
+  TASK_TAG_NAME_TAKEN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 3): a Task tag created with a name already taken, case-insensitively.',
+  },
+  TASK_ATTACHMENT_REFUSED: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 3): a file refused as a Task attachment — over the size limit, or a document a browser would run.',
+  },
+  TASK_VIEW_NAME_TAKEN: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 5): a saved view of the Tasks list named as one its owner already has, case-insensitively.',
+  },
+  TASK_PARENT_CYCLE: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 7): a Task made a sub-task of itself or of one of its own descendants.',
+  },
+  TASK_HIERARCHY_TOO_DEEP: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 7): a parent change or a new sub-task that would nest sub-tasks deeper than five levels.',
+  },
+  TASK_LINK_INVALID: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 8): a record link to an Opportunity, an Order or a Quote Request whose owner is off, which ' +
+      'the caller may not read, or which does not exist — the three answer identically.',
+  },
+  TASK_REMINDER_INVALID: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 9): a reminder naming a recipient who is neither the caller nor an assignee, an eleventh ' +
+      'reminder on one Task, or a reminder relative to the due moment of a Task that has none.',
+  },
+  TASK_PRIVATE_ASSIGNEE: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 10): a private Task given an assignee other than its Creator, on create or on edit.',
+  },
+  TASK_ALREADY_PUBLISHED: {
+    to: 'tasks',
+    reason:
+      'Minted with the `tasks` module growing into Task management (`specs/165-task-management/`, ' +
+      'Phase 10): publishing a Task that is no longer a draft — publishing is one-way.',
+  },
   PROJECT_NOT_FOUND: {
     to: 'projects',
     reason:

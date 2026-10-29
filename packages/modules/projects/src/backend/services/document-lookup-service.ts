@@ -13,22 +13,25 @@ import type { ProjectTasks } from './project-tasks.js';
 export const DOCUMENT_LIST_GROUP_LIMIT = 10;
 
 export interface ProjectDocumentLookupServiceDeps {
-  access: Pick<ProjectAccess, 'loadVisible' | 'organizationIdsOf' | 'isOrgInScope'>;
+  access: Pick<ProjectAccess, 'loadVisible' | 'organizationIdsOf' | 'isOrgInScope' | 'searchVisible'>;
   /** `orders`' list — lazy, resolved per call. `orders` cannot be switched off. */
   orders: OrderListPort;
-  /** The one door to Quote Requests — asked `isPresent` first. */
-  quoteRequests: Pick<LinkedRecordOwners, 'isPresent' | 'searchQuoteRequests'>;
+  /** The one door to Quote Requests and Opportunities — asked `isPresent` first. */
+  quoteRequests: Pick<LinkedRecordOwners, 'isPresent' | 'searchQuoteRequests' | 'searchOpportunities'>;
   /** The one door to `tasks` — asked `present()` first. */
   tasks: Pick<ProjectTasks, 'present' | 'read'>;
-  mayRead: Pick<OwnerReadChecks, 'orders' | 'quoteRequests' | 'tasks'>;
+  mayRead: Pick<OwnerReadChecks, 'orders' | 'quoteRequests' | 'tasks' | 'opportunities'>;
 }
 
 /**
  * The `@@` document list of a Project's texts
  * (`specs/163-projects-and-tasks/` FR-044, research R-14;
  * `contracts/admin-api.md` §2.4 `GET /projects/lookups/documents`) — one
- * grouped answer, Orders · Quote Requests · Tasks, the shape CRM serves at
- * `GET /crm/lookups/documents`.
+ * grouped answer, Orders · Quote Requests · Tasks · Opportunities · Projects
+ * (the last two since `specs/165-task-management/` R-5), the shape CRM serves
+ * at `GET /crm/lookups/documents`. Opportunities are `crm`'s, offered to a
+ * holder of `crm:read` while `crm` is present; Projects are this module's own,
+ * the ones the caller may see.
  *
  * A group is in the answer only for a caller holding its owner's read code
  * (`orders:read`, `rfqs:handle`, `tasks:read`) and only while its owner is
@@ -55,13 +58,15 @@ export class ProjectDocumentLookupService {
     const withOrganizations = organizationIds.length > 0;
     const quoteRequestsPresent = withOrganizations && this.deps.quoteRequests.isPresent('quote_request');
     const tasksPresent = this.deps.tasks.present();
-    const [mayReadOrders, mayReadQuoteRequests, mayReadTasks] = await Promise.all([
+    const opportunitiesPresent = this.deps.quoteRequests.isPresent('opportunity');
+    const [mayReadOrders, mayReadQuoteRequests, mayReadTasks, mayReadOpportunities] = await Promise.all([
       withOrganizations ? this.deps.mayRead.orders() : Promise.resolve(false),
       quoteRequestsPresent ? this.deps.mayRead.quoteRequests() : Promise.resolve(false),
       tasksPresent ? this.deps.mayRead.tasks() : Promise.resolve(false),
+      opportunitiesPresent ? this.deps.mayRead.opportunities() : Promise.resolve(false),
     ]);
 
-    const [orders, quoteRequests, tasks] = await Promise.all([
+    const [orders, quoteRequests, tasks, opportunities, projects] = await Promise.all([
       mayReadOrders ? this.#orders(organizationIds, q) : Promise.resolve(null),
       mayReadQuoteRequests
         ? this.deps.quoteRequests
@@ -73,11 +78,21 @@ export class ProjectDocumentLookupService {
             .search({ q, limit: DOCUMENT_LIST_GROUP_LIMIT })
             .then((found) => found.map((task) => ({ id: task.id, label: task.number, sublabel: task.title })))
         : Promise.resolve(null),
+      mayReadOpportunities
+        ? this.deps.quoteRequests
+            .searchOpportunities(q, DOCUMENT_LIST_GROUP_LIMIT)
+            .then((found) => found.map((record) => ({ id: record.id, label: record.number, sublabel: record.title })))
+        : Promise.resolve(null),
+      this.deps.access
+        .searchVisible(q, DOCUMENT_LIST_GROUP_LIMIT)
+        .then((found) => found.map((project) => ({ id: project.id, label: project.number, sublabel: project.title }))),
     ]);
     const groups: RecordDocumentLookupGroup[] = [];
     if (orders) groups.push({ kind: 'order', items: orders });
     if (quoteRequests) groups.push({ kind: 'quote_request', items: quoteRequests });
     if (tasks) groups.push({ kind: 'task', items: tasks });
+    if (opportunities) groups.push({ kind: 'opportunity', items: opportunities });
+    groups.push({ kind: 'project', items: projects });
     return { groups };
   }
 

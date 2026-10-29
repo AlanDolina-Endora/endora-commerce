@@ -2,8 +2,8 @@ import type { TaskContextDescriptor } from '@endora-commerce/contracts';
 import { getTenantContext } from '@endora-commerce/platform/tenancy';
 
 /**
- * Which Tasks the caller may see (FR-031, research R-9) — **the module's only
- * read path**. `Task` is `@RuleScoped`: no ORM filter narrows it, so every
+ * Which Tasks the caller may see (163 FR-031, research R-9; 165 research R-3)
+ * — **the module's only read path**. `Task` is `@RuleScoped`: no ORM filter narrows it, so every
  * list, count and read by id of the `tasks` table asks this service first.
  *
  * - A Task without a context is visible to every holder of `tasks:read` (the
@@ -11,6 +11,11 @@ import { getTenantContext } from '@endora-commerce/platform/tenancy';
  * - A Task with a context is visible only when a **present** module registered
  *   its type and lists the id as visible to the caller. An unregistered type,
  *   or one whose owner is off, hides its Tasks (fail-closed).
+ * - **And**, whatever its context (165 R-3): a **draft** is visible to its
+ *   Creator only, even to a holder of `tasks:see_private`; a **private** Task
+ *   to its Creator and to holders of `tasks:see_private`. One conjunct, the
+ *   same in the list pre-filter and in a read by id:
+ *   `created_by = :me or (not is_draft and (not is_private or :seePrivate))`.
  * - The **system** actor — a sweep, a subscriber, anything with no request
  *   behind it — is not narrowed. Every other caller is, including one with no
  *   tenant context at all: an absent actor is not the system.
@@ -27,9 +32,24 @@ export interface VisibleContexts {
   readonly ids: readonly string[];
 }
 
+/** Who the caller is for the draft/private rule: their id, and whether they hold `tasks:see_private`. */
+export interface TaskViewer {
+  readonly adminUserId: string | null;
+  readonly seePrivate: boolean;
+}
+
 export type TaskVisibilityScope =
   | { readonly unrestricted: true }
-  | { readonly unrestricted: false; readonly contexts: readonly VisibleContexts[] };
+  | { readonly unrestricted: false; readonly contexts: readonly VisibleContexts[]; readonly viewer: TaskViewer };
+
+/** What one Task's visibility depends on. */
+export interface TaskVisibilityFacts {
+  contextType: string | null;
+  contextId: string | null;
+  createdByAdminUserId: string;
+  draft: boolean;
+  private: boolean;
+}
 
 export interface SqlFragment {
   readonly sql: string;
@@ -54,7 +74,25 @@ export function taskVisibilitySql(scope: TaskVisibilityScope, alias: string): Sq
     disjuncts.push(`(${alias}."context_type" = ? and ${alias}."context_id" = any(?::uuid[]))`);
     params.push(contextType, uuidArray(ids));
   }
-  return { sql: `(${disjuncts.join(' or ')})`, params };
+  const draftPrivate = draftPrivateSql(scope.viewer, alias);
+  return { sql: `(${disjuncts.join(' or ')}) and ${draftPrivate.sql}`, params: [...params, ...draftPrivate.params] };
+}
+
+/** The draft/private conjunct of research R-3, over `tasks` aliased `alias`. */
+function draftPrivateSql(viewer: TaskViewer, alias: string): SqlFragment {
+  const published = viewer.seePrivate
+    ? `not ${alias}."is_draft"`
+    : `(not ${alias}."is_draft" and not ${alias}."is_private")`;
+  if (viewer.adminUserId === null) return { sql: published, params: [] };
+  if (!UUID.test(viewer.adminUserId)) throw new Error(`tasks: "${viewer.adminUserId}" is not an administrator id.`);
+  return { sql: `(${alias}."created_by_admin_user_id" = ?::uuid or ${published})`, params: [viewer.adminUserId] };
+}
+
+/** The draft/private rule for one Task, as the pre-filter states it. */
+export function viewerMaySee(viewer: TaskViewer, task: Pick<TaskVisibilityFacts, 'createdByAdminUserId' | 'draft' | 'private'>): boolean {
+  if (viewer.adminUserId !== null && task.createdByAdminUserId === viewer.adminUserId) return true;
+  if (task.draft) return false;
+  return !task.private || viewer.seePrivate;
 }
 
 /** A Postgres `uuid[]` literal. The ids come from contributors, so each is checked before it is quoted. */
@@ -77,6 +115,8 @@ export interface TaskVisibilityDeps {
   contributors: () => readonly TaskContextDescriptor[];
   /** Read per call: the same service answers a request and a sweep. */
   isSystemActor: () => boolean;
+  /** The caller's id and whether they hold `tasks:see_private` — asked per call, never for the system. */
+  viewer: () => Promise<TaskViewer>;
 }
 
 export class TaskVisibility {
@@ -89,7 +129,12 @@ export class TaskVisibility {
     for (const descriptor of this.deps.contributors()) {
       contexts.push({ contextType: descriptor.contextType, ids: await descriptor.allVisibleContextIds() });
     }
-    return { unrestricted: false, contexts };
+    return { unrestricted: false, contexts, viewer: await this.deps.viewer() };
+  }
+
+  /** The caller as the draft/private rule sees them; `null` for the system, whom it does not narrow. */
+  async viewer(): Promise<TaskViewer | null> {
+    return this.deps.isSystemActor() ? null : this.deps.viewer();
   }
 
   /** The pre-filter for a list or a count over `tasks` aliased `alias`; `null` for the system. */
@@ -97,8 +142,21 @@ export class TaskVisibility {
     return taskVisibilitySql(await this.scope(), alias);
   }
 
-  /** Whether the caller may see one Task — its own contributor is asked about its one id. */
-  async canSee(task: { contextType: string | null; contextId: string | null }): Promise<boolean> {
+  /**
+   * Whether the caller may see one Task — the draft/private rule first, then
+   * its own contributor is asked about its one id.
+   */
+  async canSee(task: TaskVisibilityFacts): Promise<boolean> {
+    if (this.deps.isSystemActor()) return true;
+    if (!viewerMaySee(await this.deps.viewer(), task)) return false;
+    return this.canSeeContext(task);
+  }
+
+  /**
+   * Whether the caller may see a context alone — the history's question about
+   * a context a Task was once in, not about a Task.
+   */
+  async canSeeContext(task: { contextType: string | null; contextId: string | null }): Promise<boolean> {
     if (this.deps.isSystemActor()) return true;
     if (task.contextType === null || task.contextId === null) return true;
     const descriptor = this.deps.contributors().find((d) => d.contextType === task.contextType);

@@ -598,7 +598,8 @@ export class ProjectService {
     });
     // Its Tasks go with it too (spec edge case) — after the commit, through
     // the Tasks module's own Commands. With Tasks off they stay, belonging to
-    // a Project nobody can see, and so are hidden by the Tasks module.
+    // a Project nobody can see, and so are hidden by the Tasks module, whose
+    // maintenance pass deletes them once it is back on (`existingContexts`, #450).
     if (this.deps.tasks.present()) {
       await this.deps.tasks.write.deleteInContext({ contextType: PROJECT_TASK_CONTEXT_TYPE, contextId: visible.id });
     }

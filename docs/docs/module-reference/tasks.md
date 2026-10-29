@@ -30,18 +30,29 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | Module | Binding | What it means |
 | --- | --- | --- |
 | `_i18n` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `admin_roles` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `admin_users` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `assets_library` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `audit_logs` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `auth` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `catalog` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `custom_fields` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `orders` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `settings` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
+| `transactional_emails` | yes | installs and migrates after it, and an operator cannot switch it off underneath this module |
 | `admin_notifications` | no | degrades-without `adminNotificationRecordPort` — Assignees are not notified of new Tasks. |
 | `admin_search` | no | contributes-to `adminSearchProviderRegistry` |
+| `crm` | no | degrades-without `opportunityReadPort` — Opportunities cannot be referenced or linked; existing ones show as unavailable, and the Tasks panel on an Opportunity is not shown. |
+| `projects` | no | degrades-without `projectReadPort` — Projects cannot be referenced; existing references show as unavailable. |
+| `quote_requests` | no | degrades-without `quoteRequestReadPort` — Quote Requests cannot be referenced or linked; existing references and links show as unavailable. |
 
 ## Permissions
 
 | Code | Label | Also needs |
 | --- | --- | --- |
+| `tasks:configure` | Configure tasks | `tasks:read` |
 | `tasks:read` | View tasks | — |
+| `tasks:see_private` | See private tasks | `tasks:read` |
 | `tasks:write` | Create and edit tasks | `tasks:read` |
 
 ## Command palette
@@ -50,13 +61,19 @@ An operator switches this module on and off on **/platform/modules**. The choice
 | --- | --- | --- |
 | `new-task` | `/tasks/new` | `tasks:write` |
 | `open-my-tasks` | `/tasks/mine` | `tasks:read` |
+| `open-task-general-settings` | `/tasks/settings/general` | `tasks:configure` |
+| `open-task-priorities` | `/tasks/settings/priorities` | `tasks:configure` |
+| `open-task-tags` | `/tasks/settings/tags` | `tasks:configure` |
+| `open-task-workflow` | `/tasks/settings/workflow` | `tasks:configure` |
 | `open-tasks` | `/tasks` | `tasks:read` |
 
 ## Settings
 
 | Code | Name | Type |
 | --- | --- | --- |
+| `tasks.board_card_fields` | Fields shown on a task board card | `json` |
 | `tasks.enabled` | Tasks enabled | `boolean` |
+| `tasks.time_zone` | Time zone of task due dates, reminders and the daily digest | `string` |
 
 ## Translations
 

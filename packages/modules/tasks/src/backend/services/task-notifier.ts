@@ -20,7 +20,27 @@ export const taskNotificationText = {
     title: `Task ${number} was assigned to you`,
     titleMessage: { scope: 'tasks', key: 'notifications.assigned.title', params: { number } },
   }),
+  mentioned: (number: string): { title: string; titleMessage: AdminNotificationMessage } => ({
+    title: `You were mentioned in Task ${number}`,
+    titleMessage: { scope: 'tasks', key: 'notifications.mention.title', params: { number } },
+  }),
+  commented: (number: string): { title: string; titleMessage: AdminNotificationMessage } => ({
+    title: `New comment on Task ${number}`,
+    titleMessage: { scope: 'tasks', key: 'notifications.comment.title', params: { number } },
+  }),
+  reminder: (number: string): { title: string; titleMessage: AdminNotificationMessage } => ({
+    title: `Reminder: Task ${number}`,
+    titleMessage: { scope: 'tasks', key: 'notifications.reminder.title', params: { number } },
+  }),
+  /** The daily digest names no Task at all: how many, and a link to *My Tasks*. */
+  digest: (count: number): { title: string; titleMessage: AdminNotificationMessage } => ({
+    title: `Your daily task digest: ${count} due today or overdue`,
+    titleMessage: { scope: 'tasks', key: 'notifications.digest.title', params: { count } },
+  }),
 };
+
+/** Where the daily digest leads: *My Tasks*. */
+export const TASK_DIGEST_LINK_PATH = '/tasks/mine';
 
 /** Where a bell entry about a Task leads: its screen in the Admin UI. */
 export function taskLinkPath(taskId: string): string {
@@ -30,6 +50,12 @@ export function taskLinkPath(taskId: string): string {
 export interface TaskNotifier {
   /** Tell `targetAdminUserId` that Task `number` is now theirs (FR-032). */
   assigned(input: { targetAdminUserId: string; taskId: string; number: string }): Promise<TaskNotificationOutcome>;
+  /** Tell `targetAdminUserId` that a text of Task `number` mentions them (FR-006). */
+  mentioned(input: { targetAdminUserId: string; taskId: string; number: string }): Promise<TaskNotificationOutcome>;
+  /** Tell `targetAdminUserId` that Task `number` has a new comment (FR-026) — never what it says. */
+  commented(input: { targetAdminUserId: string; taskId: string; number: string }): Promise<TaskNotificationOutcome>;
+  /** Tell `targetAdminUserId` how many of their Tasks are due today or overdue (FR-036). */
+  digest(input: { targetAdminUserId: string; count: number }): Promise<TaskNotificationOutcome>;
 }
 
 /**
@@ -43,22 +69,33 @@ export interface TaskNotifier {
  * catches anything (CRM's `crm-notifier.ts`, the model).
  */
 export function createTaskNotifier(adminNotifications: AdminNotificationRecordPort): TaskNotifier {
+  const notify = async (
+    kind: string,
+    text: { title: string; titleMessage: AdminNotificationMessage },
+    { targetAdminUserId, taskId }: { targetAdminUserId: string; taskId: string | null },
+  ): Promise<TaskNotificationOutcome> => {
+    if (!effectiveState.isPresent('admin_notifications')) return 'not-present';
+    await adminNotifications.record({
+      audience: 'admin_user',
+      targetAdminUserId,
+      kind,
+      subjectType: taskId === null ? null : 'task',
+      subjectId: taskId,
+      title: text.title,
+      titleMessage: text.titleMessage,
+      linkPath: taskId === null ? TASK_DIGEST_LINK_PATH : taskLinkPath(taskId),
+    });
+    return 'recorded';
+  };
   return {
-    async assigned({ targetAdminUserId, taskId, number }): Promise<TaskNotificationOutcome> {
-      if (!effectiveState.isPresent('admin_notifications')) return 'not-present';
-      const text = taskNotificationText.assigned(number);
-      await adminNotifications.record({
-        audience: 'admin_user',
-        targetAdminUserId,
-        kind: 'tasks.task.assigned',
-        subjectType: 'task',
-        subjectId: taskId,
-        title: text.title,
-        titleMessage: text.titleMessage,
-        linkPath: taskLinkPath(taskId),
-      });
-      return 'recorded';
-    },
+    assigned: (input) => notify('tasks.task.assigned', taskNotificationText.assigned(input.number), input),
+    mentioned: (input) => notify('tasks.task.mention', taskNotificationText.mentioned(input.number), input),
+    commented: (input) => notify('tasks.task.comment', taskNotificationText.commented(input.number), input),
+    digest: (input) =>
+      notify('tasks.digest.daily', taskNotificationText.digest(input.count), {
+        targetAdminUserId: input.targetAdminUserId,
+        taskId: null,
+      }),
   };
 }
 

@@ -347,28 +347,34 @@ describe('projects — who sees a Project (US5)', () => {
     const bellAbout = (taskId: string) =>
       h.em().find(AdminNotification, { subjectId: taskId }, { filters: false, orderBy: { createdAt: 'asc' } });
 
-    it('is not rung for an assignee who may not see the Task’s Project; it is for one who may', async () => {
+    it('is rung for an assignee who may see the Task’s Project; one who may not is refused, and told nothing (#506)', async () => {
       await setSetting('members');
       const project = projects.members_and_listed;
       const design = stageNamed(project, 'Design');
-      const hidden = await createStageTask(h, project.id, design, {
-        title: `${token} for the outsider`,
-        assignedAdminUserId: other.adminUserId,
+      // Before #506 this assignment was accepted and the bell stayed silent; now it is refused.
+      const refused = await callTasks(h, 'POST', '', {
+        payload: {
+          title: `${token} for the outsider`,
+          context: { contextType: 'project', contextId: project.id, contextGroupId: design },
+          assigneeIds: [other.adminUserId],
+        },
       });
-      expect(await bellAbout(hidden.id)).toEqual([]);
+      expect(refused.statusCode, refused.body).toBe(422);
+      expect(refused.json().error.code).toBe('TASK_ASSIGNEE_INVALID');
 
       const toListed = await createStageTask(h, project.id, design, { title: `${token} for the listed` });
-      const assign = await callTasks(h, 'PATCH', `/${toListed.id}`, { payload: { assignedAdminUserId: listed.adminUserId } });
+      const assign = await callTasks(h, 'PATCH', `/${toListed.id}`, { payload: { assigneeIds: [listed.adminUserId] } });
       expect(assign.statusCode, assign.body).toBe(200);
       expect((await bellAbout(toListed.id)).map((n) => n.targetAdminUserId)).toEqual([listed.adminUserId]);
 
-      // Handing the hidden one on to somebody who may not see it either still tells nobody.
-      const handOn = await callTasks(h, 'PATCH', `/${hidden.id}`, { payload: { assignedAdminUserId: seeAll.adminUserId } });
+      // Handing it on to somebody who may see it rings for them; to somebody who may not is refused, and tells nobody.
+      const handOn = await callTasks(h, 'PATCH', `/${toListed.id}`, { payload: { assigneeIds: [seeAll.adminUserId] } });
       expect(handOn.statusCode, handOn.body).toBe(200);
-      expect((await bellAbout(hidden.id)).map((n) => n.targetAdminUserId)).toEqual([seeAll.adminUserId]);
-      const back = await callTasks(h, 'PATCH', `/${hidden.id}`, { payload: { assignedAdminUserId: other.adminUserId } });
-      expect(back.statusCode, back.body).toBe(200);
-      expect((await bellAbout(hidden.id)).map((n) => n.targetAdminUserId)).toEqual([seeAll.adminUserId]);
+      expect((await bellAbout(toListed.id)).map((n) => n.targetAdminUserId)).toEqual([listed.adminUserId, seeAll.adminUserId]);
+      const away = await callTasks(h, 'PATCH', `/${toListed.id}`, { payload: { assigneeIds: [other.adminUserId] } });
+      expect(away.statusCode, away.body).toBe(422);
+      expect(away.json().error.code).toBe('TASK_ASSIGNEE_INVALID');
+      expect((await bellAbout(toListed.id)).map((n) => n.targetAdminUserId)).toEqual([listed.adminUserId, seeAll.adminUserId]);
     });
 
     it('a mention and a message ring only for people who may see the Project (T111)', async () => {
@@ -399,7 +405,7 @@ describe('projects — who sees a Project (US5)', () => {
       const project = projects.everyone;
       const task = await createStageTask(h, project.id, stageNamed(project, 'Design'), {
         title: `${token} open`,
-        assignedAdminUserId: other.adminUserId,
+        assigneeIds: [other.adminUserId],
       });
       expect((await bellAbout(task.id)).map((n) => n.targetAdminUserId)).toEqual([other.adminUserId]);
     });

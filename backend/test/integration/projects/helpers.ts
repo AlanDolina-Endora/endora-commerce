@@ -178,9 +178,16 @@ export async function createStageTask(
   return TaskDetailResponseSchema.parse(response.json()).data;
 }
 
-/** `PATCH /tasks/:id` with a new status; fails the test on anything but 200. */
+/**
+ * `POST /tasks/:id/status` from the status the Task is in to `status`
+ * (`specs/165-task-management/` R-1 — `PATCH` no longer takes a status); fails
+ * the test on anything but 200.
+ */
 export async function setTaskStatus(h: BackendServerHandle, taskId: string, status: string): Promise<void> {
-  const response = await callTasks(h, 'PATCH', `/${taskId}`, { payload: { status } });
+  const current = await callTasks(h, 'GET', `/${taskId}`);
+  expect(current.statusCode, current.body).toBe(200);
+  const from = TaskDetailResponseSchema.parse(current.json()).data.status.code;
+  const response = await callTasks(h, 'POST', `/${taskId}/status`, { payload: { from, to: status } });
   expect(response.statusCode, response.body).toBe(200);
 }
 

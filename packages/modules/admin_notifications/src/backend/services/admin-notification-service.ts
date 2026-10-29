@@ -99,6 +99,32 @@ export class AdminNotificationService {
   async record(input: RecordNotificationInput): Promise<AdminNotification> {
     // command-coverage-ignore: admin notification bookkeeping — system-generated
     // alert record / read-state, not an audited domain-state mutation.
+    const em = this.emFactory();
+    const entry = this.#create(em, input);
+    await em.persistAndFlush(entry);
+    await this.pruneStale(input.audience, input.targetAdminUserId ?? null);
+    return entry;
+  }
+
+  /**
+   * {@link record} on the **caller's** EntityManager: created and persisted
+   * into its unit of work, with no fork and no flush, so the entry commits or
+   * rolls back with the caller's transaction (`specs/165-task-management/`
+   * SC-004 — a reminder's delivery row and its bell entry are one write). The
+   * recipient's older entries are pruned by their next {@link record}.
+   */
+  recordWithin(em: EntityManager, input: RecordNotificationInput): AdminNotification {
+    // command-coverage-ignore: admin notification bookkeeping, persisted into the
+    // caller's unit of work — the caller's Command is what commits it.
+    const entry = this.#create(em, input);
+    em.persist(entry);
+    return entry;
+  }
+
+  /** One entry, checked and created on `em` — not persisted. */
+  #create(em: EntityManager, input: RecordNotificationInput): AdminNotification {
+    // command-coverage-ignore: admin notification bookkeeping — the entry both
+    // writers above persist; not an audited domain-state mutation.
     if (input.audience === 'admin_user' && !input.targetAdminUserId) {
       throw new Error(
         'AdminNotificationService.record: targetAdminUserId is required when audience="admin_user".',
@@ -118,8 +144,7 @@ export class AdminNotificationService {
         'AdminNotificationService.record: bodyMessage requires a body — the finished sentence shown when the message cannot be resolved.',
       );
     }
-    const em = this.emFactory();
-    const entry = em.create(AdminNotification, {
+    return em.create(AdminNotification, {
       audience: input.audience,
       targetAdminUserId: input.targetAdminUserId ?? null,
       kind: input.kind,
@@ -131,9 +156,6 @@ export class AdminNotificationService {
       titleMessage,
       bodyMessage,
     });
-    await em.persistAndFlush(entry);
-    await this.pruneStale(input.audience, input.targetAdminUserId ?? null);
-    return entry;
   }
 
   async listForAdmin(input: ListNotificationsInput): Promise<ListNotificationsResult> {

@@ -56,6 +56,16 @@ describe('TaskCreate', () => {
     expect(postSpy).not.toHaveBeenCalled();
   });
 
+  it('links the description’s hint to the field, and names the tag picker by its visible label (T092)', async () => {
+    renderPage();
+    const description = await screen.findByLabelText(en('field.description'));
+    // The field adds its own shortcut hint after it.
+    expect(description).toHaveAccessibleDescription(expect.stringContaining(en('field.descriptionHint')));
+    const tags = screen.getByRole('button', { name: en('field.tags') });
+    expect(tags).not.toHaveAttribute('aria-label');
+    expect(document.getElementById(tags.getAttribute('aria-labelledby') ?? '')?.textContent).toBe(en('field.tags'));
+  });
+
   it('creates a Task with the fields filled, assigned to the caller, and opens it', async () => {
     postSpy.mockResolvedValue({ data: taskDetail() });
     renderPage();
@@ -68,7 +78,7 @@ describe('TaskCreate', () => {
       title: 'Order the racking',
       description: 'Three bays.',
       dueOn: '2026-11-05',
-      assignedAdminUserId: ME_ID,
+      assigneeIds: [ME_ID],
     });
     expect(await screen.findByText('task screen')).toBeTruthy();
   });

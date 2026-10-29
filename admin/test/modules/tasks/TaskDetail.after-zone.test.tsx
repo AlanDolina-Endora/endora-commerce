@@ -3,7 +3,14 @@ import { cleanup, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { zoneComponent, type AdminContributions } from '@endora-commerce/admin-kit/contributions';
 import { setMobileViewport } from '../../setup';
-import { TASK_ID, en, historyPage, renderTasks, taskDetail } from './tasks-fixtures';
+import {
+  TASK_ID,
+  en,
+  historyPage,
+  renderTasks,
+  taskDetail,
+  workflow,
+} from './tasks-fixtures';
 
 /**
  * `task.detail.after` — the stack of panels a Task's screen ends with
@@ -66,14 +73,21 @@ async function renderDetail(options: {
     contributions: options.registry,
   });
   await screen.findByRole('heading', { name: /Order the racking/ });
-  // The history is the last thing the host loads; wait for it so two renders compare.
+  // The history and the comments load last; wait for both so two renders compare.
   await screen.findByText(en('history.empty'));
+  await screen.findByText(en('comments.empty'));
   return container;
 }
 
-/** The screen's markup with React's per-render ids taken out, so two renders compare. */
+/**
+ * The screen's markup with React's per-render ids taken out, so two renders
+ * compare — also where a component derives an id from one (`<id>-body`).
+ */
 function markup(container: HTMLElement): string {
-  return container.innerHTML.replace(/(id|for|aria-[a-z]+)="(:r[0-9a-z]+:|«r[0-9a-z]+»|_r_[0-9a-z]+_)"/g, '$1="_"');
+  return container.innerHTML.replace(
+    /(id|for|aria-[a-z]+)="(:r[0-9a-z]+:|«r[0-9a-z]+»|_r_[0-9a-z]+_)([^"]*)"/g,
+    '$1="_$3"',
+  );
 }
 
 beforeEach(() => {
@@ -81,7 +95,9 @@ beforeEach(() => {
   getSpy.mockReset();
   getSpy.mockImplementation((path: string) => {
     if (path === `/api/v1/admin/tasks/${TASK_ID}`) return Promise.resolve({ data: taskDetail() });
+    if (path === '/api/v1/admin/tasks/workflow') return Promise.resolve({ data: workflow() });
     if (path.includes('/history')) return Promise.resolve(historyPage([]));
+    if (path.endsWith('/comments')) return Promise.resolve({ data: [] });
     return Promise.reject(new Error(`unexpected GET ${path}`));
   });
 });

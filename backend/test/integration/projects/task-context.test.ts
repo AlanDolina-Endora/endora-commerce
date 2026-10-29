@@ -62,6 +62,18 @@ describe('projects — the `project` Task context (US2)', () => {
     return MyTasksResponseSchema.parse(response.json()).data.map((t) => t.id);
   }
 
+  /**
+   * An assignee the Tasks API would refuse today — somebody assigned before
+   * they lost sight of the Task's context (spec, Edge Cases) — written as the
+   * row it leaves behind.
+   */
+  async function assignBehindTheApi(taskId: string, adminUserId: string): Promise<void> {
+    await h
+      .em()
+      .getConnection()
+      .execute(`insert into "task_assignees" ("task_id", "admin_user_id") values (?, ?)`, [taskId, adminUserId]);
+  }
+
   beforeAll(async () => {
     h = await setupBackendServer();
     const write = await h.app.inject({
@@ -79,10 +91,13 @@ describe('projects — the `project` Task context (US2)', () => {
     });
     created.push(project.id);
     const design = stageNamed(project, 'Design');
-    forMember = (await createStageTask(h, project.id, design, { title: 'For the member', assignedAdminUserId: member.adminUserId })).id;
+    forMember = (await createStageTask(h, project.id, design, { title: 'For the member', assigneeIds: [member.adminUserId] })).id;
     // Assigned to somebody who may not see the Project: still not theirs to see.
-    forOutsider = (await createStageTask(h, project.id, design, { title: 'For the outsider', assignedAdminUserId: outsider.adminUserId })).id;
-    const response = await callTasks(h, 'POST', '', { payload: { title: 'Free-standing', assignedAdminUserId: outsider.adminUserId } });
+    // The Tasks API refuses such an assignment (#506), so it is the one an
+    // assignee keeps after losing sight of the Project (spec, Edge Cases).
+    forOutsider = (await createStageTask(h, project.id, design, { title: 'For the outsider' })).id;
+    await assignBehindTheApi(forOutsider, outsider.adminUserId);
+    const response = await callTasks(h, 'POST', '', { payload: { title: 'Free-standing', assigneeIds: [outsider.adminUserId] } });
     expect(response.statusCode, response.body).toBe(201);
     free = response.json().data.id;
   });
@@ -114,7 +129,10 @@ describe('projects — the `project` Task context (US2)', () => {
       const one = await callTasks(h, 'GET', `/${id}`, { cookies: outsider.cookies });
       expect(one.statusCode).toBe(404);
       expect(one.json().error.code).toBe('TASK_NOT_FOUND');
-      const edit = await callTasks(h, 'PATCH', `/${id}`, { cookies: outsider.cookies, payload: { status: 'done' } });
+      const edit = await callTasks(h, 'POST', `/${id}/status`, {
+        cookies: outsider.cookies,
+        payload: { from: 'todo', to: 'done' },
+      });
       expect(edit.statusCode).toBe(404);
     }
     // Nor can they put a Task into it.
@@ -129,6 +147,74 @@ describe('projects — the `project` Task context (US2)', () => {
     expect(into.json().error.code).toBe('TASK_CONTEXT_INVALID');
   });
 
+  it('assigning a Project Task to somebody who may not see the Project is refused, naming them (#506)', async () => {
+    const design = stageNamed(project, 'Design');
+    const into = { contextType: 'project', contextId: project.id, contextGroupId: design };
+    const refusedFor = (response: { statusCode: number; body: string; json: () => unknown }) => {
+      expect(response.statusCode, response.body).toBe(422);
+      const error = (response.json() as { error: { code: string; message: string; details?: Record<string, unknown> } })
+        .error;
+      expect(error.code).toBe('TASK_ASSIGNEE_INVALID');
+      expect(error.details).toMatchObject({ code: 'context_hidden', adminUserId: outsider.adminUserId });
+      expect(error.message).toContain('ctx-outsider');
+    };
+    const before = (await taskRowsOf(h, project.id)).length;
+
+    // On create, into a Stage.
+    refusedFor(
+      await callTasks(h, 'POST', '', {
+        payload: { title: 'Not for the outsider', context: into, assigneeIds: [member.adminUserId, outsider.adminUserId] },
+      }),
+    );
+    expect(await taskRowsOf(h, project.id)).toHaveLength(before);
+
+    // On an existing Project Task: the whole set, or one added.
+    refusedFor(await callTasks(h, 'PATCH', `/${forMember}`, { payload: { assigneeIds: [outsider.adminUserId] } }));
+    refusedFor(await callTasks(h, 'PATCH', `/${forMember}`, { payload: { addAssigneeIds: [outsider.adminUserId] } }));
+
+    // A Task of nobody's, assigned to them, moved into the Project: refused, and it stays where it was.
+    const loose = await callTasks(h, 'POST', '', { payload: { title: 'Loose, theirs', assigneeIds: [outsider.adminUserId] } });
+    expect(loose.statusCode, loose.body).toBe(201);
+    const looseId = (loose.json() as { data: { id: string } }).data.id;
+    try {
+      refusedFor(await callTasks(h, 'PATCH', `/${looseId}`, { payload: { context: into } }));
+      expect(await taskRowsOf(h, project.id)).toHaveLength(before);
+    } finally {
+      await h.em().getConnection().execute(`delete from "tasks" where "id" = ?`, [looseId]);
+    }
+
+    // A Member is assignable, and an assignee kept from before is not asked again on another change.
+    const kept = await callTasks(h, 'PATCH', `/${forOutsider}`, { payload: { addAssigneeIds: [member.adminUserId] } });
+    expect(kept.statusCode, kept.body).toBe(200);
+    const removed = await callTasks(h, 'PATCH', `/${forOutsider}`, { payload: { removeAssigneeIds: [member.adminUserId] } });
+    expect(removed.statusCode, removed.body).toBe(200);
+  });
+
+  it('the assignee lookup offers only who may see the Project — for a Task in it, and on create with its context (#506)', async () => {
+    const offered = async (query: string): Promise<string[]> => {
+      const response = await callTasks(h, 'GET', `/lookups/assignees?q=ctx-&${query}`);
+      expect(response.statusCode, response.body).toBe(200);
+      return (response.json() as { data: Array<{ id: string }> }).data.map((option) => option.id);
+    };
+    // Not vacuous: with no Task and no context both read Tasks and are offered.
+    const anywhere = await offered('');
+    expect(anywhere).toEqual(expect.arrayContaining([member.adminUserId, outsider.adminUserId]));
+    for (const query of [`taskId=${forMember}`, `contextType=project&contextId=${project.id}`]) {
+      const ids = await offered(query);
+      expect(ids, query).toContain(member.adminUserId);
+      expect(ids, query).not.toContain(outsider.adminUserId);
+    }
+    // A context the caller may not see is refused, not answered.
+    const hidden = await callTasks(h, 'GET', `/lookups/assignees?contextType=project&contextId=${project.id}`, {
+      cookies: outsider.cookies,
+    });
+    expect(hidden.statusCode, hidden.body).toBe(422);
+    expect(hidden.json().error.code).toBe('TASK_CONTEXT_INVALID');
+    // Half a context is a malformed query.
+    const half = await callTasks(h, 'GET', `/lookups/assignees?contextType=project`);
+    expect(half.statusCode, half.body).toBe(400);
+  });
+
   it('somebody with `tasks:read` but not `projects:read` sees no Project Task, label or Stage anywhere (T144 F1)', async () => {
     const token = `tro${randomUUID().replace(/-/g, '').slice(0, 10)}`;
     const tasksOnly = await seedCrmAdmin(h.em(), 'ctx-tasks-only', ['tasks:read', 'tasks:write', 'crm:read', 'crm:write']);
@@ -136,10 +222,9 @@ describe('projects — the `project` Task context (US2)', () => {
       // Open to everyone who may read Projects: only the missing `projects:read` hides it.
       const open = await createProject(h, { title: `Open ${token}`, visibility: 'everyone' });
       created.push(open.id);
-      const task = await createStageTask(h, open.id, stageNamed(open, 'Design'), {
-        title: `Task ${token}`,
-        assignedAdminUserId: tasksOnly.adminUserId,
-      });
+      const task = await createStageTask(h, open.id, stageNamed(open, 'Design'), { title: `Task ${token}` });
+      // Not assignable through the API (#506): an assignment left from before they lost `projects:read`.
+      await assignBehindTheApi(task.id, tasksOnly.adminUserId);
 
       expect(await listed(tasksOnly.cookies)).not.toContain(task.id);
       expect(await mine(tasksOnly.cookies)).not.toContain(task.id);
@@ -281,12 +366,12 @@ describe('projects — the `project` Task context (US2)', () => {
       expect((await taskRowsOf(h, open.id)).map((row) => row.id)).toEqual([task.id]);
 
       // A Task of nobody's is theirs to delete; a holder of projects:write may do all three.
-      expect((await callTasks(h, 'DELETE', `/${looseId}`, { cookies: writer.cookies })).statusCode).toBe(204);
+      expect((await callTasks(h, 'DELETE', `/${looseId}`, { cookies: writer.cookies })).statusCode).toBe(200);
       const putIn = await callTasks(h, 'POST', '', { payload: { title: 'Put in by a projects writer', context: into } });
       expect(putIn.statusCode, putIn.body).toBe(201);
       for (const id of [task.id, (putIn.json() as { data: { id: string } }).data.id]) {
         const deleted = await callTasks(h, 'DELETE', `/${id}`);
-        expect(deleted.statusCode, deleted.body).toBe(204);
+        expect(deleted.statusCode, deleted.body).toBe(200);
       }
     } finally {
       writer.undo();

@@ -90,6 +90,7 @@ import { entityNamed } from '@endora-commerce/platform/packages';
 import { createAttributeFixture, findAttributeDefinitionByKey } from './attribute-fixtures.js';
 import { DEMO_USAGE_WITHDRAWAL_NAME, withdrawDemoUsage } from './demo-usage.js';
 import { demoProjectsStep, demoProjectTasksStep } from './projects.js';
+import { demoTasksStep } from './tasks.js';
 import { demoSalesPipelineStep } from './sales-pipeline.js';
 
 /** A sign-in detail the runner prints — the platform's own shape. */
@@ -1552,6 +1553,10 @@ const STEPS: readonly CompositionStep[] = [
   // `project_organizations.organization_id` (`on delete restrict`) needs.
   demoProjectsStep,
   demoProjectTasksStep,
+  // The Tasks of no Project (`tasks.ts`, `specs/165-task-management/` R-23):
+  // they name no other step's rows, so their place is only by kind, after the
+  // Project Tasks. On the way out they go first, before `admin_users`' reset.
+  demoTasksStep,
 ];
 
 /**

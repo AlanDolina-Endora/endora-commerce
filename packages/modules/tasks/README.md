@@ -28,14 +28,18 @@ Everything below is a **peer** dependency, so the application resolves exactly o
 
 - `@endora-commerce/admin-kit` — *optional*
 - `@endora-commerce/contracts`
+- `@endora-commerce/email-components`
 - `@endora-commerce/platform`
 
 **Third-party**
 
+- `@fastify/multipart` ^10
 - `@mikro-orm/core` ^6
 - `@mikro-orm/migrations` ^6
 - `@mikro-orm/postgresql` ^6
+- `bullmq` ^5
 - `fastify` ^5.11.0
+- `ioredis` ^5
 - `lucide-react` ^1 — *optional*
 - `react` ^19 — *optional*
 - `react-router-dom` ^7 — *optional*

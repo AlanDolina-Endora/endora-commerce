@@ -170,6 +170,8 @@ export interface RecordHistoryProps<E extends RecordHistoryEntryShape> {
   renderChange?: (change: RecordHistoryChange, entry: E) => ReactNode | undefined;
   /** What an entry says between its heading and its rows — a status change, its cause. */
   renderLead?: (entry: E, changes: readonly RecordHistoryChange[]) => ReactNode;
+  /** An entry's time in words; `formatDateTime` when the record has no format of its own. */
+  formatTime?: (iso: string) => string;
 }
 
 /**
@@ -232,7 +234,7 @@ export function RecordHistory<E extends RecordHistoryEntryShape>(props: RecordHi
                   <p className="text-xs text-muted-foreground">
                     <span>{actor(entry)}</span>
                     {' · '}
-                    <time dateTime={entry.actedAt}>{formatDateTime(entry.actedAt)}</time>
+                    <time dateTime={entry.actedAt}>{(props.formatTime ?? formatDateTime)(entry.actedAt)}</time>
                   </p>
                 </div>
                 {props.renderLead?.(entry, changes)}

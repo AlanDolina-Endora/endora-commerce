@@ -1118,7 +1118,29 @@ export interface ProjectRecord {
 export interface ProjectReadPort {
   findById(id: string): Promise<ProjectRecord | null>;
   findByRecord(kind: ProjectRecordKind, id: string): Promise<ProjectRecord | null>;
+  /**
+   * The Projects of `ids` the caller may see, in no particular order — a
+   * hidden, missing or malformed id is simply absent. One query for a page of
+   * references (`specs/165-task-management/` R-5).
+   */
+  findByIds(ids: readonly string[]): Promise<ProjectRecord[]>;
+  /**
+   * Projects the caller may see whose number or title contains `q`
+   * (case-insensitively; every visible one for an empty `q`), newest first, at
+   * most `limit` (≤ 20) — the Projects group of the `@@` list (R-5).
+   */
+  search(query: ProjectSearchQuery): Promise<ProjectRecord[]>;
 }
+
+/** What `ProjectReadPort.search` is asked. */
+export interface ProjectSearchQuery {
+  q?: string;
+  /** At most {@link PROJECT_READ_PORT_SEARCH_MAX}. */
+  limit: number;
+}
+
+/** The most Projects one `ProjectReadPort.search` answers. */
+export const PROJECT_READ_PORT_SEARCH_MAX = 20;
 
 export type ProjectStageGuardKind = 'move' | 'close_completed' | 'close_lost' | 'reopen';
 

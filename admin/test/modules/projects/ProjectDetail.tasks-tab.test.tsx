@@ -76,10 +76,14 @@ const TASK: TaskSummary = {
   id: '00000000-0000-4000-8000-0000000007a1',
   number: 'TSK-000001',
   title: 'Approve the drawings',
-  status: 'in_progress',
+  status: { code: 'in_progress', name: 'In progress', color: '#f59e0b', category: 'open' },
+  closed: false,
   dueOn: '2026-10-30',
+  dueAt: null,
   overdue: false,
-  assignee: { id: '00000000-0000-4000-8000-000000000c01', name: 'Anna Nowak', active: true },
+  assignees: [{ id: '00000000-0000-4000-8000-000000000c01', name: 'Anna Nowak', active: true }],
+  priority: null,
+  tags: [],
   context: {
     type: 'project',
     available: true,
@@ -87,6 +91,12 @@ const TASK: TaskSummary = {
     href: `/projects/${PROJECT_ID}`,
     groupLabel: 'Design',
   },
+  parent: null,
+  subtasks: { closed: 0, total: 0 },
+  draft: false,
+  private: false,
+  createdAt: '2026-10-20T08:00:00.000Z',
+  updatedAt: '2026-10-20T08:00:00.000Z',
 };
 
 let current: ProjectDetail = detail();
@@ -162,7 +172,8 @@ describe('ProjectDetail — the Tasks tab', () => {
     const link = within(design).getByRole('link', { name: 'TSK-000001' });
     expect(link.getAttribute('href')).toBe(`/tasks/${TASK.id}`);
     expect(within(design).getByText('Approve the drawings')).toBeTruthy();
-    expect(within(design).getByText(en('tasks.status.in_progress'))).toBeTruthy();
+    // The status is the Tasks workflow's own name, served with the Task (165 R-1).
+    expect(within(design).getByText('In progress')).toBeTruthy();
     expect(within(design).getByText('Anna Nowak')).toBeTruthy();
     expect(within(stageSection(panel, 'Build')).getByText(en('tasks.empty'))).toBeTruthy();
   });

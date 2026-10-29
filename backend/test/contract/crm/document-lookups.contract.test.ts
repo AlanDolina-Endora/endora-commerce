@@ -198,9 +198,11 @@ describe('crm document lookups — the @@ list (contract, FR-044)', () => {
     expect((await get(url({ opportunityId: own.id }), everything.cookies)).statusCode).toBe(200);
   });
 
-  it('answers the three groups in their order — the Opportunity`s Organization`s Orders and Quote Requests, and Tasks', async () => {
+  // `specs/165-task-management/` R-5 added Opportunities — this module's own,
+  // offered to every caller, who holds `crm:read` — and Projects, after Tasks.
+  it('answers the groups in their order — the Opportunity`s Organization`s Orders and Quote Requests, Tasks and Opportunities', async () => {
     const answer = await groups(url({ opportunityId: own.id }), everything.cookies);
-    expect(kinds(answer)).toEqual(['order', 'quote_request', 'task']);
+    expect(kinds(answer)).toEqual(['order', 'quote_request', 'task', 'opportunity']);
     expect(ids(answer, 'order')).toContain(order.id);
     expect(ids(answer, 'order')).not.toContain(foreignOrder.id);
     expect(ids(answer, 'quote_request')).toContain(quote.id);
@@ -241,18 +243,18 @@ describe('crm document lookups — the @@ list (contract, FR-044)', () => {
   });
 
   it('offers a group only to a holder of its owner`s read code', async () => {
-    expect(kinds(await groups(url({ opportunityId: own.id }), ordersOnly.cookies))).toEqual(['order']);
-    expect(await groups(url({ opportunityId: own.id }), crmWriter.cookies)).toEqual([]);
+    expect(kinds(await groups(url({ opportunityId: own.id }), ordersOnly.cookies))).toEqual(['order', 'opportunity']);
+    expect(kinds(await groups(url({ opportunityId: own.id }), crmWriter.cookies))).toEqual(['opportunity']);
   });
 
   it('leaves out the group of a module that is off, and offers it again once it is back', async () => {
     await withModuleOff('tasks', 'deactivated', async () => {
-      expect(kinds(await groups(url({ opportunityId: own.id }), everything.cookies))).toEqual(['order', 'quote_request']);
+      expect(kinds(await groups(url({ opportunityId: own.id }), everything.cookies))).toEqual(['order', 'quote_request', 'opportunity']);
     });
     await withModuleOff('quote_requests', 'deactivated', async () => {
-      expect(kinds(await groups(url({ opportunityId: own.id }), everything.cookies))).toEqual(['order', 'task']);
+      expect(kinds(await groups(url({ opportunityId: own.id }), everything.cookies))).toEqual(['order', 'task', 'opportunity']);
     });
-    expect(kinds(await groups(url({ opportunityId: own.id }), everything.cookies))).toEqual(['order', 'quote_request', 'task']);
+    expect(kinds(await groups(url({ opportunityId: own.id }), everything.cookies))).toEqual(['order', 'quote_request', 'task', 'opportunity']);
   });
 
   it('answers an Opportunity out of the caller`s reach as one that does not exist', async () => {
@@ -266,11 +268,11 @@ describe('crm document lookups — the @@ list (contract, FR-044)', () => {
 
   it('before an Opportunity exists: the chosen Organization`s documents, and Tasks alone without one', async () => {
     const chosen = await groups(url({ organizationId: TEST_ORGANIZATION_ID }), everything.cookies);
-    expect(kinds(chosen)).toEqual(['order', 'quote_request', 'task']);
+    expect(kinds(chosen)).toEqual(['order', 'quote_request', 'task', 'opportunity']);
     expect(ids(chosen, 'order')).toContain(order.id);
-    expect(kinds(await groups(url({}), everything.cookies))).toEqual(['task']);
+    expect(kinds(await groups(url({}), everything.cookies))).toEqual(['task', 'opportunity']);
     // An Organization out of reach has no documents to offer, and is not told apart from none.
-    expect(kinds(await groups(url({ organizationId: TEST_ORGANIZATION_ID }), outsider.cookies))).toEqual(['task']);
+    expect(kinds(await groups(url({ organizationId: TEST_ORGANIZATION_ID }), outsider.cookies))).toEqual(['task', 'opportunity']);
   });
 
   it('refuses a malformed query', async () => {

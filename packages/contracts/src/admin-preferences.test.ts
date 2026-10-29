@@ -23,12 +23,13 @@ const lists = (n: number, size: number | null = 20): Record<string, number | nul
   Object.fromEntries(Array.from({ length: n }, (_, i) => [`list-${i}`, size]));
 
 describe('ADMIN_PREFERENCE_KEYS', () => {
-  it('is exactly the four preferences', () => {
+  it('is exactly the five preferences', () => {
     expect([...ADMIN_PREFERENCE_KEYS]).toEqual([
       'sidebarPins',
       'sidebarCollapsedGroups',
       'sidebarRailMode',
       'listPageSizes',
+      'listViewModes',
     ]);
   });
 });
@@ -161,6 +162,7 @@ describe('adminPreferencesSchema — the read side (FR-015)', () => {
         sidebarCollapsedGroups: ['oldGroup'],
         sidebarRailMode: false,
         listPageSizes: { orders: 7 },
+        listViewModes: { tasks: 'timeline' },
       }).success,
     ).toBe(true);
   });
@@ -171,6 +173,39 @@ describe('adminPreferencesSchema — the read side (FR-015)', () => {
       sidebarCollapsedGroups: [],
       sidebarRailMode: false,
       listPageSizes: {},
+      listViewModes: {},
+    });
+  });
+});
+
+describe('listViewModes (165 R-14, FR-018)', () => {
+  it('accepts list or board per kebab-case list id', () => {
+    expect(
+      adminPreferencesPatchSchema.safeParse({ listViewModes: { tasks: 'board', 'tasks-mine': 'list' } })
+        .success,
+    ).toBe(true);
+  });
+
+  it('accepts `null` for a list (forget it, back to the default)', () => {
+    expect(adminPreferencesPatchSchema.safeParse({ listViewModes: { tasks: null } }).success).toBe(true);
+  });
+
+  it.each([
+    ['a mode that is neither list nor board', { listViewModes: { tasks: 'timeline' } }],
+    ['an upper-case list id', { listViewModes: { Tasks: 'board' } }],
+    ['a snake_case list id', { listViewModes: { tasks_mine: 'board' } }],
+    ['a list id of 65 characters', { listViewModes: { ['a'.repeat(65)]: 'board' } }],
+    ['129 lists', { listViewModes: Object.fromEntries(Array.from({ length: 129 }, (_, i) => [`l-${i}`, 'list'])) }],
+  ])('refuses %s', (_label, body) => {
+    expect(adminPreferencesPatchSchema.safeParse(body).success).toBe(false);
+  });
+
+  it('the tolerant read falls back to {} when the stored value is missing or unreadable', () => {
+    const base = { sidebarPins: [], sidebarCollapsedGroups: [], sidebarRailMode: false, listPageSizes: {} };
+    expect(adminPreferencesSchema.parse(base).listViewModes).toEqual({});
+    expect(adminPreferencesSchema.parse({ ...base, listViewModes: 'board' }).listViewModes).toEqual({});
+    expect(adminPreferencesSchema.parse({ ...base, listViewModes: { tasks: 'board' } }).listViewModes).toEqual({
+      tasks: 'board',
     });
   });
 });

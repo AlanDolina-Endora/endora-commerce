@@ -47,6 +47,8 @@ const ORDER_ID = '00000000-0000-4000-8000-0000000000c1';
 const QUOTE_ID = '00000000-0000-4000-8000-0000000000f1';
 const TASK_ID = '00000000-0000-4000-8000-0000000000e1';
 const PRODUCT_ID = '00000000-0000-4000-8000-00000000aa01';
+const OPPORTUNITY_ID = '00000000-0000-4000-8000-0000000000b1';
+const PROJECT_ID = '00000000-0000-4000-8000-0000000000b2';
 
 const PEOPLE: ReferenceSuggestion[] = [
   { id: PERSON_ID, label: 'Anna Nowak' },
@@ -160,6 +162,24 @@ describe('ReferenceField — the trigger table is the `kinds` prop', () => {
     await waitFor(() => expect(storedText(field())).toBe(`see [[task:${TASK_ID}]] `));
   });
 
+  it('never shrinks a suggestion’s number for its title: the title is what truncates (165 T095)', async () => {
+    // jsdom lays nothing out, so the flex contract is what is held: the label
+    // (the record's number, what the chip shows) keeps its width; the sublabel (the title) may shrink to nothing and truncates.
+    const long = 'A very long Task title that goes on and on well past the width of any popup list';
+    searchDocuments.mockResolvedValue({ groups: [{ kind: 'task', items: [{ id: TASK_ID, label: 'TSK-000042', sublabel: long }] }] });
+    mount(<Harness />);
+    await userEvent.type(field(), '@@');
+    const option = within(await screen.findByRole('listbox', { name: core('references.suggest.title.document') })).getByRole(
+      'option',
+    );
+    const number = within(option).getByText('TSK-000042');
+    expect(number).toHaveClass('shrink-0');
+    expect(number).not.toHaveClass('min-w-0');
+    const title = within(option).getByText(long);
+    expect(title).toHaveClass('min-w-0', 'truncate');
+    expect(title).not.toHaveClass('shrink-0');
+  });
+
   it('shows only the groups the adapter answers — a group it leaves out is not offered', async () => {
     searchDocuments.mockResolvedValue({ groups: [{ kind: 'task', items: [{ id: TASK_ID, label: 'TSK-000042' }] }] });
     mount(<Harness />);
@@ -168,6 +188,33 @@ describe('ReferenceField — the trigger table is the `kinds` prop', () => {
     expect(within(list).getAllByRole('group').map((group) => group.getAttribute('aria-label'))).toEqual([
       core('references.group.task'),
     ]);
+  });
+
+  // `specs/165-task-management/` T035, research R-5: Opportunities and Projects
+  // are kinds of the shared grammar, two more groups of the one list.
+  it('@@ groups Opportunities and Projects after Tasks, and inserts each as its token', async () => {
+    searchDocuments.mockResolvedValue({
+      groups: [
+        ...DOCUMENTS.groups,
+        { kind: 'opportunity', items: [{ id: OPPORTUNITY_ID, label: 'OPP-000012', sublabel: 'Fleet renewal' }] },
+        { kind: 'project', items: [{ id: PROJECT_ID, label: 'PRJ-000003', sublabel: 'Warehouse fit-out' }] },
+      ],
+    });
+    mount(<Harness />);
+    await userEvent.type(field(), '@@');
+    const list = await screen.findByRole('listbox', { name: core('references.suggest.title.document') });
+    const groups = within(list).getAllByRole('group');
+    expect(groups.map((group) => group.getAttribute('aria-label'))).toEqual([
+      core('references.group.order'),
+      core('references.group.quote_request'),
+      core('references.group.task'),
+      core('references.group.opportunity'),
+      core('references.group.project'),
+    ]);
+    expect(within(groups[3]!).getByRole('option')).toHaveTextContent('OPP-000012');
+    expect(within(groups[4]!).getByRole('option')).toHaveTextContent('Warehouse fit-out');
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}');
+    await waitFor(() => expect(storedText(field())).toBe(`[[project:${PROJECT_ID}]] `));
   });
 
   it('@@@ opens the Products the adapter answers', async () => {
@@ -310,6 +357,48 @@ describe('ReferenceText — five chip kinds, and the unavailable chip', () => {
       'href',
       `/tasks/${TASK_ID}`,
     );
+  });
+
+  it('links an Opportunity and a Project to their screens (165)', () => {
+    mount(
+      <ReferenceText
+        text={`[[opportunity:${OPPORTUNITY_ID}]] [[project:${PROJECT_ID}]]`}
+        references={[
+          {
+            type: 'opportunity',
+            id: OPPORTUNITY_ID,
+            available: true,
+            label: 'OPP-000012',
+            url: `/crm/opportunities/${OPPORTUNITY_ID}`,
+          },
+          { type: 'project', id: PROJECT_ID, available: true, label: 'PRJ-000003', url: `/projects/${PROJECT_ID}` },
+        ]}
+      />,
+    );
+    expect(screen.getByRole('link', { name: `${core('references.kind.opportunity')}OPP-000012` })).toHaveAttribute(
+      'href',
+      `/crm/opportunities/${OPPORTUNITY_ID}`,
+    );
+    expect(screen.getByRole('link', { name: `${core('references.kind.project')}PRJ-000003` })).toHaveAttribute(
+      'href',
+      `/projects/${PROJECT_ID}`,
+    );
+  });
+
+  it('shows an Opportunity or a Project the reader may not see as unavailable (165)', () => {
+    mount(
+      <ReferenceText
+        text={`[[opportunity:${OPPORTUNITY_ID}]] [[project:${PROJECT_ID}]]`}
+        references={[
+          { type: 'opportunity', id: OPPORTUNITY_ID, available: false, label: null, url: null },
+          { type: 'project', id: PROJECT_ID, available: false, label: null, url: null },
+        ]}
+      />,
+    );
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    for (const type of ['opportunity', 'project'] as const) {
+      expect(screen.getByText(core(`references.unavailable.${type}`))).toHaveAttribute('title', core('references.unavailableHint'));
+    }
   });
 
   it('shows a target the reader may not see as a chip that says so, with no link and no name', () => {

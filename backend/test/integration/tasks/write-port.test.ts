@@ -84,7 +84,7 @@ describe('tasks — the write port', () => {
           context: { contextType: 'write_probe', contextId, contextGroupId: groupId },
           tasks: [
             { title: 'Measure the showroom', dueOn: '2026-11-02', contextNote: 'Responsible role: Installer' },
-            { title: 'Order the fittings', assignedAdminUserId: TEST_ADMIN_ID },
+            { title: 'Order the fittings', assigneeIds: [TEST_ADMIN_ID] },
           ],
         }),
       );
@@ -95,13 +95,17 @@ describe('tasks — the write port', () => {
       const measure = records.find((r) => r.title === 'Measure the showroom')!;
       expect(measure).toMatchObject({
         status: 'todo',
+        statusCategory: 'open',
+        closed: false,
+        draft: false,
+        private: false,
         dueOn: '2026-11-02',
         contextGroupId: groupId,
         contextNote: 'Responsible role: Installer',
-        assignedAdminUserId: null,
+        assigneeIds: [],
       });
       expect(measure.number).toMatch(/^TSK-\d{6,}$/);
-      expect(records.find((r) => r.title === 'Order the fittings')!.assignedAdminUserId).toBe(TEST_ADMIN_ID);
+      expect(records.find((r) => r.title === 'Order the fittings')!.assigneeIds).toEqual([TEST_ADMIN_ID]);
 
       for (const id of ids) {
         const audit = await h.auditLogService.query({ action: 'tasks.task.create', objectId: id });
@@ -147,7 +151,7 @@ describe('tasks — the write port', () => {
       asAdmin(() =>
         writePort().createMany({
           context: { contextType: 'write_probe', contextId },
-          tasks: [{ title: 'fine' }, { title: 'nobody', assignedAdminUserId: randomUUID() }],
+          tasks: [{ title: 'fine' }, { title: 'nobody', assigneeIds: [randomUUID()] }],
         }),
       ),
     );
@@ -174,6 +178,112 @@ describe('tasks — the write port', () => {
     );
     expect(blank).toEqual({ statusCode: 422, code: 'VALIDATION_FAILED' });
     expect(await taskCount(contextId)).toBe(0);
+  });
+
+  describe('a source key makes creation idempotent (R-19, issue #450)', () => {
+    const keysOf = async (contextId: string): Promise<Array<{ id: string; source_key: string | null }>> =>
+      (await h.orm.em
+        .getConnection()
+        .execute(`select "id", "source_key" from "tasks" where "context_id" = ? order by "source_key", "id"`, [
+          contextId,
+        ])) as Array<{ id: string; source_key: string | null }>;
+
+    it('skips a key the context already holds and answers its id in input order; a key is per context', async () => {
+      const contextId = randomUUID();
+      const other = randomUUID();
+      visible.add(contextId);
+      visible.add(other);
+      const context = { contextType: 'write_probe', contextId };
+      const first = await asAdmin(() =>
+        writePort().createMany({ context, tasks: [{ title: 'A', sourceKey: 'a' }, { title: 'B', sourceKey: 'b' }] }),
+      );
+      const [idA, idB] = first.ids;
+
+      const second = await asAdmin(() =>
+        writePort().createMany({
+          context,
+          tasks: [
+            { title: 'B again', sourceKey: 'b' },
+            { title: 'C', sourceKey: 'c' },
+            { title: 'A again', sourceKey: 'a' },
+            { title: 'No key' },
+            { title: 'C twice in one call', sourceKey: 'c' },
+          ],
+        }),
+      );
+      expect(second.ids).toHaveLength(5);
+      expect(second.ids[0]).toBe(idB);
+      expect(second.ids[2]).toBe(idA);
+      expect(second.ids[4]).toBe(second.ids[1]);
+      expect(new Set(second.ids).size).toBe(4);
+      expect((await keysOf(contextId)).map((r) => r.source_key)).toEqual(['a', 'b', 'c', null]);
+      // A Task skipped is not written again: its title and its one audit row stand.
+      const rows = (await h.orm.em.getConnection().execute(`select "title" from "tasks" where "id" = ?`, [idA])) as Array<{
+        title: string;
+      }>;
+      expect(rows[0]!.title).toBe('A');
+      expect(await h.auditLogService.query({ action: 'tasks.task.create', objectId: idA! })).toHaveLength(1);
+
+      const elsewhere = await asAdmin(() =>
+        writePort().createMany({ context: { contextType: 'write_probe', contextId: other }, tasks: [{ title: 'A', sourceKey: 'a' }] }),
+      );
+      expect(elsewhere.ids[0]).not.toBe(idA);
+      expect(await keysOf(other)).toHaveLength(1);
+    });
+
+    it('two calls at once create each key once, and both answer the same ids', async () => {
+      const contextId = randomUUID();
+      visible.add(contextId);
+      const tasks = ['k1', 'k2', 'k3', 'k4', 'k5'].map((sourceKey) => ({ title: sourceKey, sourceKey }));
+      const call = () => asAdmin(() => writePort().createMany({ context: { contextType: 'write_probe', contextId }, tasks }));
+      const [a, b] = await Promise.all([call(), call()]);
+      expect(a.ids).toEqual(b.ids);
+      const rows = await keysOf(contextId);
+      expect(rows.map((r) => r.source_key)).toEqual(['k1', 'k2', 'k3', 'k4', 'k5']);
+      expect(rows.map((r) => r.id)).toEqual(a.ids);
+    });
+
+    it('a key another call is creating at that moment is answered with that call’s Task, not refused', async () => {
+      const contextId = randomUUID();
+      visible.add(contextId);
+      // The other call's Command, mid-transaction: its Task holds the key, uncommitted.
+      const holder = h.em().fork();
+      await holder.begin();
+      const theirs = randomUUID();
+      let pending: Promise<{ ids: string[] }> | undefined;
+      try {
+        await holder.execute(
+          `insert into "tasks" ("id", "number", "title", "status", "created_by_admin_user_id", "context_type", "context_id",
+                                "source_key", "published_at")
+           values (?, ?, 'Theirs', 'todo', ?, 'write_probe', ?, 'raced', now())`,
+          [theirs, `TSK-W${theirs.slice(0, 6).toUpperCase()}`, TEST_ADMIN_ID, contextId],
+        );
+        pending = asAdmin(() =>
+          writePort().createMany({
+            context: { contextType: 'write_probe', contextId },
+            tasks: [{ title: 'Ours', sourceKey: 'raced' }, { title: 'Also ours', sourceKey: 'free' }],
+          }),
+        );
+        // Ours waits on the unique index until theirs commits.
+        const deadline = Date.now() + 10_000;
+        for (;;) {
+          const [waiting] = (await h.orm.em
+            .getConnection()
+            .execute(`select count(*)::int as n from pg_stat_activity where wait_event_type = 'Lock' and query ilike 'insert into "tasks"%'`)) as Array<{ n: number }>;
+          if (Number(waiting?.n) > 0) break;
+          if (Date.now() > deadline) throw new Error('the second create never waited on the unique index');
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        await holder.commit();
+      } catch (error) {
+        await holder.rollback().catch(() => undefined);
+        throw error;
+      }
+      const { ids } = await pending!;
+      expect(ids[0]).toBe(theirs);
+      expect((await keysOf(contextId)).map((r) => r.source_key)).toEqual(['free', 'raced']);
+      expect(await h.auditLogService.query({ action: 'tasks.task.create', objectId: theirs })).toEqual([]);
+    });
   });
 
   it('deletes every Task of one context and no other, each with its own audit row', async () => {

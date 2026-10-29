@@ -1591,7 +1591,31 @@ export interface OpportunityReadPort {
   findById(id: string): Promise<OpportunityRecord | null>;
   findByDocument(kind: OpportunityDocumentKind, documentId: string): Promise<OpportunityRecord | null>;
   listOpenForOrganization(organizationId: string): Promise<OpportunityRecord[]>;
+  /**
+   * The Opportunities of `ids` in the caller's tenant scope, in no particular
+   * order — a missing or malformed id is simply absent. One query for a page of
+   * references (`specs/165-task-management/` R-5). Checks no permission: the
+   * caller checks `crm:read`, as for every other method.
+   */
+  findByIds(ids: readonly string[]): Promise<OpportunityRecord[]>;
+  /**
+   * Opportunities in the caller's tenant scope whose number or title contains
+   * `q` (case-insensitively; every one for an empty `q`), newest first, at most
+   * `limit` (≤ 20) — the Opportunities group of the `@@` list and the Tasks
+   * link picker (R-5, R-16).
+   */
+  search(query: OpportunitySearchQuery): Promise<OpportunityRecord[]>;
 }
+
+/** What `OpportunityReadPort.search` is asked. */
+export interface OpportunitySearchQuery {
+  q?: string;
+  /** At most {@link OPPORTUNITY_READ_PORT_SEARCH_MAX}. */
+  limit: number;
+}
+
+/** The most Opportunities one `OpportunityReadPort.search` answers. */
+export const OPPORTUNITY_READ_PORT_SEARCH_MAX = 20;
 
 /** Why a requested transition did not happen. */
 export const OPPORTUNITY_TRANSITION_REFUSALS = [

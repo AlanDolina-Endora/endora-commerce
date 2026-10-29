@@ -11,6 +11,7 @@ import {
   useAdminPreference,
   useAdminPreferencesStatus,
   useAuth,
+  useListViewModePreference,
   type AdminMe,
 } from '@endora-commerce/admin-kit/lib';
 import { adminSession } from '../helpers/render-with-session';
@@ -61,6 +62,11 @@ function applyPatch(doc: AdminPreferences, body: Record<string, unknown>): Admin
       for (const [list, size] of Object.entries(value as Record<string, number | null>)) {
         if (size === null) delete next.listPageSizes[list];
         else next.listPageSizes[list] = size;
+      }
+    } else if (key === 'listViewModes') {
+      for (const [list, mode] of Object.entries(value as Record<string, string | null>)) {
+        if (mode === null) delete next.listViewModes[list];
+        else next.listViewModes[list] = mode;
       }
     } else {
       (next as Record<string, unknown>)[key] = value;
@@ -372,5 +378,78 @@ describe('isolation (US1 AS-7)', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     expect(() => render(<Probe />)).toThrow();
     spy.mockRestore();
+  });
+});
+
+// `specs/165-task-management/` R-14 — the list/board choice, kept per list like page sizes.
+describe('list view modes (165 R-14)', () => {
+  let setTasksMode: (next: 'list' | 'board') => void = () => undefined;
+
+  function ModeProbe(): ReactElement {
+    const [tasks, setTasks] = useListViewModePreference('tasks');
+    const [mine] = useListViewModePreference('tasks-mine', 'board');
+    const status = useAdminPreferencesStatus();
+    setTasksMode = setTasks;
+    return (
+      <div>
+        <span data-testid="tasks-mode">{tasks}</span>
+        <span data-testid="mine-mode">{mine}</span>
+        <span data-testid="availability">{status.availability}</span>
+      </div>
+    );
+  }
+
+  function renderModes(me: AdminMe) {
+    return render(
+      <StrictMode>
+        <AuthProvider initial={me}>
+          <ModeProbe />
+        </AuthProvider>
+      </StrictMode>,
+    );
+  }
+
+  it('reads the stored choice, the fallback for a list without one, and ignores a value it does not know', () => {
+    renderModes(
+      sessionWith({ ...structuredClone(ADMIN_PREFERENCES_DEFAULTS), listViewModes: { tasks: 'board', 'tasks-mine': 'grid' } }),
+    );
+    expect(text('tasks-mode')).toBe('board');
+    expect(text('mine-mode')).toBe('board');
+    cleanup();
+    renderModes(sessionWith(ADMIN_PREFERENCES_DEFAULTS));
+    expect(text('tasks-mode')).toBe('list');
+    expect(text('mine-mode')).toBe('board');
+  });
+
+  it('applies a choice at once and sends only that list, leaving the other lists and the page sizes alone', async () => {
+    server = {
+      ...structuredClone(ADMIN_PREFERENCES_DEFAULTS),
+      listViewModes: { 'tasks-mine': 'list' },
+      listPageSizes: { orders: 50 },
+    };
+    renderModes(sessionWith(structuredClone(server)));
+    act(() => setTasksMode('board'));
+    expect(text('tasks-mode')).toBe('board');
+    await waitFor(() => expect(server.listViewModes).toEqual({ 'tasks-mine': 'list', tasks: 'board' }));
+    expect(patchBodies()).toEqual([{ listViewModes: { tasks: 'board' } }]);
+    expect(server.listPageSizes).toEqual({ orders: 50 });
+    expect(text('mine-mode')).toBe('list');
+  });
+
+  it('keeps the choice on a failed save and sends it again on `online`', async () => {
+    renderModes(sessionWith(ADMIN_PREFERENCES_DEFAULTS));
+    patchSpy.mockRejectedValueOnce(new Error('offline'));
+    await act(async () => setTasksMode('board'));
+    expect(text('tasks-mode')).toBe('board');
+    await act(async () => window.dispatchEvent(new Event('online')));
+    await waitFor(() => expect(server.listViewModes).toEqual({ tasks: 'board' }));
+    expect(patchBodies()).toEqual([{ listViewModes: { tasks: 'board' } }, { listViewModes: { tasks: 'board' } }]);
+  });
+
+  it('adopts another device’s choice on a foreground refetch', async () => {
+    renderModes(sessionWith(ADMIN_PREFERENCES_DEFAULTS));
+    server = { ...structuredClone(ADMIN_PREFERENCES_DEFAULTS), listViewModes: { tasks: 'board' } };
+    await act(async () => fireVisible());
+    await waitFor(() => expect(text('tasks-mode')).toBe('board'));
   });
 });

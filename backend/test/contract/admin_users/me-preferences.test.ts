@@ -145,6 +145,26 @@ describe('Admin UI preferences — /api/v1/admin/me/preferences (spec 164)', () 
     expect(forgotten.listPageSizes).toEqual({ 'catalog-products': 100 });
   });
 
+  it('list/board choices merge per list, and `null` forgets a list (`specs/165-task-management/` R-14)', async () => {
+    const current = await read(adminB);
+    const stored = Object.keys(current.listViewModes);
+    if (stored.length > 0) {
+      await patchOk(adminB, { listViewModes: Object.fromEntries(stored.map((n) => [n, null])) });
+    }
+    await patchOk(adminB, { listViewModes: { tasks: 'board' } });
+    const both = await patchOk(adminB, { listViewModes: { 'tasks-mine': 'list' } });
+    expect(both.listViewModes).toEqual({ tasks: 'board', 'tasks-mine': 'list' });
+    // Page sizes are a different map: writing one leaves the other alone.
+    const sizes = await patchOk(adminB, { listPageSizes: { orders: 50 } });
+    expect(sizes.listViewModes).toEqual({ tasks: 'board', 'tasks-mine': 'list' });
+    const forgotten = await patchOk(adminB, { listViewModes: { tasks: null } });
+    expect(forgotten.listViewModes).toEqual({ 'tasks-mine': 'list' });
+    expect((await read(adminB)).listViewModes).toEqual({ 'tasks-mine': 'list' });
+    const refused = await patch(adminB, { listViewModes: { tasks: 'grid' } });
+    expect(refused.statusCode).toBe(400);
+    await patchOk(adminB, { listViewModes: { 'tasks-mine': null }, listPageSizes: { orders: null } });
+  });
+
   it('legacy-import never overwrites a stored list (FR-022, US3 AS-5)', async () => {
     await clearLists(adminB);
     await patchOk(adminB, { listPageSizes: { orders: 100 } });

@@ -111,8 +111,8 @@ export { MethodAvailabilityCaption, MethodAvailabilityCell, MethodNotOfferedNoti
 // Feature 161 — the editable grid (`specs/161-price-book-editor/research.md` R4).
 export { EditableGrid } from './editable-grid/index.js';
 export type { EditableGridCellChange, EditableGridChangeReason, EditableGridColumn, EditableGridHandle, EditableGridProps, EditableGridRenderContext, EditableGridRow, EditableGridSelection } from './editable-grid/index.js';
-export { KanbanBoard } from './kanban/index.js';
-export type { KanbanBoardLabels, KanbanBoardProps, KanbanCardRenderState, KanbanColumnRenderState, KanbanColumnState, KanbanDropState } from './kanban/index.js';
+export { KanbanBoard, MoveToMenu } from './kanban/index.js';
+export type { KanbanBoardLabels, KanbanBoardProps, KanbanCardRenderState, KanbanColumnRenderState, KanbanColumnState, KanbanDropState, MoveToMenuProps, MoveToMenuTarget } from './kanban/index.js';
 export { ReorderAnnouncer } from './reorder/ReorderAnnouncer.js';
 export type { ReorderAnnouncerProps } from './reorder/ReorderAnnouncer.js';
 export { moveItem, useReorderList } from './reorder/useReorderList.js';
@@ -171,6 +171,8 @@ export { COMMENT_MAX_LENGTH, CommentComposer } from './comments/CommentComposer.
 export type { CommentComposerProps } from './comments/CommentComposer.js';
 export { CommentThread } from './comments/CommentThread.js';
 export type { CommentThreadApi, CommentThreadCopy, CommentThreadProps, RecordComment } from './comments/CommentThread.js';
+export { TagChips, TagMultiSelect, useTagOptions } from './tags/TagPicker.js';
+export type { TagMultiSelectProps, TagOption } from './tags/TagPicker.js';
 export { AttachmentUploader } from './attachments/AttachmentUploader.js';
 export type { AttachmentUploaderProps } from './attachments/AttachmentUploader.js';
 export { uploadAttachment } from './attachments/upload-attachment.js';

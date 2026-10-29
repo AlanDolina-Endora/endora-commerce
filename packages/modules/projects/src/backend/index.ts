@@ -538,13 +538,14 @@ export function registerModule(ctx: ModuleContext): void {
   ctx.di.register({
     projectsReferenceService: ctx
       .asFunction(
-        ({ projectsLinkedRecordOwners, projectsTasks, projectsOwnerReadChecks }: ProjectsCradle) =>
+        ({ projectsAccess, projectsLinkedRecordOwners, projectsTasks, projectsOwnerReadChecks }: ProjectsCradle) =>
           new ProjectReferenceService({
             products: lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
             orders: lazyPort<OrderReadPort>(ctx, 'orderReadPort'),
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
             quoteRequests: projectsLinkedRecordOwners,
             tasks: projectsTasks,
+            projects: projectsAccess,
             mayRead: projectsOwnerReadChecks,
           }),
       )

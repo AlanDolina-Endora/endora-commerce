@@ -287,7 +287,7 @@ describe('custom_fields — the list-filter option of a definition', () => {
     },
   );
 
-  it('answers listFilter: true in entity-types for exactly order, quote_request, opportunity and project', async () => {
+  it('answers listFilter: true in entity-types for exactly order, quote_request, opportunity, project and task', async () => {
     const response = await h.app.inject({ method: 'GET', url: `${API}/entity-types`, ...ADMIN });
     expect(response.statusCode, response.body).toBe(200);
     const rows = (response.json() as { data: Array<{ entityType: string; listFilter: boolean }> }).data;
@@ -296,7 +296,7 @@ describe('custom_fields — the list-filter option of a definition', () => {
         .filter((row) => row.listFilter)
         .map((row) => row.entityType)
         .sort(),
-    ).toEqual(['opportunity', 'order', 'project', 'quote_request']);
+    ).toEqual(['opportunity', 'order', 'project', 'quote_request', 'task']);
     for (const row of rows) expect(typeof row.listFilter).toBe('boolean');
   });
 

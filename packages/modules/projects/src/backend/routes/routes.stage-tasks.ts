@@ -42,6 +42,8 @@ export async function registerStageTaskRoutes(app: FastifyInstance, deps: StageT
   app.get<{ Params: { id: string } }>(
     `${PROJECT}/tasks`,
     { preHandler: requireAdmin('projects:read') },
-    async (request) => ({ data: await stageTasks.tasksByStage(request.params.id) }),
+    async (request) => ({
+      data: await stageTasks.tasksByStage(request.params.id, await request.responseLanguage()),
+    }),
   );
 }

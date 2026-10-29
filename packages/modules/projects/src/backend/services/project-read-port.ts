@@ -1,10 +1,16 @@
-import type { ProjectRecord, ProjectReadPort, ProjectRecordKind } from '@endora-commerce/contracts';
+import {
+  PROJECT_READ_PORT_SEARCH_MAX,
+  type ProjectRecord,
+  type ProjectReadPort,
+  type ProjectRecordKind,
+  type ProjectSearchQuery,
+} from '@endora-commerce/contracts';
 import type { ProjectAccess, VisibleProjectRow } from './project-access.js';
 import type { ProjectReadService } from './project-read-service.js';
 import type { RecordProjectService } from './record-project-service.js';
 
 export interface ProjectReadPortDeps {
-  access: Pick<ProjectAccess, 'findVisible'>;
+  access: Pick<ProjectAccess, 'findVisible' | 'findVisibleMany' | 'searchVisible'>;
   read: Pick<ProjectReadService, 'summary'>;
   records: Pick<RecordProjectService, 'findByRecord'>;
 }
@@ -26,6 +32,19 @@ export class ProjectReadPortService implements ProjectReadPort {
   async findById(id: string): Promise<ProjectRecord | null> {
     const row = await this.deps.access.findVisible(id);
     return row === null ? null : this.#record(row);
+  }
+
+  /** The Projects of `ids` the caller may see; a hidden or missing id is absent (165 R-5). */
+  async findByIds(ids: readonly string[]): Promise<ProjectRecord[]> {
+    const rows = await this.deps.access.findVisibleMany(ids);
+    return Promise.all(rows.map((row) => this.#record(row)));
+  }
+
+  /** Projects the caller may see by number or title, newest first, at most 20 (165 R-5). */
+  async search(query: ProjectSearchQuery): Promise<ProjectRecord[]> {
+    const limit = Math.min(Math.max(0, Math.trunc(query.limit)), PROJECT_READ_PORT_SEARCH_MAX);
+    const rows = await this.deps.access.searchVisible(query.q ?? '', limit);
+    return Promise.all(rows.map((row) => this.#record(row)));
   }
 
   async findByRecord(kind: ProjectRecordKind, id: string): Promise<ProjectRecord | null> {

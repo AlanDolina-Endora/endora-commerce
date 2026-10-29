@@ -1,7 +1,13 @@
-import { ERROR_CODES, type AdminUserReadPort, type TaskContext } from '@endora-commerce/contracts';
+import {
+  ADMIN_PERMISSION_WILDCARD,
+  ERROR_CODES,
+  type AdminUserReadPort,
+  type PermissionReadPort,
+  type TaskContext,
+} from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import type { TaskContextRegistry } from './task-context-registry.js';
-import { taskAssigneeInvalid, taskContextInvalid } from './task-errors.js';
+import { taskAssigneeContextHidden, taskAssigneeInvalid, taskContextInvalid } from './task-errors.js';
 
 /**
  * The checks a Task write makes before its first Command runs, shared by the
@@ -18,6 +24,61 @@ export async function assertAssignable(
   const found = await adminUsers.findByIds(named, { activeOnly: true });
   const active = new Set(found.filter((a) => a.status === 'active' && a.deletedAt === null).map((a) => a.id));
   if (named.some((id) => !active.has(id))) throw taskAssigneeInvalid();
+}
+
+/**
+ * What the Tasks screens assign (`specs/165-task-management/` FR-001,
+ * `contracts/admin-api.md` §1): every named assignee is an active
+ * administrator **who holds `tasks:read`** — somebody who could not open the
+ * Task is not given it — or the whole write is 422 `TASK_ASSIGNEE_INVALID`.
+ * For a Task in a context, {@link assertAssigneesSeeContext} follows.
+ *
+ * The write port keeps {@link assertAssignable} alone: a context's owner
+ * assigns the people its own rules name (163 behaviour), and they are told only
+ * when they may see the Task. A Project's Stage Tasks go to the Member holding
+ * each definition's Role, who need not hold `tasks:read` or `projects:read`;
+ * refusing one of them would refuse the whole batch, and entering the Stage
+ * would record `tasks_materialize_failed` for a Task nobody else would get
+ * (issue #506, owner ruling 2026-10-29: the HTTP routes only).
+ */
+export async function assertMayBeAssigned(
+  adminUsers: AdminUserReadPort,
+  permissions: PermissionReadPort,
+  adminUserIds: readonly string[],
+): Promise<void> {
+  const named = [...new Set(adminUserIds)];
+  await assertAssignable(adminUsers, named);
+  for (const adminUserId of named) {
+    const held = await permissions.listPermissions(adminUserId);
+    if (!held.includes(ADMIN_PERMISSION_WILDCARD) && !held.includes('tasks:read')) throw taskAssigneeInvalid();
+  }
+}
+
+/**
+ * Every named assignee of a Task in a context may see that record — its
+ * owner's `canSeeAs` answers yes — or the write is 422 `TASK_ASSIGNEE_INVALID`
+ * naming the first who may not (spec, Edge Cases; issue #506, option A). A
+ * Task in no context asks nothing. An owner that is not present vouches for
+ * nobody, though a Task of one is hidden before this is reached. The HTTP
+ * routes only: see {@link assertMayBeAssigned} for why the write port does not.
+ */
+export async function assertAssigneesSeeContext(
+  contexts: Pick<TaskContextRegistry, 'presentFor'>,
+  adminUsers: AdminUserReadPort,
+  context: { contextType: string | null; contextId: string | null } | null,
+  adminUserIds: readonly string[],
+): Promise<void> {
+  if (!context || context.contextType === null || context.contextId === null) return;
+  const named = [...new Set(adminUserIds)];
+  if (named.length === 0) return;
+  const descriptor = contexts.presentFor(context.contextType);
+  if (!descriptor) throw taskAssigneeInvalid();
+  for (const adminUserId of named) {
+    if (await descriptor.canSeeAs(adminUserId, context.contextId)) continue;
+    const [person] = await adminUsers.findByIds([adminUserId]);
+    const name = person ? `${person.firstName} ${person.lastName}`.trim() || person.email : adminUserId;
+    throw taskAssigneeContextHidden({ id: adminUserId, name });
+  }
 }
 
 /**

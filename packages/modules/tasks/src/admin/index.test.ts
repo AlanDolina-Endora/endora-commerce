@@ -20,11 +20,15 @@ function bundle(language: 'en' | 'pl'): Record<string, string> {
 }
 
 describe('tasks admin contributions', () => {
-  it("declares User Story 2's four screens, each on the code its route enforces", () => {
+  it('declares its screens, each on the code its route enforces — the workflow (165 T047), priorities and tags (T083) and general settings (T071) on tasks:configure', () => {
     expect((contributions.routes ?? []).map((route) => [route.path, route.requiredPermission])).toEqual([
       ['/tasks', 'tasks:read'],
       ['/tasks/mine', 'tasks:read'],
       ['/tasks/new', 'tasks:write'],
+      ['/tasks/settings/workflow', 'tasks:configure'],
+      ['/tasks/settings/priorities', 'tasks:configure'],
+      ['/tasks/settings/tags', 'tasks:configure'],
+      ['/tasks/settings/general', 'tasks:configure'],
       ['/tasks/:id', 'tasks:read'],
     ]);
     expect((contributions.routes ?? []).filter((route) => route.index)).toHaveLength(1);
@@ -38,12 +42,13 @@ describe('tasks admin contributions', () => {
     expect(entry).not.toMatch(/^import .* from '\.\/(pages|components)\//m);
   });
 
-  it('puts "My tasks" then "Tasks" after "Projects" in the "Projects & tasks" section, on tasks:read', () => {
+  it('puts "My tasks" and "Tasks" after "Projects", and "Task settings" with the section’s configuration rows', () => {
     expect(
       (contributions.nav ?? []).map((row) => [row.to, row.section, row.weight, row.requiredPermission, row.icon]),
     ).toEqual([
       ['/tasks/mine', 'work', 200, 'tasks:read', 'ListChecks'],
       ['/tasks', 'work', 210, 'tasks:read', 'ListChecks'],
+      ['/tasks/settings/workflow', 'work', 430, 'tasks:configure', 'Settings'],
     ]);
   });
 
@@ -51,6 +56,15 @@ describe('tasks admin contributions', () => {
     const declared = new Set((manifest.permissions ?? []).map((permission) => permission.code));
     for (const route of contributions.routes ?? []) expect(declared.has(route.requiredPermission ?? '')).toBe(true);
     for (const row of contributions.nav ?? []) expect(declared.has(row.requiredPermission ?? '')).toBe(true);
+    for (const zone of contributions.zones ?? []) expect(declared.has(zone.requiredPermission ?? '')).toBe(true);
+  });
+
+  it('contributes the Tasks panel to an Order, a Quote Request and an Opportunity (165 US6)', () => {
+    expect((contributions.zones ?? []).map((zone) => [zone.zone, zone.weight, zone.requiredPermission])).toEqual([
+      ['order.detail.after', 660, 'tasks:read'],
+      ['quote_request.detail.after', 660, 'tasks:read'],
+      ['opportunity.detail.after', 660, 'tasks:read'],
+    ]);
   });
 
   it('labels every nav row in both shipped languages', () => {

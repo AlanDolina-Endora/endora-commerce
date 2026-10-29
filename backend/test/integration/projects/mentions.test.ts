@@ -346,7 +346,9 @@ describe('projects — mentions and the reference lookups (US7)', () => {
         title: 'Lookup task',
       });
       const all = await documents(`?projectId=${project.id}`);
-      expect(all.groups.map((group) => group.kind)).toEqual(['order', 'quote_request', 'task']);
+      // `specs/165-task-management/` R-5 added the Projects group — this
+      // module's own, the ones the caller may see — after Tasks.
+      expect(all.groups.map((group) => group.kind)).toEqual(['order', 'quote_request', 'task', 'project']);
       const byNumber = await documents(`?projectId=${project.id}&q=${encodeURIComponent(order.businessId ?? '')}`);
       expect(byNumber.groups.find((g) => g.kind === 'order')?.items.map((i) => i.id)).toContain(order.id);
       const byQuote = await documents(`?projectId=${project.id}&q=${encodeURIComponent(quoteRequest.businessId)}`);
@@ -359,19 +361,19 @@ describe('projects — mentions and the reference lookups (US7)', () => {
 
     it('an internal Project offers no Orders and no Quote Requests', async () => {
       const answer = await documents(`?projectId=${internal.id}`);
-      expect(answer.groups.map((group) => group.kind)).toEqual(['task']);
+      expect(answer.groups.map((group) => group.kind)).toEqual(['task', 'project']);
     });
 
     it('without a Project (the create form), only Tasks', async () => {
-      expect((await documents('')).groups.map((group) => group.kind)).toEqual(['task']);
+      expect((await documents('')).groups.map((group) => group.kind)).toEqual(['task', 'project']);
     });
 
     it('a group is offered only with its read code and a present owner', async () => {
       const without = await documents(`?projectId=${internal.id}`, noTasks);
-      expect(without.groups).toEqual([]);
+      expect(without.groups.map((group) => group.kind)).toEqual(['project']);
       await withTasksOff(async () => {
         const off = await documents(`?projectId=${project.id}`);
-        expect(off.groups.map((group) => group.kind)).toEqual(['order', 'quote_request']);
+        expect(off.groups.map((group) => group.kind)).toEqual(['order', 'quote_request', 'project']);
       });
     });
 

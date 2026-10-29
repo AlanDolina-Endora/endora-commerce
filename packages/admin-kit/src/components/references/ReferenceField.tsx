@@ -736,9 +736,11 @@ export function ReferenceField(props: ReferenceFieldProps): ReactNode {
         index === activeIndex ? 'bg-accent text-accent-foreground' : ''
       }`}
     >
-      <span className="truncate">{suggestion.label}</span>
+      {/* The label is what the chip will show (a record's number, a person's
+          name) and keeps its width; the description (a title) gives way to it. */}
+      <span className="max-w-full shrink-0 truncate">{suggestion.label}</span>
       {suggestion.description ? (
-        <span className="shrink-0 text-xs text-muted-foreground">{suggestion.description}</span>
+        <span className="min-w-0 truncate text-xs text-muted-foreground">{suggestion.description}</span>
       ) : null}
     </li>
   );

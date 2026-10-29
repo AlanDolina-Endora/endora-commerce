@@ -235,7 +235,8 @@ describe('projects — Templates (US3)', () => {
     const assigned = (await h
       .em()
       .getConnection()
-      .execute(`select "title", "assigned_admin_user_id" from "tasks" where "context_id" = ? order by "title"`, [
+      .execute(`select t."title", (select a."admin_user_id" from "task_assignees" a where a."task_id" = t."id") as "assigned_admin_user_id"
+                  from "tasks" t where t."context_id" = ? order by t."title"`, [
         project.id,
       ])) as Array<{ title: string; assigned_admin_user_id: string | null }>;
     expect(assigned).toEqual([

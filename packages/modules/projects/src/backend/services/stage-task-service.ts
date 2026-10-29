@@ -1,13 +1,13 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   ERROR_CODES,
-  TASK_CLOSED_STATUSES,
   type AdminUserReadPort,
   type NewContextTask,
   type ProjectStage as ProjectStageView,
   type ProjectStageEntryNote,
   type ProjectTasksResponse,
   type StageTaskDefinition,
+  type SupportedLanguage,
   type TaskRecord,
   type TaskSummary,
 } from '@endora-commerce/contracts';
@@ -54,6 +54,15 @@ import { responsibleRoleNote } from './task-context-descriptor.js';
  *   (`projects.project.stage_tasks_failed`); `POST …/materialize-tasks` then
  *   creates them once (`projects.project.stage_tasks_retry`), and refuses with
  *   409 `PROJECT_STAGE_TASKS_NOT_RETRYABLE` otherwise.
+ * - **No duplicates** (`specs/165-task-management/` R-19, issue #450). A
+ *   failure can come part way through — `createMany` commits one Task at a
+ *   time — so each Task carries its definition's id as its `sourceKey`, and
+ *   `createMany` answers the Task an earlier attempt created for a key instead
+ *   of creating another. A retry therefore creates only what is missing, however
+ *   many earlier attempts failed and wherever. The retry's claim (the stamp,
+ *   under the Project's lock) stays: it is what answers a second retry at once
+ *   with 409 rather than with a second, redundant pass, and the source key is
+ *   what makes a pass that does run harmless.
  *
  * Every Project is loaded through `ProjectAccess.loadVisible`, or was by the
  * caller that hands its id here; Stages, definitions and Members are read by
@@ -78,8 +87,6 @@ export interface StageEntryPlan {
 }
 
 const NOTHING_PLANNED: StageEntryPlan = { materialize: false, notes: [] };
-
-const CLOSED = new Set<string>(TASK_CLOSED_STATUSES);
 
 function definitionSnapshot(task: ProjectStageTask): Record<string, unknown> {
   // Titles are the Stage's structure; a description is free text and travels
@@ -208,7 +215,11 @@ export class StageTaskService {
     }
   }
 
-  /** `POST /projects/:id/stages/:stageId/materialize-tasks` — once, after a recorded failure. */
+  /**
+   * `POST /projects/:id/stages/:stageId/materialize-tasks` — once, after a
+   * recorded failure. `created` counts the Stage's Tasks once it has run, those
+   * an earlier attempt created included: `createMany` answers their ids too.
+   */
   async retry(projectId: string, stageId: string): Promise<{ created: number }> {
     const visible = await this.deps.access.loadVisible(projectId);
     if (!this.deps.tasks.present()) throw new ModuleDisabledError('tasks');
@@ -242,9 +253,11 @@ export class StageTaskService {
   /**
    * `GET /projects/:id/tasks` — the Project's Tasks by Stage, in Stage order.
    * `tasksAvailable: false` while Tasks is off, or for a reader who may not
-   * read Tasks (`tasks:read` — the Tasks module's own gate).
+   * read Tasks (`tasks:read` — the Tasks module's own gate). A status is named
+   * as the Tasks workflow names it, in `language`; *closed* is the record's own
+   * `closed` (`specs/165-task-management/` research R-1).
    */
-  async tasksByStage(projectId: string): Promise<ProjectTasksResponse> {
+  async tasksByStage(projectId: string, language: SupportedLanguage): Promise<ProjectTasksResponse> {
     const visible = await this.deps.access.loadVisible(projectId);
     if (!this.deps.tasks.present() || !(await this.deps.access.callerHolds('tasks:read'))) {
       return { tasksAvailable: false, stages: [] };
@@ -255,26 +268,41 @@ export class StageTaskService {
     });
     const { stages } = await this.deps.read.graphOf(visible.id);
     const today = todayIn(await this.deps.read.timeZone());
-    const assigneeIds = [...new Set(records.map((r) => r.assignedAdminUserId).filter((id): id is string => id !== null))];
+    const assigneeIds = [...new Set(records.flatMap((r) => r.assigneeIds))];
     const people = new Map(
       (assigneeIds.length > 0 ? await this.deps.adminUsers.findByIds(assigneeIds) : []).map((a) => [a.id, a]),
     );
+    const now = new Date();
     const summary = (record: TaskRecord, stageName: string): TaskSummary => {
-      const assignee = record.assignedAdminUserId ? people.get(record.assignedAdminUserId) : undefined;
       return {
         id: record.id,
         number: record.number,
         title: record.title,
-        status: record.status,
+        status: {
+          code: record.status,
+          name: record.statusName[language] || record.statusDefaultName,
+          color: record.statusColor,
+          category: record.statusCategory,
+        },
+        closed: record.closed,
         dueOn: record.dueOn,
-        overdue: !CLOSED.has(record.status) && record.dueOn !== null && record.dueOn < today,
-        assignee: assignee
-          ? {
-              id: assignee.id,
-              name: personName(assignee),
-              active: assignee.status === 'active' && assignee.deletedAt === null,
-            }
-          : null,
+        dueAt: record.dueAt ? record.dueAt.toISOString() : null,
+        overdue: !record.closed && (record.dueAt ? now > record.dueAt : record.dueOn !== null && record.dueOn < today),
+        assignees: record.assigneeIds.flatMap((id) => {
+          const person = people.get(id);
+          return person
+            ? [{ id: person.id, name: personName(person), active: person.status === 'active' && person.deletedAt === null }]
+            : [];
+        }),
+        // The Tasks tab shows none of these; the Tasks module's own screens do.
+        priority: null,
+        tags: [],
+        parent: null,
+        subtasks: { closed: 0, total: 0 },
+        draft: record.draft,
+        private: record.private,
+        createdAt: record.createdAt.toISOString(),
+        updatedAt: record.updatedAt.toISOString(),
         context: {
           type: PROJECT_TASK_CONTEXT_TYPE,
           available: true,
@@ -285,7 +313,8 @@ export class StageTaskService {
       };
     };
     // A Task whose Stage is gone (deleted while Tasks was off) belongs to no
-    // Stage the Project shows; it stays readable in the Tasks module.
+    // Stage the Project shows until the Tasks module's maintenance pass takes
+    // the Stage off it (#450); it stays readable in the Tasks module.
     return {
       tasksAvailable: true,
       stages: stages.map((stage) => ({
@@ -322,10 +351,10 @@ export class StageTaskService {
     )) as Array<{ started_on: string | null }>;
     if (!stage) return [];
     const definitions = (await em.execute(
-      `select t."title", t."description", t."responsible_role_id", t."due_offset_days"
+      `select t."id", t."title", t."description", t."responsible_role_id", t."due_offset_days"
          from "project_stage_tasks" t where t."stage_id" = ? order by t."position", t."id"`,
       [stageId],
-    )) as Array<{ title: string; description: string; responsible_role_id: string | null; due_offset_days: number }>;
+    )) as Array<{ id: string; title: string; description: string; responsible_role_id: string | null; due_offset_days: number }>;
     if (definitions.length === 0) return [];
 
     const roleIds = [...new Set(definitions.map((d) => d.responsible_role_id).filter((id): id is string => id !== null))];
@@ -354,8 +383,10 @@ export class StageTaskService {
         title: definition.title,
         description: definition.description,
         dueOn: startedOn === null ? null : addDays(startedOn, definition.due_offset_days),
-        assignedAdminUserId: assignee,
+        assigneeIds: assignee === null ? [] : [assignee],
         contextNote: roleId && assignee === null ? responsibleRoleNote(roleId) : null,
+        // The definition's id: a retry creates only the Tasks still missing (#450).
+        sourceKey: definition.id,
       };
     });
   }

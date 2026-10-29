@@ -249,6 +249,19 @@ export const manifest = defineModuleManifest({
         'rather than from a caught refusal. A reference holds the Task by value, so no table of ' +
         'that owner is referenced from this module\'s schema.',
     },
+    {
+      // `specs/165-task-management/` R-5: Projects became a reference kind of
+      // the shared grammar, which CRM's texts resolve and offer after `@@`.
+      moduleId: 'projects',
+      name: 'projectReadPort',
+      kind: 'degrades-without',
+      whenAbsent: 'References to Projects show as unavailable and Projects are not offered after @@.',
+      reason:
+        'Every call into this owner goes through `crm-projects.ts`, whose callers ask `isPresent()` ' +
+        'in front of the gate: a referenced Project renders as unavailable and the `@@` list offers ' +
+        'none. A reference holds its Project by value, so no table of that owner is referenced from ' +
+        "this module's schema.",
+    },
     // Feature 162 — an Opportunity's custom-field values pushed into a Quote
     // Request created from it (`specs/162-custom-fields-value-carry/`, R-16).
     {

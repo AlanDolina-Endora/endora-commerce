@@ -1,6 +1,7 @@
 import {
   ADMIN_PREFERENCES_DEFAULTS,
   type AdminListPageSize,
+  type AdminListViewMode,
   type AdminPreferenceKey,
   type AdminPreferences,
 } from '@endora-commerce/contracts';
@@ -25,6 +26,10 @@ import {
  *   are shown, nothing is sent, and the admin's changes are recorded as deltas;
  *   once loading succeeds they are applied onto the loaded values and only the
  *   touched keys are written — defaults are never saved over stored values.
+ * - **Per-list maps** (`listPageSizes`, and `listViewModes` of
+ *   `specs/165-task-management/` R-14) send only the lists changed since the
+ *   last successful write, so two devices choosing for two lists never erase
+ *   each other.
  */
 
 export const PREFERENCES_URL = '/api/v1/admin/me/preferences';
@@ -50,13 +55,19 @@ export interface PreferencesSnapshot {
   readonly unsavedNotice: boolean;
 }
 
+/** The preferences that are a map of list id to a value, merged per list by the server. */
+type ListMapKey = 'listPageSizes' | 'listViewModes';
+const LIST_MAP_KEYS: readonly ListMapKey[] = ['listPageSizes', 'listViewModes'];
+const isListMapKey = (key: AdminPreferenceKey): key is ListMapKey =>
+  (LIST_MAP_KEYS as readonly AdminPreferenceKey[]).includes(key);
+
 interface Deltas {
   pinsAdded: string[];
   pinsRemoved: Set<string>;
   folded: Set<string>;
   unfolded: Set<string>;
   rail?: boolean;
-  lists: Map<string, AdminListPageSize | null>;
+  lists: Record<ListMapKey, Map<string, unknown>>;
 }
 
 const KEYS: readonly AdminPreferenceKey[] = [
@@ -64,6 +75,7 @@ const KEYS: readonly AdminPreferenceKey[] = [
   'sidebarCollapsedGroups',
   'sidebarRailMode',
   'listPageSizes',
+  'listViewModes',
 ];
 
 function emptyDeltas(): Deltas {
@@ -72,8 +84,12 @@ function emptyDeltas(): Deltas {
     pinsRemoved: new Set(),
     folded: new Set(),
     unfolded: new Set(),
-    lists: new Map(),
+    lists: { listPageSizes: new Map(), listViewModes: new Map() },
   };
+}
+
+function emptyListSets(): Record<ListMapKey, Set<string>> {
+  return { listPageSizes: new Set(), listViewModes: new Set() };
 }
 
 /** The value of one key from a server document, or `undefined` when it has the wrong type. */
@@ -92,8 +108,9 @@ function remoteValue<K extends AdminPreferenceKey>(
     case 'sidebarRailMode':
       return typeof value === 'boolean' ? (value as AdminPreferences[K]) : undefined;
     case 'listPageSizes':
+    case 'listViewModes':
       return typeof value === 'object' && value !== null && !Array.isArray(value)
-        ? ({ ...(value as Record<string, number>) } as AdminPreferences[K])
+        ? ({ ...(value as Record<string, unknown>) } as AdminPreferences[K])
         : undefined;
     default:
       return undefined;
@@ -107,10 +124,10 @@ export class AdminPreferencesStore {
   /** A failure episode is open: no further notice until a success closes it. */
   private episodeOpen = false;
   private readonly state: Record<AdminPreferenceKey, KeyState>;
-  /** Lists changed since they were last sent successfully. */
-  private readonly dirtyLists = new Set<string>();
-  /** Lists carried by the `listPageSizes` write in flight. */
-  private inFlightLists = new Set<string>();
+  /** Per list map: lists changed since they were last sent successfully. */
+  private readonly dirtyLists: Record<ListMapKey, Set<string>> = emptyListSets();
+  /** Per list map: lists carried by that map's write in flight. */
+  private inFlightLists: Record<ListMapKey, Set<string>> = emptyListSets();
   private deltas: Deltas = emptyDeltas();
   private touched = new Set<AdminPreferenceKey>();
   private refetching = false;
@@ -156,7 +173,7 @@ export class AdminPreferencesStore {
 
   // ---- writing ------------------------------------------------------------
 
-  set<K extends Exclude<AdminPreferenceKey, 'listPageSizes'>>(
+  set<K extends Exclude<AdminPreferenceKey, ListMapKey>>(
     key: K,
     next: AdminPreferences[K],
   ): void {
@@ -173,19 +190,12 @@ export class AdminPreferencesStore {
 
   /** One list's page size; `null` forgets it. Only that list goes on the wire. */
   setListPageSize(list: string, size: AdminListPageSize | null): void {
-    const sizes = { ...this.values.listPageSizes };
-    if (size === null) delete sizes[list];
-    else sizes[list] = size;
-    this.values = { ...this.values, listPageSizes: sizes };
-    this.emit();
-    if (this.availability === 'unavailable') {
-      this.deltas.lists.set(list, size);
-      this.touched.add('listPageSizes');
-      void this.tryLoad();
-      return;
-    }
-    this.dirtyLists.add(list);
-    this.write('listPageSizes');
+    this.setListEntry('listPageSizes', list, size);
+  }
+
+  /** One list's list-or-board choice; `null` forgets it. Only that list goes on the wire. */
+  setListViewMode(list: string, mode: AdminListViewMode | null): void {
+    this.setListEntry('listViewModes', list, mode);
   }
 
   /**
@@ -195,12 +205,28 @@ export class AdminPreferencesStore {
   adoptListPageSizes(remote: Readonly<Record<string, number>>): void {
     const local = this.values.listPageSizes;
     const merged: Record<string, number> = { ...remote };
-    for (const list of [...this.dirtyLists, ...this.inFlightLists]) {
+    for (const list of [...this.dirtyLists.listPageSizes, ...this.inFlightLists.listPageSizes]) {
       if (list in local) merged[list] = local[list]!;
       else delete merged[list];
     }
     this.values = { ...this.values, listPageSizes: merged };
     this.emit();
+  }
+
+  private setListEntry(key: ListMapKey, list: string, value: unknown): void {
+    const entries: Record<string, unknown> = { ...this.values[key] };
+    if (value === null) delete entries[list];
+    else entries[list] = value;
+    this.values = { ...this.values, [key]: entries };
+    this.emit();
+    if (this.availability === 'unavailable') {
+      this.deltas.lists[key].set(list, value);
+      this.touched.add(key);
+      void this.tryLoad();
+      return;
+    }
+    this.dirtyLists[key].add(list);
+    this.write(key);
   }
 
   dismissNotice = (): void => {
@@ -259,13 +285,13 @@ export class AdminPreferencesStore {
     state.inFlight = true;
     state.pending = false;
     let body: Partial<Record<AdminPreferenceKey, unknown>>;
-    if (key === 'listPageSizes') {
-      this.inFlightLists = new Set(this.dirtyLists);
-      this.dirtyLists.clear();
-      const sizes = this.values.listPageSizes;
+    if (isListMapKey(key)) {
+      this.inFlightLists[key] = new Set(this.dirtyLists[key]);
+      this.dirtyLists[key].clear();
+      const entries = this.values[key] as Record<string, unknown>;
       body = {
-        listPageSizes: Object.fromEntries(
-          [...this.inFlightLists].map((list) => [list, sizes[list] ?? null]),
+        [key]: Object.fromEntries(
+          [...this.inFlightLists[key]].map((list) => [list, entries[list] ?? null]),
         ),
       };
     } else {
@@ -278,8 +304,8 @@ export class AdminPreferencesStore {
       );
       state.inFlight = false;
       state.unsaved = false;
-      if (key === 'listPageSizes') this.inFlightLists = new Set();
-      if (!state.pending && (key !== 'listPageSizes' || this.dirtyLists.size === 0)) {
+      if (isListMapKey(key)) this.inFlightLists[key] = new Set();
+      if (!state.pending && (!isListMapKey(key) || this.dirtyLists[key].size === 0)) {
         const adopted = remoteValue(response.data, key);
         if (adopted !== undefined) this.values = { ...this.values, [key]: adopted };
       }
@@ -294,9 +320,9 @@ export class AdminPreferencesStore {
       state.unsaved = true;
       // The newest value is already in `values`; it goes out on the next trigger.
       state.pending = false;
-      if (key === 'listPageSizes') {
-        for (const list of this.inFlightLists) this.dirtyLists.add(list);
-        this.inFlightLists = new Set();
+      if (isListMapKey(key)) {
+        for (const list of this.inFlightLists[key]) this.dirtyLists[key].add(list);
+        this.inFlightLists[key] = new Set();
       }
       if (!this.episodeOpen) {
         this.episodeOpen = true;
@@ -325,7 +351,7 @@ export class AdminPreferencesStore {
     for (const key of KEYS) {
       const state = this.state[key];
       if (state.inFlight || state.pending || state.unsaved) continue;
-      if (key === 'listPageSizes' && this.dirtyLists.size > 0) continue;
+      if (isListMapKey(key) && this.dirtyLists[key].size > 0) continue;
       const value = remoteValue(doc, key);
       if (value === undefined) continue;
       (next as Record<AdminPreferenceKey, unknown>)[key] = value;
@@ -336,7 +362,7 @@ export class AdminPreferencesStore {
     this.emit();
   }
 
-  private recordDelta<K extends Exclude<AdminPreferenceKey, 'listPageSizes'>>(
+  private recordDelta<K extends Exclude<AdminPreferenceKey, ListMapKey>>(
     key: K,
     previous: AdminPreferences[K],
     next: AdminPreferences[K],
@@ -399,11 +425,13 @@ export class AdminPreferencesStore {
       if (touched.has('sidebarRailMode') && d.rail !== undefined) {
         loaded.sidebarRailMode = d.rail;
       }
-      if (touched.has('listPageSizes')) {
-        for (const [list, size] of d.lists) {
-          if (size === null) delete loaded.listPageSizes[list];
-          else loaded.listPageSizes[list] = size;
-          this.dirtyLists.add(list);
+      for (const mapKey of LIST_MAP_KEYS) {
+        if (!touched.has(mapKey)) continue;
+        const entries = loaded[mapKey] as Record<string, unknown>;
+        for (const [list, value] of d.lists[mapKey]) {
+          if (value === null) delete entries[list];
+          else entries[list] = value;
+          this.dirtyLists[mapKey].add(list);
         }
       }
       this.values = loaded;

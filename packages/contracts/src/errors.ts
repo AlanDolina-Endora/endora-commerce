@@ -716,6 +716,40 @@ export const ERROR_CODES = {
   TASK_CONTEXT_INVALID: 'TASK_CONTEXT_INVALID',
   /** The assignee is not an active administrator. */
   TASK_ASSIGNEE_INVALID: 'TASK_ASSIGNEE_INVALID',
+  /** A status code that is not in the Task workflow (`specs/165-task-management/` R-1). */
+  TASK_STATUS_UNKNOWN: 'TASK_STATUS_UNKNOWN',
+  /** A Task status move the workflow does not permit; carries `allowedTargets`. */
+  TASK_TRANSITION_FORBIDDEN: 'TASK_TRANSITION_FORBIDDEN',
+  /** The Task left the status the caller saw before the move. */
+  TASK_TRANSITION_CONFLICT: 'TASK_TRANSITION_CONFLICT',
+  /** A Task workflow or priority-list change that breaks a rule; carries `rule` (`specs/165-task-management/` FR-013, FR-016, FR-024). */
+  TASK_WORKFLOW_INVALID: 'TASK_WORKFLOW_INVALID',
+  /** A Task status or priority removal that would move more Tasks than one Command moves (R-1, R-9). */
+  TASK_STATUS_IN_USE_TOO_MANY: 'TASK_STATUS_IN_USE_TOO_MANY',
+  /** A change to someone else's private Task by a holder of `tasks:see_private` (R-3). */
+  TASK_PRIVATE_READ_ONLY: 'TASK_PRIVATE_READ_ONLY',
+  /** A private Task given an assignee other than its Creator (R-3, FR-038). */
+  TASK_PRIVATE_ASSIGNEE: 'TASK_PRIVATE_ASSIGNEE',
+  /** Publishing a Task that is no longer a draft: publishing is one-way (R-3, FR-037). */
+  TASK_ALREADY_PUBLISHED: 'TASK_ALREADY_PUBLISHED',
+  /** A Task priority code that is not configured (R-9). */
+  TASK_PRIORITY_UNKNOWN: 'TASK_PRIORITY_UNKNOWN',
+  /** A Task tag id that does not exist (R-10). */
+  TASK_TAG_UNKNOWN: 'TASK_TAG_UNKNOWN',
+  /** A Task tag name already taken, case-insensitively (R-10). */
+  TASK_TAG_NAME_TAKEN: 'TASK_TAG_NAME_TAKEN',
+  /** A Task attachment refused: too large, or a document a browser would run (R-7). */
+  TASK_ATTACHMENT_REFUSED: 'TASK_ATTACHMENT_REFUSED',
+  /** A saved Tasks list view name its owner already uses, case-insensitively (R-13). */
+  TASK_VIEW_NAME_TAKEN: 'TASK_VIEW_NAME_TAKEN',
+  /** A Task parent that would close a cycle — the Task itself or one of its descendants (R-15). */
+  TASK_PARENT_CYCLE: 'TASK_PARENT_CYCLE',
+  /** A Task parent that would nest sub-tasks deeper than `TASK_HIERARCHY_DEPTH_MAX` levels (R-15). */
+  TASK_HIERARCHY_TOO_DEEP: 'TASK_HIERARCHY_TOO_DEEP',
+  /** A record a Task cannot be linked to: its owner absent, no read permission for it, or not found (R-16). */
+  TASK_LINK_INVALID: 'TASK_LINK_INVALID',
+  /** A Task reminder that cannot be set: a recipient not the caller or an assignee, too many, or no due moment (R-17). */
+  TASK_REMINDER_INVALID: 'TASK_REMINDER_INVALID',
 
   // Projects (`specs/163-projects-and-tasks/`, `contracts/admin-api.md` §2) —
   // the spellings of `PROJECTS_ERROR_CODES`. Each is declared by the `projects`

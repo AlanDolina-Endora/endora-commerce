@@ -1,10 +1,12 @@
 import {
   ADMIN_LIST_PAGE_SIZES_MAX,
+  ADMIN_LIST_VIEW_MODES_MAX,
   ADMIN_PREFERENCE_KEYS,
   ADMIN_PREFERENCES_DEFAULTS,
   ERROR_CODES,
   adminPreferencesSchema,
   type AdminListPageSize,
+  type AdminListViewMode,
   type AdminPreferenceKey,
   type AdminPreferences,
 } from '@endora-commerce/contracts';
@@ -107,5 +109,38 @@ export function assertListPageSizesBound(merged: Readonly<Record<string, number>
     ERROR_CODES.VALIDATION_FAILED,
     `At most ${ADMIN_LIST_PAGE_SIZES_MAX} lists may remember a page size.`,
     [{ path: 'listPageSizes', issue: `more than ${ADMIN_LIST_PAGE_SIZES_MAX} lists` }],
+  );
+}
+
+/** The stored `listViewModes` map, or `{}` when the row holds anything else (`specs/165-task-management/` R-14). */
+export function readStoredListViewModes(value: unknown): Record<string, string> {
+  const parsed = adminPreferencesSchema.shape.listViewModes.safeParse(value);
+  return parsed.success ? { ...parsed.data } : {};
+}
+
+/**
+ * `PATCH` semantics for `listViewModes` — those of `listPageSizes`: present
+ * entries set, `null` entries removed, every other stored list untouched.
+ */
+export function mergeListViewModes(
+  stored: Readonly<Record<string, string>>,
+  patch: Readonly<Record<string, AdminListViewMode | null>>,
+): Record<string, string> {
+  const merged: Record<string, string> = { ...stored };
+  for (const [list, mode] of Object.entries(patch)) {
+    if (mode === null) delete merged[list];
+    else merged[list] = mode;
+  }
+  return merged;
+}
+
+/** The 128-list bound of `listViewModes`, judged on the merged value, as for page sizes. */
+export function assertListViewModesBound(merged: Readonly<Record<string, string>>): void {
+  if (Object.keys(merged).length <= ADMIN_LIST_VIEW_MODES_MAX) return;
+  throw new HttpError(
+    400,
+    ERROR_CODES.VALIDATION_FAILED,
+    `At most ${ADMIN_LIST_VIEW_MODES_MAX} lists may remember a list or board view.`,
+    [{ path: 'listViewModes', issue: `more than ${ADMIN_LIST_VIEW_MODES_MAX} lists` }],
   );
 }

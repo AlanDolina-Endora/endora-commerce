@@ -5,8 +5,11 @@ import {
   MyTasksResponseSchema,
   RecordHistoryPageSchema,
   TaskAssigneeLookupResponseSchema,
+  TaskDeleteResponseSchema,
   TaskDetailResponseSchema,
   TaskListResponseSchema,
+  TaskStatusChangeResponseSchema,
+  TaskWorkflowResponseSchema,
   type TaskContextDescriptor,
   type TaskContextRegistryPort,
   type TaskDetail,
@@ -21,9 +24,12 @@ import { seedCrmAdmin } from '../../helpers/seed-crm.js';
 
 /**
  * The Tasks API — every endpoint of
- * `specs/163-projects-and-tasks/contracts/admin-api.md` §1: each answer against
- * its schema, each gate (401 without a session, 403 without the code), and each
- * refusal by its code.
+ * `specs/163-projects-and-tasks/contracts/admin-api.md` §1, on the shape of
+ * `specs/165-task-management/contracts/admin-api.md` §1 (statuses are workflow
+ * codes moved through `POST /tasks/:id/status`; assignees are a list), plus the
+ * read-only `GET /tasks/workflow` of §4: each answer against its schema, each
+ * gate (401 without a session, 403 without the code), and each refusal by its
+ * code.
  *
  * A probe context type, `contract_probe`, is owned by `crm` (a module that is
  * on) for the length of the file: it lists one id as visible, with one group.
@@ -101,10 +107,11 @@ describe('tasks (contract) — §1 Tasks', () => {
 
   describe('gates', () => {
     const ID = '00000000-0000-4000-8000-0000000071b1';
-    const reads = ['', '/mine', `/${ID}`, `/${ID}/history`];
+    const reads = ['', '/mine', `/${ID}`, `/${ID}/history`, '/workflow'];
     const writes: Array<[Method, string]> = [
       ['POST', ''],
       ['PATCH', `/${ID}`],
+      ['POST', `/${ID}/status`],
       ['DELETE', `/${ID}`],
       ['GET', '/lookups/assignees'],
     ];
@@ -136,17 +143,20 @@ describe('tasks (contract) — §1 Tasks', () => {
       const task = await create({
         title: '  Call the supplier  ',
         description: 'About the racking',
-        assignedAdminUserId: TEST_ADMIN_ID,
+        assigneeIds: [TEST_ADMIN_ID],
         dueOn: '2026-12-01',
       });
       expect(task.number).toMatch(/^TSK-\d{6,}$/);
       expect(task).toMatchObject({
         title: 'Call the supplier',
         description: 'About the racking',
-        status: 'todo',
+        status: { code: 'todo', name: 'To do', category: 'open' },
+        closed: false,
         dueOn: '2026-12-01',
         overdue: false,
-        assignee: { id: TEST_ADMIN_ID, active: true },
+        assignees: [{ id: TEST_ADMIN_ID, active: true }],
+        draft: false,
+        private: false,
         context: null,
         contextNote: null,
         createdBy: { id: TEST_ADMIN_ID },
@@ -215,7 +225,7 @@ describe('tasks (contract) — §1 Tasks', () => {
     });
 
     it('refuses an assignee who is no active administrator — 422 TASK_ASSIGNEE_INVALID', async () => {
-      const response = await call('POST', '', { payload: { title: 'Nobody', assignedAdminUserId: randomUUID() } });
+      const response = await call('POST', '', { payload: { title: 'Nobody', assigneeIds: [randomUUID()] } });
       expect(response.statusCode, response.body).toBe(422);
       expect(code(response)).toBe('TASK_ASSIGNEE_INVALID');
     });
@@ -234,12 +244,12 @@ describe('tasks (contract) — §1 Tasks', () => {
     });
 
     it('answers My Tasks against MyTasksResponse — the caller’s open Tasks', async () => {
-      const mine = await create({ title: 'Mine', assignedAdminUserId: TEST_ADMIN_ID });
+      const mine = await create({ title: 'Mine', assigneeIds: [TEST_ADMIN_ID] });
       const response = await call('GET', '/mine');
       expect(response.statusCode, response.body).toBe(200);
       const { data } = MyTasksResponseSchema.parse(response.json());
       expect(data.map((t) => t.id)).toContain(mine.id);
-      expect(data.every((t) => t.assignee?.id === TEST_ADMIN_ID)).toBe(true);
+      expect(data.every((t) => t.assignees.some((a) => a.id === TEST_ADMIN_ID))).toBe(true);
     });
 
     it('answers 404 TASK_NOT_FOUND for a Task that does not exist', async () => {
@@ -251,21 +261,26 @@ describe('tasks (contract) — §1 Tasks', () => {
     });
 
     it('answers 400 for a query its schema refuses', async () => {
-      expect((await call('GET', '?status=open')).statusCode).toBe(400);
+      expect((await call('GET', '?status=Not-A-Code')).statusCode).toBe(400);
+      expect((await call('GET', '?sort=popularity')).statusCode).toBe(400);
     });
   });
 
   describe('PATCH /tasks/:id and DELETE /tasks/:id', () => {
     it('edits against TaskDetail; done sets completedAt and leaving done clears it', async () => {
       const task = await create({ title: 'To edit' });
-      const done = await call('PATCH', `/${task.id}`, { payload: { status: 'done', title: 'Edited' } });
+      const patched = await call('PATCH', `/${task.id}`, { payload: { title: 'Edited' } });
+      expect(patched.statusCode, patched.body).toBe(200);
+      expect(TaskDetailResponseSchema.parse(patched.json()).data).toMatchObject({ title: 'Edited' });
+      const done = await call('POST', `/${task.id}/status`, { payload: { from: 'todo', to: 'done' } });
       expect(done.statusCode, done.body).toBe(200);
-      const edited = TaskDetailResponseSchema.parse(done.json()).data;
-      expect(edited).toMatchObject({ title: 'Edited', status: 'done' });
-      expect(edited.completedAt).not.toBeNull();
+      const moved = TaskStatusChangeResponseSchema.parse(done.json()).data;
+      expect(moved.task).toMatchObject({ title: 'Edited', status: { code: 'done', category: 'done' }, closed: true });
+      expect(moved.task.completedAt).not.toBeNull();
+      expect(moved.openSubtasks).toBe(0);
 
-      const reopened = await call('PATCH', `/${task.id}`, { payload: { status: 'in_progress' } });
-      expect(TaskDetailResponseSchema.parse(reopened.json()).data.completedAt).toBeNull();
+      const reopened = await call('POST', `/${task.id}/status`, { payload: { from: 'done', to: 'in_progress' } });
+      expect(TaskStatusChangeResponseSchema.parse(reopened.json()).data.task.completedAt).toBeNull();
     });
 
     it('answers 400 for an empty or unknown body, 404 for a missing Task, 422 for a bad context', async () => {
@@ -282,11 +297,11 @@ describe('tasks (contract) — §1 Tasks', () => {
       expect(code(context)).toBe('TASK_CONTEXT_INVALID');
     });
 
-    it('deletes with 204, after which the Task is not found', async () => {
+    it('deletes with 200 and how many sub-tasks became top-level (FR-029), after which the Task is not found', async () => {
       const task = await create({ title: 'To delete' });
       const response = await call('DELETE', `/${task.id}`);
-      expect(response.statusCode, response.body).toBe(204);
-      expect(response.body).toBe('');
+      expect(response.statusCode, response.body).toBe(200);
+      expect(TaskDeleteResponseSchema.parse(response.json())).toEqual({ data: { subtasksDetached: 0 } });
       const gone = await call('DELETE', `/${task.id}`);
       expect(gone.statusCode).toBe(404);
       expect(code(gone)).toBe('TASK_NOT_FOUND');
@@ -305,7 +320,7 @@ describe('tasks (contract) — §1 Tasks', () => {
       } finally {
         mayChangeTasks = true;
       }
-      expect((await call('DELETE', `/${task.id}`)).statusCode).toBe(204);
+      expect((await call('DELETE', `/${task.id}`)).statusCode).toBe(200);
     });
   });
 
@@ -326,6 +341,57 @@ describe('tasks (contract) — §1 Tasks', () => {
       expect(page.data.map((entry) => entry.action)).toEqual(['tasks.task.update', 'tasks.task.create']);
       expect(page.data[0]!.actor).toMatchObject({ kind: 'admin', id: TEST_ADMIN_ID });
       expect(page.truncated).toBe(false);
+    });
+  });
+
+  describe('POST /tasks/:id/status and GET /tasks/workflow (165 research R-1)', () => {
+    it('serves the workflow against TaskWorkflow: the four seeded statuses in order, every move', async () => {
+      const response = await call('GET', '/workflow', { cookies: reader.cookies });
+      expect(response.statusCode, response.body).toBe(200);
+      const { data } = TaskWorkflowResponseSchema.parse(response.json());
+      expect(data.statuses.map((status) => [status.code, status.category])).toEqual([
+        ['todo', 'open'],
+        ['in_progress', 'open'],
+        ['done', 'done'],
+        ['cancelled', 'cancelled'],
+      ]);
+      expect(data.transitions).toHaveLength(12);
+    });
+
+    it('refuses a code the workflow does not hold — 422 TASK_STATUS_UNKNOWN', async () => {
+      const task = await create({ title: 'Unknown target' });
+      const response = await call('POST', `/${task.id}/status`, { payload: { from: 'todo', to: 'in_review' } });
+      expect(response.statusCode, response.body).toBe(422);
+      expect(code(response)).toBe('TASK_STATUS_UNKNOWN');
+    });
+
+    it('refuses a move from a status the Task has left — 409 TASK_TRANSITION_CONFLICT', async () => {
+      const task = await create({ title: 'Moved meanwhile' });
+      const response = await call('POST', `/${task.id}/status`, { payload: { from: 'in_progress', to: 'done' } });
+      expect(response.statusCode, response.body).toBe(409);
+      expect(code(response)).toBe('TASK_TRANSITION_CONFLICT');
+    });
+
+    it('refuses a move the workflow does not permit — 409 TASK_TRANSITION_FORBIDDEN with allowedTargets', async () => {
+      const task = await create({ title: 'Not that way' });
+      const connection = h.orm.em.getConnection();
+      await connection.execute(`delete from "task_status_transitions" where "from_code" = 'todo' and "to_code" = 'done'`);
+      try {
+        const response = await call('POST', `/${task.id}/status`, { payload: { from: 'todo', to: 'done' } });
+        expect(response.statusCode, response.body).toBe(409);
+        const body = response.json() as { error: { code: string; details: { allowedTargets: string[] } } };
+        expect(body.error.code).toBe('TASK_TRANSITION_FORBIDDEN');
+        expect(body.error.details.allowedTargets).toEqual(['in_progress', 'cancelled']);
+      } finally {
+        await connection.execute(
+          `insert into "task_status_transitions" ("from_code", "to_code") values ('todo', 'done') on conflict do nothing`,
+        );
+      }
+    });
+
+    it('PATCH no longer takes a status — 400', async () => {
+      const task = await create({ title: 'Status by PATCH' });
+      expect((await call('PATCH', `/${task.id}`, { payload: { status: 'done' } })).statusCode).toBe(400);
     });
   });
 });

@@ -251,8 +251,10 @@ tego etapu.
 
 Jeśli moduł Zadania zawiedzie przy ich tworzeniu, projekt i tak jest w nowym
 etapie, historia etapów podaje *Tworzenie zadań etapu nie powiodło się.*, a
-zadania można utworzyć ponownie — jeden raz — przyciskiem *Utwórz ponownie
-zadania etapu* przy etapie w zakładce *Etapy*.
+zadania można utworzyć ponownie przyciskiem *Utwórz ponownie zadania etapu*
+przy etapie w zakładce *Etapy*. Każde zadanie etapu powstaje **dokładnie raz**,
+niezależnie od tego, jak tworzenie się nie powiodło i ile razy je ponowiono:
+ponowienie tworzy tylko te, których jeszcze brakuje.
 
 **Gdy moduł Zadania jest wyłączony**, projekt działa dalej z samymi swoimi
 etapami i nic nie ginie:
@@ -268,9 +270,14 @@ etapami i nic nie ginie:
 - zadania etapów i blokady zostają zachowane i znów działają dla tego, co
   dzieje się po ponownym włączeniu modułu Zadania.
 
-Usunięcie projektu usuwa razem z nim jego zadania (gdy moduł Zadania jest
-włączony; przy wyłączonym zostają, ukryte, bo nikt nie może zobaczyć projektu,
-do którego należą).
+Usunięcie projektu usuwa razem z nim jego zadania. Gdy moduł Zadania jest
+wyłączony, na razie zostają, ukryte, bo nikt nie może zobaczyć projektu, do
+którego należą; etap usunięty w tym czasie także zachowuje swoje zadania.
+**W ciągu piętnastu minut od ponownego włączenia modułu Zadania** są
+porządkowane: zadania usuniętego projektu są usuwane, a zadania usuniętego
+etapu zostają w swoim projekcie bez etapu — każda zmiana trafia do dziennika
+zmian. Gdy moduł Projekty jest wyłączony, nic nie jest porządkowane: projektu,
+o który nie można zapytać, nie uznaje się za usunięty.
 
 ## Szablony
 
@@ -496,7 +503,7 @@ rzeczy**:
 | Wpisz | Aby odwołać się do | Dostępne dla |
 | --- | --- | --- |
 | `@` | osoby | administratorów, którzy mogą tworzyć i prowadzić projekty; lista podaje tylko osoby, które mogą widzieć projekt |
-| `@@` | dokumentu — jedna lista w grupach: zamówienia, zapytania ofertowe, zadania | zamówienia z uprawnieniem do przeglądania zamówień, zapytania ofertowe z uprawnieniem do ich obsługi, zadania z uprawnieniem do przeglądania zadań; zamówienia i zapytania ofertowe to te organizacji projektu — żadne w projekcie wewnętrznym; w formularzu **Nowy projekt** — te organizacji wybranych w formularzu |
+| `@@` | dokumentu — jedna lista w grupach: zamówienia, zapytania ofertowe, zadania, szanse sprzedażowe, projekty | zamówienia z uprawnieniem do przeglądania zamówień, zapytania ofertowe z uprawnieniem do ich obsługi, zadania z uprawnieniem do przeglądania zadań, szanse sprzedażowe z uprawnieniem do przeglądania CRM; projekty — każdy inny projekt, który możesz zobaczyć — zawsze; zamówienia i zapytania ofertowe to te organizacji projektu — żadne w projekcie wewnętrznym; w formularzu **Nowy projekt** — te organizacji wybranych w formularzu |
 | `@@@` | produktu | administratorów, którzy mogą przeglądać katalog |
 
 To samo robią przyciski nad polem — *Wspomnij osobę*, *Wstaw dokument*,
@@ -769,7 +776,21 @@ Moduł odczytuje i zapisuje zadania wyłącznie przez `taskReadPort` i
 `taskWritePort`, po ustaleniu, że moduł Zadania jest obecny (krawędzie
 `degrades-without`). Zadania etapu są tworzone po zatwierdzeniu własnej
 transakcji przejścia, każde przez osobne audytowane polecenie
-`tasks.task.create`. Notatka nieprzypisanego zadania etapu jest zapisywana jako
+`tasks.task.create`, każde z identyfikatorem definicji zadania etapu jako
+`sourceKey`: `createMany` tworzy klucz, którego projekt jeszcze nie ma, a dla
+klucza, który już ma, zwraca identyfikator istniejącego zadania, więc
+ponowienie jest idempotentne. Dlatego `created` w odpowiedzi
+`materialize-tasks` liczy zadania etapu po ponowieniu, łącznie z tymi
+z wcześniejszych prób.
+
+Deskryptor implementuje też `existingContexts(ids)`, na które odpowiada
+`ProjectAccess.existingWithStages` — jedno zapytanie po `projects`
+i `project_stages`, udzielające odpowiedzi tylko aktorowi systemowemu. Przebieg
+porządkujący modułu Zadania wywołuje je, aby znaleźć zadania projektów i etapów
+usuniętych przy wyłączonym module Zadania (zob. stronę modułu Zadania, *Konteksty
+zadań*).
+
+Notatka nieprzypisanego zadania etapu jest zapisywana jako
 rola odpowiedzialna (`role:<id>`), a nie jako zdanie; `renderNote` deskryptora
 formułuje ją w języku każdego czytającego.
 
@@ -783,9 +804,10 @@ dziennika zawierają identyfikator, rodzaj i długość komentarza, nigdy jego
 treść: dziennik zmian nie jest ograniczony do dzierżawcy. Odwołania są
 rozwiązywane przy każdym odczycie, jednym wywołaniem na rodzaj, przez porty i
 uprawnienia do odczytu ich właścicieli — `orderReadPort`,
-`quoteRequestReadPort` (przez `linked-records.ts`), `taskReadPort` (przez
-`project-tasks.ts`, po `present()`), `catalogProductReadPort` i
-`adminUserReadPort`.
+`quoteRequestReadPort` i `opportunityReadPort` (oba przez `linked-records.ts`),
+`taskReadPort` (przez `project-tasks.ts`, po `present()`),
+`catalogProductReadPort` i `adminUserReadPort`; przywołany projekt jest czytany
+przez `ProjectAccess`, więc widzi go tylko ktoś, kto może go zobaczyć.
 
 Powiadomienia przechodzą przez `adminNotificationRecordPort` (krawędź
 `degrades-without`: obecność modułu jest rozstrzygana najpierw i nic nie jest

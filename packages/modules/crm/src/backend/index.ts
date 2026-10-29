@@ -28,6 +28,7 @@ import type {
   SalesChannelAttributionRegistryPort,
   SalesRepAssignmentPort,
   SettingsAdminPort,
+  ProjectReadPort,
   TaskReadPort,
   TransactionalEmailSender,
 } from '@endora-commerce/contracts';
@@ -74,6 +75,7 @@ import { createAdminReach } from './services/admin-reach.js';
 import { createOwnerReadChecks, type OwnerReadChecks } from './services/owner-read-permissions.js';
 import { createCrmNotifier, type CrmNotifier } from './services/crm-notifier.js';
 import { createCrmQuoteRequests, type CrmQuoteRequests } from './services/crm-quote-requests.js';
+import { createCrmProjects, type CrmProjects } from './services/crm-projects.js';
 import { createCrmTasks, type CrmTasks } from './services/crm-tasks.js';
 import { createCarryIntoDocument } from './services/opportunity-document-carry.js';
 import { DocumentOpportunityService } from './services/document-opportunity-service.js';
@@ -805,15 +807,35 @@ export function registerModule(ctx: ModuleContext): void {
   // through — as `crmQuoteRequests` is for the quote desk.
   ctx.di.register({
     crmTasks: ctx.asFunction(() => createCrmTasks(lazyPort<TaskReadPort>(ctx, 'taskReadPort'))).singleton(),
+    // `projects` is operator-switchable too (the manifest's `degrades-without`
+    // edge on `projectReadPort`, `specs/165-task-management/` R-5): the same
+    // one-door rule, `isPresent()` first.
+    crmProjects: ctx.asFunction(() => createCrmProjects(lazyPort<ProjectReadPort>(ctx, 'projectReadPort'))).singleton(),
+    // An Opportunity referred to is this module's own: read through the same
+    // class the published port is, unregistered as a port, under the reader's scope.
+    crmOpportunityRecords: ctx
+      .asFunction(
+        ({ emFactory, crmWorkflowReadService }: CrmCradle) =>
+          new OpportunityReadPortService(emFactory, crmWorkflowReadService),
+      )
+      .singleton(),
     crmReferenceService: ctx
       .asFunction(
-        ({ crmOwnerReadChecks, crmQuoteRequests, crmTasks }: CrmCradle & ValueCradle & ReferencesCradle) =>
+        ({
+          crmOwnerReadChecks,
+          crmQuoteRequests,
+          crmTasks,
+          crmProjects,
+          crmOpportunityRecords,
+        }: CrmCradle & ValueCradle & ReferencesCradle) =>
           new ReferenceService({
             products: lazyPort<CatalogProductReadPort>(ctx, 'catalogProductReadPort'),
             orders: lazyPort<OrderReadPort>(ctx, 'orderReadPort'),
             adminUsers: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
             quoteRequests: crmQuoteRequests,
             tasks: crmTasks,
+            opportunities: crmOpportunityRecords,
+            projects: crmProjects,
             mayRead: crmOwnerReadChecks,
           }),
       )
@@ -1051,13 +1073,22 @@ export function registerModule(ctx: ModuleContext): void {
   ctx.di.register({
     crmDocumentLookupService: ctx
       .asFunction(
-        ({ emFactory, crmQuoteRequests, crmOwnerReadChecks, crmTasks }: CrmCradle & ValueCradle & ReferencesCradle) =>
+        ({
+          emFactory,
+          crmQuoteRequests,
+          crmOwnerReadChecks,
+          crmTasks,
+          crmProjects,
+          crmOpportunityRecords,
+        }: CrmCradle & ValueCradle & ReferencesCradle) =>
           new CrmDocumentLookupService({
             emFactory,
             quoteRequestPresence: crmQuoteRequests,
             quoteRequests: lazyPort<QuoteRequestReadPort>(ctx, 'quoteRequestReadPort'),
             orders: lazyPort<OrderListPort>(ctx, 'orderListPort'),
             tasks: crmTasks,
+            opportunities: crmOpportunityRecords,
+            projects: crmProjects,
             mayRead: crmOwnerReadChecks,
           }),
       )
@@ -1293,6 +1324,10 @@ interface ReferencesCradle {
   readonly crmReferenceService: ReferenceService;
   /** The one door to `tasks`' read port (`specs/163-projects-and-tasks/` FR-044). */
   readonly crmTasks: CrmTasks;
+  /** The one door to `projects`' read port (`specs/165-task-management/` R-5). */
+  readonly crmProjects: CrmProjects;
+  /** This module's own Opportunities as records — what a reference to one is named from. */
+  readonly crmOpportunityRecords: OpportunityReadPortService;
 }
 
 /** What the change-history section reads from the container. */

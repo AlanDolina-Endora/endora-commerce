@@ -40,12 +40,12 @@ import {
   useCustomFieldListFilterFields,
   withCustomFieldFilter,
   writeCustomFieldFilterParams,
+  TagChips,
   type ResponsiveColumn,
 } from '@endora-commerce/admin-kit/components';
 import { useAppLanguage, useTranslation } from '@endora-commerce/admin-kit/i18n';
 import { crmApi, MAX_PAGE_LIMIT, type OpportunityListParams, type OpportunitySort } from '../api.js';
 import { AssigneeName } from '../components/AssigneeName.js';
-import { TagChips } from '../components/TagPicker.js';
 import {
   NO_SHARED_FILTERS,
   OpportunityFilterFields,

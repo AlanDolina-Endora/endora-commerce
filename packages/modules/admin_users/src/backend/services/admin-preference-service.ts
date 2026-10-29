@@ -8,9 +8,12 @@ import type { PlatformLogger } from '@endora-commerce/platform/kernel';
 import {
   assemblePreferences,
   assertListPageSizesBound,
+  assertListViewModesBound,
   importListPageSizes,
   mergeListPageSizes,
+  mergeListViewModes,
   readStoredListPageSizes,
+  readStoredListViewModes,
   type StoredPreferenceRow,
 } from './admin-preference-document.js';
 
@@ -26,8 +29,9 @@ const REPLACED_KEYS: readonly ReplacedKey[] = [
  * (`specs/164-admin-user-preferences/contracts/admin-preferences-api.md` §2.2, §3).
  *
  * One row per (admin, preference) in `admin_user_preferences`. The three sidebar
- * keys replace their whole value (last write wins); `listPageSizes` merges per
- * list under a row lock, so two devices choosing sizes on two lists do not erase
+ * keys replace their whole value (last write wins); `listPageSizes` and
+ * `listViewModes` (`specs/165-task-management/` R-14) merge per list under a
+ * row lock, so two devices choosing sizes on two lists do not erase
  * each other; the carry-over inserts only the lists the server does not hold.
  *
  * Every statement of one request runs in one transaction on that transaction's
@@ -71,6 +75,19 @@ export class AdminPreferenceService {
           mergeListPageSizes(stored, changes),
         );
       }
+      if (patch.listViewModes !== undefined) {
+        const changes = patch.listViewModes;
+        await this.writeListMap(
+          tx,
+          adminUserId,
+          'listViewModes',
+          (stored) => {
+            const merged = mergeListViewModes(readStoredListViewModes(stored), changes);
+            assertListViewModesBound(merged);
+            return merged;
+          },
+        );
+      }
       return this.readWith(tx, adminUserId);
     });
   }
@@ -102,23 +119,41 @@ export class AdminPreferenceService {
     adminUserId: string,
     merge: (stored: Record<string, number>) => Record<string, number>,
   ): Promise<void> {
+    await this.writeListMap(tx, adminUserId, 'listPageSizes', (stored) => {
+      const merged = merge(readStoredListPageSizes(stored));
+      assertListPageSizesBound(merged);
+      return merged;
+    });
+  }
+
+  /**
+   * One per-list map preference (`listPageSizes`, `listViewModes`): lock the
+   * admin's row — creating it empty if absent, so there is always a row to
+   * lock — then merge (which checks the bound on the result) and write. Two
+   * devices choosing for two lists do not erase each other.
+   */
+  private async writeListMap(
+    tx: EntityManager,
+    adminUserId: string,
+    key: 'listPageSizes' | 'listViewModes',
+    merge: (stored: unknown) => Record<string, unknown>,
+  ): Promise<void> {
     await tx.execute(
       `insert into "admin_user_preferences" ("admin_user_id", "preference_key", "value", "updated_at") ` +
-        `values (?, 'listPageSizes', '{}'::jsonb, now()) ` +
+        `values (?, ?, '{}'::jsonb, now()) ` +
         `on conflict ("admin_user_id", "preference_key") do nothing`,
-      [adminUserId],
+      [adminUserId, key],
     );
     const rows = await tx.execute<Array<{ value: unknown }>>(
       `select "value" from "admin_user_preferences" ` +
-        `where "admin_user_id" = ? and "preference_key" = 'listPageSizes' for update`,
-      [adminUserId],
+        `where "admin_user_id" = ? and "preference_key" = ? for update`,
+      [adminUserId, key],
     );
-    const merged = merge(readStoredListPageSizes(rows[0]?.value));
-    assertListPageSizesBound(merged);
+    const merged = merge(rows[0]?.value);
     await tx.execute(
       `update "admin_user_preferences" set "value" = ?::jsonb, "updated_at" = now() ` +
-        `where "admin_user_id" = ? and "preference_key" = 'listPageSizes'`,
-      [JSON.stringify(merged), adminUserId],
+        `where "admin_user_id" = ? and "preference_key" = ?`,
+      [JSON.stringify(merged), adminUserId, key],
     );
   }
 

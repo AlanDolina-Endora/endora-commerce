@@ -19,6 +19,10 @@ const DOCUMENT_GROUP_PERMISSIONS: ReadonlyArray<{ code: string; needsOrganizatio
   { code: 'orders:read', needsOrganization: true },
   { code: 'rfqs:handle', needsOrganization: true },
   { code: 'tasks:read', needsOrganization: false },
+  // `specs/165-task-management/` R-5: the Opportunities group. This module's
+  // own Projects group is answered to every writer but does not open `@@` on
+  // its own — issue #498.
+  { code: 'crm:read', needsOrganization: false },
 ];
 
 /** A Product's name in the language on screen, then any name it has, then its SKU. */
