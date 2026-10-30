@@ -368,9 +368,10 @@ kodem `400 CMS_LANGUAGE_NOT_IN_CHANNEL_SCOPE`.
 W storefroncie:
 
 - **Każdy język ma własny adres ze swoim slugiem** — a dla strony
-  zagnieżdżonej także ze slugami przodków w tym języku. Adres w języku innym niż
-  domyślny język kanału ma `?lang=<język>`, tak jak adres produktu: `/o-nas` w
-  języku domyślnym, `/about-us?lang=en-US` po angielsku.
+  zagnieżdżonej także ze slugami przodków w tym języku, pod prefiksem tego języka,
+  tak jak adres produktu: `/pl/o-nas` po polsku, `/en/about-us` po angielsku
+  (`/o-nas`, gdy kanał nie dodaje prefiksu do języka domyślnego — zob. *Kanały
+  sprzedaży*).
 - **Stronę można znaleźć po slugu w dowolnym z jej języków** oraz po jej
   własnym slugu, a wyświetla się w języku odwiedzającego. Gdy żądany adres nie
   jest adresem strony w tym języku — odwiedzający zmienił język na stronie —
@@ -1452,8 +1453,8 @@ albo nieudane pobranie nic nie wyświetla — hooki nie mogą zepsuć wyświetla
 | GET    | `/hooks/by-code?code=…&language=…`| Uporządkowaną listę aktywnych bloków dla wskazanego hooka.     |
 
 Odczytana strona zawiera też `path` (swoją ścieżkę publiczną w kanale i
-wyświetlanym języku), `url` (tę ścieżkę tak, jak linkuje ją storefront, z
-`?lang=` poza językiem domyślnym), `alternates` (`{language, url}` dla każdego
+wyświetlanym języku), `url` (tę ścieżkę tak, jak linkuje ją storefront, pod
+prefiksem języka), `alternates` (`{language, url}` dla każdego
 języka, w którym jest wyświetlana), `name` w wyświetlanym języku,
 `breadcrumbs` (`visible`, `scheme`, `overlay: true` tylko wtedy, gdy ścieżka
 leży na pierwszej sekcji, i `trail` — listę przodków, każdy jako

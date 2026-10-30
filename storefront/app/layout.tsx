@@ -16,6 +16,8 @@ import { CheckoutHeader } from '../components/checkout/CheckoutHeader';
 import { HeaderSwitch } from '../components/HeaderSwitch';
 import { getActiveMegamenu } from '../lib/api/megamenu';
 import { getServerContext } from '../lib/server-context';
+import { LocalePathProvider } from '../lib/i18n/localized-link';
+import { localizePath } from '../lib/i18n/locale-path';
 import { blockPresenceOf } from '../lib/page-builder/presence';
 import { BlockRenderScope } from '../components/BlockRenderScope';
 import { siteUrl } from '../lib/seo/site-url';
@@ -194,7 +196,7 @@ export default async function RootLayout({
     );
   }
 
-  const { config, locale, currency, ctx, theme, modules, brandTokens } = await getServerContext();
+  const { config, locale, currency, ctx, theme, modules, brandTokens, urlState } = await getServerContext();
   const t = tForLocale(locale);
   // Feature 036 US5 — checkout uses a minimal, logo-only header. The full vs
   // minimal switch is decided per-route by the <HeaderSwitch> client component
@@ -243,8 +245,10 @@ export default async function RootLayout({
   ]);
   const me = viewer.me;
   if (viewer.refusal === 'sign_in_required') {
+    // Feature 167 — `x-pathname` is the logical path; the visitor comes back to it
+    // under the current prefix, through the prefixed session-expired page.
     const pathname = (await headers()).get('x-pathname') ?? '/';
-    redirect(`/session-expired?next=${encodeURIComponent(pathname)}`);
+    redirect(localizePath(`/session-expired?next=${encodeURIComponent(localizePath(pathname, urlState))}`, urlState));
   }
   // Asked only on a refusal: it is the viewer's own answer and is never cached.
   const access = viewer.refusal === 'not_permitted' ? await getSalesChannelAccess(ctx) : null;
@@ -260,8 +264,12 @@ export default async function RootLayout({
     // stops a caller from forgetting it (feature 102).
     // `brandTokens` (feature 163): the channel's brand as `<style id="cmsb">` in
     // the head, server-rendered so the first paint is already on brand.
+    // `locale` is the path language (feature 167, FR-022): `<html lang>` follows the URL.
     <StorefrontDocument lang={locale} theme={theme} brandTokens={brandTokens}>
       {robotsDefault !== null ? <meta name="robots" content={robotsDefault} /> : null}
+      {/* Feature 167 — every link below gets the current language's prefix through
+          `LocalizedLink` / `useLocalizedPath`, which read this. */}
+      <LocalePathProvider value={urlState}>
       {/* Feature 141 — every Page Builder tree below renders the installed
           modules' blocks under one presence answer: the modules the backend
           reports as not present, resolved once here. */}
@@ -372,6 +380,7 @@ export default async function RootLayout({
         message={<CookieConsentMessage ctx={ctx} />}
       />
       </BlockRenderScope>
+    </LocalePathProvider>
     </StorefrontDocument>
   );
 }

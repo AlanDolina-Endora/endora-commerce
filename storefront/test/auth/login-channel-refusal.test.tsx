@@ -28,6 +28,8 @@ vi.mock('../../lib/server-context', () => ({
     anonymousAccess: context.anonymousAccess,
     ctx: { salesChannelCode: 'trade', locale: context.locale },
     modules: { isPresent: () => false },
+    // Feature 167 — no URL languages known: paths stay as written.
+    urlState: { languages: [], aliases: [], current: context.locale },
   })),
 }));
 vi.mock('../../components/Hook', () => ({ Hook: () => null }));

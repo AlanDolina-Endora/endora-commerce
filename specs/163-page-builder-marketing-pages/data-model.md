@@ -642,7 +642,9 @@ name: string;                                   // the served language's
   inherit. A request naming an undeclared language is refused with
   `400 CMS_LANGUAGE_NOT_IN_CHANNEL_SCOPE`; a stored one is kept, unused.
 - **URL** (`cmsPageUrl`): `/<path>`, plus `?lang=<L>` when L is not the channel default — the rule
-  `productPath` states for a product. Built by the backend only.
+  `productPath` states for a product. Built by the backend only. **Superseded by
+  `specs/167-storefront-locale-path/`**: the language is the URL's path prefix
+  (`/<prefix>/<path>`), `cmsPageUrl` takes the channel's URL facts, and `?lang=` is never emitted.
 - **Trees.** A channel is addressed through its channel-slug tree (§5.1) and one tree per
   language its pages declare, each from every page's effective slug in that language. Paths are
   unique per tree: a write producing a duplicate is refused with `409 CMS_SLUG_CONFLICT`

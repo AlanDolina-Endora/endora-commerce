@@ -26,7 +26,7 @@ import {
   CORNER_RADIUS_FIELD,
   DEFAULT_BOX_PROPS,
 } from '../fields/shared-fields.js';
-import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
+import { useCmsRenderAssets, useCmsRenderMediaBaseUrl, useCmsRenderLocalizePath } from './render-context.js';
 import { resolveImageUrl, type CmsAssetMap } from '../utils/resolve-image-url.js';
 import { ratioVars, sanitizeRatio, uniformRatio } from '../utils/aspect-ratio.js';
 import { pictureMobileMedia } from './Picture.js';
@@ -151,6 +151,8 @@ function ImageContent({
   assets: CmsAssetMap;
   mediaBaseUrl?: string;
 }): ReactNode {
+  // Feature 167 — an internal link takes the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
   const desktopSrc = resolveImageUrl(props, tier, assets, mediaBaseUrl);
   const mobileSrc = resolveImageUrl(
     {
@@ -235,6 +237,7 @@ function ImageContent({
   const link = blockLinkTarget(blockLink(props.link, props.href, props.linkTarget), {
     assets,
     ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}),
+    localizePath,
   });
   if (link) {
     media = (

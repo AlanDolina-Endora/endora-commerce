@@ -7,6 +7,7 @@ import {
   getMyComparison,
   removeProductFromCompare,
 } from '../lib/api/comparisons';
+import { LocalizedAnchor } from '../lib/i18n/localized-link';
 
 /**
  * `<CompareToggle>` — feature 007 / T030.
@@ -206,13 +207,13 @@ export function CompareCounterLink(props: {
 
   const label = size > 0 ? `${props.ariaLabel} · ${size}` : props.ariaLabel;
   return (
-    <a href={props.href} className="icon-btn" aria-label={label}>
+    <LocalizedAnchor href={props.href} className="icon-btn" aria-label={label}>
       {props.icon}
       {size > 0 ? (
         <span className="icon-btn__count" aria-hidden="true">
           {size > 99 ? '99+' : size}
         </span>
       ) : null}
-    </a>
+    </LocalizedAnchor>
   );
 }

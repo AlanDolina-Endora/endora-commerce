@@ -1,4 +1,5 @@
 import type {
+  ChannelUrlFacts,
   FeedFieldSourceKind,
   FeedFieldTransform,
   FeedPricePresentation,
@@ -68,6 +69,11 @@ export interface FeedItemSource {
   readonly variantId: string | null;
   /** The variant's SKU when this is a variant item, else the product's. */
   readonly sku: string;
+  /**
+   * The product's URL key in the feed's language — its effective key at (channel,
+   * language) from `catalogProductUrlKeyReadPort`, else the global slug (feature 167,
+   * FR-033).
+   */
   readonly slug: string;
   /** `products.type` — simple / configurable / grouped / bundle / virtual (FR-003). */
   readonly productType: string;
@@ -117,6 +123,11 @@ export interface FeedResolutionContext {
   readonly taxCountry: string | null;
   /** Storefront origin for the feed's channel; empty when none is configured. */
   readonly storefrontOrigin: string;
+  /**
+   * The channel's URL-language facts (feature 167): the `link` is the prefixed
+   * product path in the feed's language, composed by `productPath`.
+   */
+  readonly channelUrl: ChannelUrlFacts;
   readonly salesChannelId: string;
   readonly priceListId: string | null;
 }

@@ -6,19 +6,16 @@ import type { CmsResolvedPage } from '@endora-commerce/contracts';
  * A CMS page's address per language on the storefront
  * (`specs/163-page-builder-marketing-pages/` R24, issue #521).
  *
- * - `?lang=` is the language a link asked for, as on a product page: it
- *   overrides the reader's language for this page alone.
- * - The backend answers the page at its address in the served language
- *   (`path`) and the URL built for it (`url`); a request under another address
- *   — the slug of the language the reader switched away from — answers a
+ * - Feature 167: the language is the path's (`/en/about-us`); `?lang=` is not read.
+ * - The backend answers the page at its address in the served language (`path`) and
+ *   the URL built for it (`url`, under the language prefix); a request under another
+ *   address — the slug of the language the reader switched away from — answers a
  *   permanent redirect to that URL.
- * - The canonical is `url`, and the languages are `hreflang` alternates.
+ * - The canonical is `url`; every language is an `hreflang` alternate, plus
+ *   `x-default` — the default language's URL without its prefix.
  */
 
-const state: { page: CmsResolvedPage | null; langOverrides: Array<string | null | undefined> } = {
-  page: null,
-  langOverrides: [],
-};
+const state: { page: CmsResolvedPage | null; calls: unknown[] } = { page: null, calls: [] };
 const redirects: string[] = [];
 
 vi.mock('next/navigation', () => ({
@@ -31,9 +28,20 @@ vi.mock('next/navigation', () => ({
   },
 }));
 vi.mock('../../lib/server-context', () => ({
-  getServerContext: async (input?: { langOverride?: string | null }) => {
-    state.langOverrides.push(input?.langOverride);
-    return { ctx: { locale: 'pl-PL', salesChannelCode: 'web' }, locale: 'pl-PL' };
+  getServerContext: async (...args: unknown[]) => {
+    state.calls.push(args);
+    return {
+      ctx: { locale: 'pl-PL', salesChannelCode: 'web' },
+      locale: 'pl-PL',
+      urlState: {
+        languages: [
+          { languageCode: 'pl-PL', prefix: 'pl', prefixed: true, isDefault: true },
+          { languageCode: 'en-US', prefix: 'en', prefixed: true, isDefault: false },
+        ],
+        aliases: [],
+        current: 'pl-PL',
+      },
+    };
   },
 }));
 vi.mock('../../lib/api/cms', () => ({
@@ -58,10 +66,10 @@ function page(overrides: Partial<CmsResolvedPage> = {}): CmsResolvedPage {
     id: '00000000-0000-4000-8000-000000000001',
     slug: 'about-us',
     path: 'o-nas',
-    url: '/o-nas?lang=pl-PL',
+    url: '/pl/o-nas',
     alternates: [
-      { language: 'en-US', url: '/about-us' },
-      { language: 'pl-PL', url: '/o-nas?lang=pl-PL' },
+      { language: 'pl-PL', url: '/pl/o-nas' },
+      { language: 'en-US', url: '/en/about-us' },
     ],
     name: 'O nas',
     language: 'pl-PL',
@@ -92,7 +100,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   state.page = null;
-  state.langOverrides.length = 0;
+  state.calls.length = 0;
   redirects.length = 0;
 });
 
@@ -102,26 +110,20 @@ describe('a CMS page in several languages', () => {
     const html = await render(['o-nas'], 'pl-PL');
     expect(redirects).toEqual([]);
     expect(html).toContain('O nas');
-    // WCAG 3.1.2: `<html lang>` is the cookie's; the page marks the language it is written in.
+    // WCAG 3.1.2: the page marks the language it is written in.
     expect(html).toContain('lang="pl-PL"');
   });
 
-  it('passes ?lang= on as the language of this page alone', async () => {
+  it('reads no ?lang= override: the path decides the language (feature 167)', async () => {
     state.page = page();
-    await render(['o-nas'], 'pl-PL');
-    expect(state.langOverrides).toEqual(['pl-PL']);
-  });
-
-  it('ignores a ?lang= that is not a language code', async () => {
-    state.page = page();
-    await render(['o-nas'], '../../etc');
-    expect(state.langOverrides).toEqual([null]);
+    await render(['o-nas'], 'en-US');
+    expect(state.calls.every((args) => (args as unknown[]).length === 0)).toBe(true);
   });
 
   it('redirects the slug of another language permanently to the URL of the served one', async () => {
     state.page = page();
     await expect(render(['about-us'])).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirects).toEqual(['/o-nas?lang=pl-PL']);
+    expect(redirects).toEqual(['/pl/o-nas']);
   });
 
   it('declares the served language URL canonical and every language as an hreflang alternate', async () => {
@@ -131,16 +133,19 @@ describe('a CMS page in several languages', () => {
       searchParams: Promise.resolve({ lang: 'pl-PL' }),
     });
     expect(metadata.alternates).toEqual({
-      canonical: '/o-nas?lang=pl-PL',
-      languages: { 'en-US': '/about-us', 'pl-PL': '/o-nas?lang=pl-PL' },
+      canonical: '/pl/o-nas',
+      languages: { 'pl-PL': '/pl/o-nas', 'en-US': '/en/about-us', 'x-default': '/o-nas' },
     });
-    expect(metadata.openGraph).toMatchObject({ url: '/o-nas?lang=pl-PL' });
+    expect(metadata.openGraph).toMatchObject({ url: '/pl/o-nas' });
     expect(metadata.title).toBe('O nas');
   });
 
-  it('declares no alternates for a page in one language', async () => {
-    state.page = page({ alternates: [{ language: 'pl-PL', url: '/o-nas?lang=pl-PL' }], languages: ['pl-PL'] });
+  it('lists only its own language and x-default for a page in one language (FR-030)', async () => {
+    state.page = page({ alternates: [{ language: 'pl-PL', url: '/pl/o-nas' }], languages: ['pl-PL'] });
     const metadata = await route.generateMetadata({ params: Promise.resolve({ slug: ['o-nas'] }) });
-    expect(metadata.alternates).toEqual({ canonical: '/o-nas?lang=pl-PL' });
+    expect(metadata.alternates).toEqual({
+      canonical: '/pl/o-nas',
+      languages: { 'pl-PL': '/pl/o-nas', 'x-default': '/o-nas' },
+    });
   });
 });

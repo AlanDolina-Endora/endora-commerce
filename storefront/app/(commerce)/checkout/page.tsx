@@ -1,6 +1,4 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { getSessionCookie, getAnonCartCookie, setAnonCartCookie } from '../../../lib/session';
 import {
   CART_UNAVAILABLE,
@@ -44,6 +42,8 @@ import {
 } from '../../../lib/checkout/shipping-adapter-data';
 import type { Metadata } from 'next';
 import { lineAmountHalfUp } from '@endora-commerce/contracts';
+import { localeRedirect } from '../../../lib/i18n/navigation';
+import { LocalizedLink } from '../../../lib/i18n/localized-link';
 
 /**
  * Not indexed (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010): an
@@ -69,7 +69,7 @@ export default async function CheckoutPage({
   searchParams: Promise<{ error?: string; couponError?: string }>;
 }): Promise<ReactNode> {
   const session = await getSessionCookie();
-  if (!session) redirect('/login?next=/checkout');
+  if (!session) return await localeRedirect('/login?next=/checkout');
 
   const params = await searchParams;
   const jar: CartCookieJar = await readJar();
@@ -110,7 +110,7 @@ export default async function CheckoutPage({
     // that as "not logged in" and bounce to login with a return path, rather
     // than crashing the page with an unhandled UNAUTHORIZED error.
     if (err instanceof StorefrontApiError && err.status === 401) {
-      redirect('/login?next=/checkout');
+      return await localeRedirect('/login?next=/checkout');
     }
     throw err;
   }
@@ -127,7 +127,7 @@ export default async function CheckoutPage({
   // `carts` is not present (issue #132). There is nothing to check out, and the
   // cart page owns the copy that says so — sending the buyer there is one
   // absence explained in one place rather than two.
-  if (cartResult === CART_UNAVAILABLE) redirect('/cart');
+  if (cartResult === CART_UNAVAILABLE) return await localeRedirect('/cart');
   if (cartResult.newAnonCookie) await setAnonCartCookie(cartResult.newAnonCookie);
   const cart = cartResult.cart;
   const canTransact = me?.organization?.canTransact ?? true;
@@ -173,7 +173,7 @@ export default async function CheckoutPage({
         <h1>Checkout</h1>
         <p>Your cart is empty — add a product before checking out.</p>
         <p>
-          <Link href="/catalog">Browse the catalog</Link>
+          <LocalizedLink href="/catalog">Browse the catalog</LocalizedLink>
         </p>
       </div>
     );
@@ -333,12 +333,12 @@ export default async function CheckoutPage({
         </table>
 
         <div className="b2b-auth__actions items-center justify-between">
-          <Link
+          <LocalizedLink
             href="/cart"
             className="inline-flex items-center gap-2 rounded-sm border border-line bg-surface px-[16px] py-[10px] font-medium text-fg-soft transition-[background-color,border-color,color] duration-150 hover:border-line-strong hover:bg-surface-alt hover:text-[color:var(--ink-900)]"
           >
             ← Back to cart
-          </Link>
+          </LocalizedLink>
           <PlaceOrderButton
             blocked={placeOrderBlockReason}
             label="Place order"
@@ -478,7 +478,7 @@ async function buildPlaceOrderPayload(
 async function submitAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login?next=/checkout');
+  if (!session) return await localeRedirect('/login?next=/checkout');
 
   let order;
   try {
@@ -496,13 +496,13 @@ async function submitAction(formData: FormData): Promise<void> {
     // the buyer goes back to already holds the current prices.
     const message =
       err instanceof StorefrontApiError ? err.detail : 'Could not place the order.';
-    redirect(`/checkout/failure?reason=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/checkout/failure?reason=${encodeURIComponent(message)}`);
   }
   // Feature 036 — a gateway method returns a redirect next-action; send the
   // buyer to the gateway. Otherwise land on the Success Page, which shows the
   // customer-facing business Order ID.
   if (order.nextAction?.kind === 'redirect_to_gateway') {
-    redirect(order.nextAction.url);
+    return await localeRedirect(order.nextAction.url);
   }
   // Four more redirects used to stand here, one per gateway whose adapter
   // settles on a step of this platform's own rather than on a hosted page —
@@ -511,7 +511,7 @@ async function submitAction(formData: FormData): Promise<void> {
   // free storefront knows one gateway handover: the `redirect_to_gateway` next
   // action above, which is `orders`' own contract and names no vendor. A shop
   // that copies an inline gateway's fragment in re-adds its hop here.
-  redirect(`/checkout/success?id=${order.id}`);
+  return await localeRedirect(`/checkout/success?id=${order.id}`);
 }
 
 /**
@@ -523,22 +523,22 @@ async function submitAction(formData: FormData): Promise<void> {
 async function applyCouponAction(formData: FormData): Promise<void> {
   'use server';
   const jar = await readJar();
-  if (!jar.session && !jar.anon) redirect('/login?next=/checkout');
+  if (!jar.session && !jar.anon) return await localeRedirect('/login?next=/checkout');
   const code = ((formData.get('couponCode') as string | null) ?? '').trim();
-  if (!code) redirect('/checkout');
+  if (!code) return await localeRedirect('/checkout');
   const result = await applyCartCoupon(jar, code);
   if (result.outcome === 'rejected') {
-    redirect(`/checkout?couponError=${encodeURIComponent(couponRejectionMessage(result.reason))}`);
+    return await localeRedirect(`/checkout?couponError=${encodeURIComponent(couponRejectionMessage(result.reason))}`);
   }
-  redirect('/checkout');
+  return await localeRedirect('/checkout');
 }
 
 async function clearCouponAction(): Promise<void> {
   'use server';
   const jar = await readJar();
-  if (!jar.session && !jar.anon) redirect('/login?next=/checkout');
+  if (!jar.session && !jar.anon) return await localeRedirect('/login?next=/checkout');
   await clearCartCoupon(jar);
-  redirect('/checkout');
+  return await localeRedirect('/checkout');
 }
 
 /** Map the typed coupon-rejection reasons to a localized buyer message. */

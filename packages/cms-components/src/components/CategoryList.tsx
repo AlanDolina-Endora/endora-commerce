@@ -4,6 +4,7 @@ import { type ComponentConfig, type PuckComponent } from '@puckeditor/core';
 import { createToggleField, withHideOn } from '@endora-commerce/page-builder-core';
 import type { CategoryListProps } from '../schema/component-types.js';
 import { BoxStyled } from './box-styles.js';
+import { useCmsRenderLocalizePath } from './render-context.js';
 import {
   BOX_BORDER_FIELD,
   BOX_MARGIN_FIELD,
@@ -22,6 +23,8 @@ import {
 } from '../fields/catalog-fallback-fields.js';
 
 const CategoryListRender: PuckComponent<CategoryListProps> = (props) => {
+  // Feature 167 — internal links take the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
   const {
     selectionMode = 'all',
     categorySlugs = [],
@@ -55,7 +58,7 @@ const CategoryListRender: PuckComponent<CategoryListProps> = (props) => {
         <ul className={listClass}>
           {items.map((cat) => (
             <li key={cat.slug} style={{ paddingLeft: layout === 'list' ? `${cat.depth * 12}px` : undefined }}>
-              <a href={`/c/${cat.slug}`} className="cmsc-pb-category-list__link">
+              <a href={localizePath(`/c/${cat.slug}`)} className="cmsc-pb-category-list__link">
                 {cat.name}
                 {showCounts ? <span className="cmsc-pb-category-list__count">({cat.productCount})</span> : null}
               </a>

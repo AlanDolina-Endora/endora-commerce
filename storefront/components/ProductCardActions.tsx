@@ -14,6 +14,7 @@ import { addProductToCartAction } from '../lib/actions/cart';
 import { channelHeaders } from '../lib/channel/channel-header';
 import { cardAddToCartPayload, quoteAddQuantity } from '../lib/orderMinimum';
 import { productCardActionLabels, type CardActionState } from '../lib/buyActionLabels';
+import { useLocalizedPath } from '../lib/i18n/localized-link';
 
 /**
  * Product-card action buttons (add to cart / add to shopping list / add to
@@ -86,6 +87,7 @@ export function ProductCardActions(props: {
   const [cartState, setCartState] = useState<ActionState>('idle');
   const [listState, setListState] = useState<ActionState>('idle');
   /** Whether this product is currently in the customer's default list. */
+  const localize = useLocalizedPath();
   const [inList, setInList] = useState(false);
   const [quoteState, setQuoteState] = useState<ActionState>('idle');
 
@@ -153,7 +155,7 @@ export function ProductCardActions(props: {
           itemId: existingItemId,
         });
         if (!res.ok && res.reason === 'auth') {
-          window.location.href = '/login?next=/shopping-lists';
+          window.location.href = localize(`/login?next=${encodeURIComponent(localize('/shopping-lists'))}`);
           return;
         }
         if (!res.ok) throw new Error('list');
@@ -162,7 +164,7 @@ export function ProductCardActions(props: {
       } else {
         const res = await addToDefaultListAction({ productId: props.productId, quantity: 1 });
         if (!res.ok && res.reason === 'auth') {
-          window.location.href = '/login?next=/shopping-lists';
+          window.location.href = localize(`/login?next=${encodeURIComponent(localize('/shopping-lists'))}`);
           return;
         }
         if (!res.ok) throw new Error('list');

@@ -1,5 +1,3 @@
-import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { loginCustomer } from '../../../lib/api/auth';
 import { beginMfaSetupTicket } from '../../../lib/api/mfa';
@@ -19,6 +17,8 @@ import { backendBaseUrl } from '../../../lib/env.mjs';
 import { tForLocale } from '../../../lib/i18n/messages';
 import { signInErrorMessage, signInErrorParam } from '../../../lib/auth/sign-in-errors';
 import { SIGN_IN_REQUIRED_REASON } from '../../../lib/channel/closed-store';
+import { localeRedirect, localizedPath } from '../../../lib/i18n/navigation';
+import { LocalizedLink } from '../../../lib/i18n/localized-link';
 
 /**
  * Not indexed (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010): an
@@ -106,17 +106,19 @@ export default async function LoginPage({
         </form>
         <SocialLoginButtons
           backendBaseUrl={backendBaseUrl()}
-          next={nextPath}
+          // Feature 167 — the return address under this page's prefix, from which the
+          // backend learns the language to come back in.
+          next={await localizedPath(nextPath)}
           locale={locale}
           modulePresent={mfaPresent}
           availableProviders={federatedProviders}
           salesChannelCode={ctx.salesChannelCode}
         />
         <p className="b2b-auth__hint">
-          Forgot your password? <Link href="/password-reset/request">Reset it</Link>.
+          Forgot your password? <LocalizedLink href="/password-reset/request">Reset it</LocalizedLink>.
         </p>
         <p className="b2b-auth__hint">
-          New here? <Link href="/register">Create an account</Link>.
+          New here? <LocalizedLink href="/register">Create an account</LocalizedLink>.
         </p>
       </div>
       <Hook code="login.bottom" />
@@ -138,13 +140,13 @@ async function loginAction(formData: FormData): Promise<void> {
     result = await loginCustomer({ email, password });
   } catch (err) {
     const message = signInErrorParam(err, 'Sign-in failed. Please try again.');
-    redirect(`/login?error=${encodeURIComponent(message)}&next=${encodeURIComponent(next)}`);
+    return await localeRedirect(`/login?error=${encodeURIComponent(message)}&next=${encodeURIComponent(next)}`);
   }
   // Feature 042 — two-step login. An account with active 2FA gets routed to the
   // second-step code screen; the opaque challenge id rides in an httpOnly cookie.
   if (result.status === 'mfaRequired') {
     await setMfaChallengeCookie(result.challengeId);
-    redirect(`/login/mfa?next=${encodeURIComponent(next)}`);
+    return await localeRedirect(`/login/mfa?next=${encodeURIComponent(next)}`);
   }
   if (result.status === 'mfaSetupRequired') {
     // Enforced-but-unenrolled — begin enrolment with the ticket and route to the
@@ -153,7 +155,7 @@ async function loginAction(formData: FormData): Promise<void> {
     try {
       begun = await beginMfaSetupTicket(result.setupTicket);
     } catch {
-      redirect(
+      return await localeRedirect(
         `/login?error=${encodeURIComponent('Could not start two-factor setup. Please try again.')}&next=${encodeURIComponent(next)}`,
       );
     }
@@ -162,10 +164,10 @@ async function loginAction(formData: FormData): Promise<void> {
       secret: begun.secret,
       otpauthUri: begun.otpauthUri,
     });
-    redirect(`/login/setup?next=${encodeURIComponent(next)}`);
+    return await localeRedirect(`/login/setup?next=${encodeURIComponent(next)}`);
   }
   if (!result.sessionCookieValue) {
-    redirect(
+    return await localeRedirect(
       `/login?error=${encodeURIComponent('Sign-in failed. Please try again.')}&next=${encodeURIComponent(next)}`,
     );
   }
@@ -185,7 +187,7 @@ async function loginAction(formData: FormData): Promise<void> {
     await clearAnonCartCookie();
     await setCartMergeFlash(result.cartMerge.outcome);
   }
-  redirect(next);
+  return await localeRedirect(next);
 }
 
 /** Only allow same-origin paths in `?next=` to defend against open-redirect. */

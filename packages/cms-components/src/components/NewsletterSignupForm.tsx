@@ -14,7 +14,7 @@ import { levelField } from '../fields/section-block-fields.js';
 import { useSectionAnchor } from './Section.js';
 import { InlineRich } from './InlineRich.js';
 import { useBlockDomId } from './block-dom-id.js';
-import { useCmsRenderLocation, type CmsRenderLocation } from './render-context.js';
+import { useCmsRenderLocalizePath, useCmsRenderLocation, type CmsRenderLocation } from './render-context.js';
 import { BlockHeading, plainTextToDoc, RichBody } from './section-parts.js';
 import { createIconPickerField } from './IconPickerField.js';
 import { resolveCmsIcon } from './icon-catalog.js';
@@ -117,7 +117,12 @@ function topicColumns(value: unknown): number | null {
 
 function SignupBody({ props, editing }: { props: NewsletterSignupFormProps; editing: boolean }): ReactNode {
   const location = useCmsRenderLocation();
-  const [returnTo, setReturnTo] = useState(() => (location ? returnPathOf(location.path, location.query) : '/'));
+  // Feature 167 — the form posts to, and comes back to, the page's own language.
+  const localizePath = useCmsRenderLocalizePath();
+  const subscribePath = localizePath(NEWSLETTER_SUBSCRIBE_PATH);
+  const [returnTo, setReturnTo] = useState(() =>
+    localizePath(location ? returnPathOf(location.path, location.query) : '/'),
+  );
   const [outcome, setOutcome] = useState<Outcome>(() => outcomeFromQuery(location?.query));
   const [enhanced, setEnhanced] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -186,7 +191,7 @@ function SignupBody({ props, editing }: { props: NewsletterSignupFormProps; edit
     }
     setBusy(true);
     try {
-      const res = await fetch(NEWSLETTER_SUBSCRIBE_PATH, {
+      const res = await fetch(subscribePath, {
         method: 'POST',
         headers: { Accept: 'application/json' },
         body,
@@ -242,7 +247,7 @@ function SignupBody({ props, editing }: { props: NewsletterSignupFormProps; edit
       <form
         className="cmsc-pb-signup__form"
         method="post"
-        action={NEWSLETTER_SUBSCRIBE_PATH}
+        action={subscribePath}
         noValidate={enhanced}
         onSubmit={(event) => void onSubmit(event)}
       >

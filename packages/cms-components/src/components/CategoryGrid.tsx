@@ -13,6 +13,7 @@ import { usePreviewBreakpointTier } from '@endora-commerce/page-builder-core/cli
 import type { CategoryGridProps } from '../schema/component-types.js';
 import { useViewportBreakpointTier } from '../hooks/use-viewport-breakpoint-tier.js';
 import { BoxStyled } from './box-styles.js';
+import { useCmsRenderLocalizePath } from './render-context.js';
 import {
   BOX_BORDER_FIELD,
   BOX_MARGIN_FIELD,
@@ -41,6 +42,8 @@ function CategoryGridBody({
   tier: BreakpointTier;
   editing: boolean;
 }): React.ReactElement {
+  // Feature 167 — internal links take the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
   const {
     selectionMode = 'all',
     categorySlugs = [],
@@ -94,7 +97,7 @@ function CategoryGridBody({
         >
           {items.map((cat) => (
             <li key={cat.slug}>
-              <a href={`/c/${cat.slug}`} className="cmsc-pb-category-grid__card">
+              <a href={localizePath(`/c/${cat.slug}`)} className="cmsc-pb-category-grid__card">
                 {showImage ? <span className="cmsc-pb-category-grid__image" aria-hidden /> : null}
                 <span className="cmsc-pb-category-grid__name">{cat.name}</span>
                 {showCounts ? <span className="cmsc-pb-category-grid__count">{cat.productCount}</span> : null}

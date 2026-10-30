@@ -2,7 +2,6 @@ import { randomUUID } from 'crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   ERROR_CODES,
-  productPath,
   productUrlKeysResponseSchema,
   type ProductUrlKeysResponse,
 } from '@endora-commerce/contracts';
@@ -229,10 +228,21 @@ describe('Product URL keys — admin routes (spec 163, T101)', () => {
         languageCode: 'pl-PL',
         key: k('czytnik'),
         source: 'language',
-        url: productPath({ key: k('czytnik'), languageCode: 'pl-PL', channelDefaultLanguage: 'pl-PL' }),
+        // Feature 167 — the channel prefixes its default language (the column default), so
+        // even the default language's URL carries `/pl`; never `?lang=`.
+        url: `/pl/p/${k('czytnik')}`,
       });
-      expect(at(chB, 'pl-PL')).toMatchObject({ key: k('czytnik-b'), source: 'channel_language', url: `/p/${k('czytnik-b')}?lang=pl-PL` });
-      expect(at(chB, 'en-GB')).toMatchObject({ key: k('reader'), source: 'global', url: `/p/${k('reader')}` });
+      expect(at(chB, 'pl-PL')).toMatchObject({ key: k('czytnik-b'), source: 'channel_language', url: `/pl/p/${k('czytnik-b')}` });
+      expect(at(chB, 'en-GB')).toMatchObject({ key: k('reader'), source: 'global', url: `/en/p/${k('reader')}` });
+      // With the setting off the default language (chB: en-GB) is unprefixed; others stay prefixed.
+      await h.em().getConnection().execute(`update sales_channels set prefix_default_language = false where id = ?`, [chB]);
+      await h.salesChannels.cache.invalidateAll();
+      const off = productUrlKeysResponseSchema.parse((await get(p)).json()).data;
+      const atOff = (languageCode: string) => off.effective.find((e) => e.channelId === chB && e.languageCode === languageCode);
+      expect(atOff('en-GB')?.url).toBe(`/p/${k('reader')}`);
+      expect(atOff('pl-PL')?.url).toBe(`/pl/p/${k('czytnik-b')}`);
+      await h.em().getConnection().execute(`update sales_channels set prefix_default_language = true where id = ?`, [chB]);
+      await h.salesChannels.cache.invalidateAll();
       expect(data.redirects?.map((r) => `${r.languageCode}:${r.key}`)).toEqual([`pl-PL:${k('reader')}`]);
     });
 

@@ -11,7 +11,7 @@ import {
   BOX_PADDING_FIELD,
   DEFAULT_BOX_PROPS,
 } from '../fields/shared-fields.js';
-import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
+import { useCmsRenderAssets, useCmsRenderMediaBaseUrl, useCmsRenderLocalizePath } from './render-context.js';
 import { resolveImageUrl } from '../utils/resolve-image-url.js';
 import { BUTTON_SPEC_OBJECT_FIELDS } from './Button.js';
 import { blockLink, blockLinkTarget, carriedBlockLink } from '../utils/link-href.js';
@@ -70,6 +70,8 @@ function LogoStripBody({
   } = props;
   const assets = useCmsRenderAssets();
   const mediaBaseUrl = useCmsRenderMediaBaseUrl();
+  // Feature 167 — an internal link takes the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
   // R17 (T207): the gap, a size or a Custom px per breakpoint; a stored number is today's inline gap.
   const gapStyle = responsiveGapStyle(gap, gapPx, 32, editing ? tier : null);
   // R17 (T206): the alignment per breakpoint; one alignment is today's inline `justify-content`.
@@ -118,7 +120,7 @@ function LogoStripBody({
             />
           );
           // R17 (T212): any kind of link; a URL stored before opened a new tab and still does.
-          const link = blockLinkTarget(blockLink(item.link, item.href, '_blank'), { assets, ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}) });
+          const link = blockLinkTarget(blockLink(item.link, item.href, '_blank'), { assets, ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}), localizePath });
           return (
             <li key={`${item.alt ?? 'logo'}-${index}`}>
               {link ? (

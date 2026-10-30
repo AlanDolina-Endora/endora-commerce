@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  channelUrlLanguages,
   type DictionaryCurrenciesPageResponse,
   type DictionaryCurrency,
   type DictionaryLanguage,
@@ -91,6 +92,11 @@ export interface ChannelIdentityFormValue {
    * customers whose Organization is assigned to the channel get in.
    */
   anonymousAccess: boolean;
+  /**
+   * Feature 167 — whether the default language carries its path prefix in
+   * storefront URLs, like every other channel language always does.
+   */
+  prefixDefaultLanguage: boolean;
 }
 
 export interface ChannelIdentityFormProps {
@@ -100,6 +106,11 @@ export interface ChannelIdentityFormProps {
   lockCode?: boolean;
   errorMessage?: string | null;
   saving?: boolean;
+  /**
+   * The operator may only read the channel (no `sales_channels:write`): the
+   * URL-prefix switch is shown, disabled (feature 167, US3 #3).
+   */
+  readOnly?: boolean;
   onSubmit: (value: ChannelIdentityFormValue) => void;
   onCancel?: () => void;
 }
@@ -115,6 +126,7 @@ export function ChannelIdentityForm({
   lockCode = false,
   errorMessage,
   saving = false,
+  readOnly = false,
   onSubmit,
   onCancel,
 }: ChannelIdentityFormProps): ReactNode {
@@ -132,6 +144,7 @@ export function ChannelIdentityForm({
   );
   const [active, setActive] = useState(initial?.active ?? true);
   const [anonymousAccess, setAnonymousAccess] = useState(initial?.anonymousAccess ?? true);
+  const [prefixDefaultLanguage, setPrefixDefaultLanguage] = useState(initial?.prefixDefaultLanguage ?? true);
   const [dictionaryLanguages, setDictionaryLanguages] = useState<DictionaryLanguage[]>([]);
   const [dictionaryCurrencies, setDictionaryCurrencies] = useState<DictionaryCurrency[]>([]);
   const [dictionaryStatus, setDictionaryStatus] = useState<DictionaryStatus>('loading');
@@ -149,6 +162,7 @@ export function ChannelIdentityForm({
     setDefaultCurrency(initial.defaultCurrency);
     setActive(initial.active);
     setAnonymousAccess(initial.anonymousAccess);
+    setPrefixDefaultLanguage(initial.prefixDefaultLanguage);
   }, [initial]);
 
   useEffect(() => {
@@ -227,6 +241,7 @@ export function ChannelIdentityForm({
         defaultCurrency: defaultCurrency.trim(),
         active,
         anonymousAccess,
+        prefixDefaultLanguage,
       });
     },
     [
@@ -241,8 +256,21 @@ export function ChannelIdentityForm({
       defaultCurrency,
       active,
       anonymousAccess,
+      prefixDefaultLanguage,
     ],
   );
+
+  // Feature 167 — the prefixes the storefront will use, derived exactly as the
+  // backend derives them, from what the form holds now. A language list the
+  // derivation refuses (a case-insensitive duplicate) lists nothing; the
+  // dictionary validation answers it on save.
+  const urlLanguages = useMemo(() => {
+    try {
+      return channelUrlLanguages({ languages, defaultLanguage, prefixDefaultLanguage });
+    } catch {
+      return [];
+    }
+  }, [languages, defaultLanguage, prefixDefaultLanguage]);
 
   const cannotSubmit = saving || invalid;
 
@@ -495,6 +523,43 @@ export function ChannelIdentityForm({
               <Link to="/price-lists/display-modes" className="underline underline-offset-2">
                 {t('identity.anonymousAccess.pricesLink')}
               </Link>
+            </p>
+          </div>
+
+          {/* Feature 167 (US3) — whether the default language carries its path
+              prefix in storefront URLs. The derived prefix of every channel
+              language is listed under it, recomputed as the languages change, with
+              the warning that both the list and the switch move the URLs. */}
+          <div className="grid gap-1">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="sc-prefix-default-language"
+                checked={prefixDefaultLanguage}
+                disabled={readOnly}
+                onChange={(e) => setPrefixDefaultLanguage(e.target.checked)}
+                aria-describedby="sc-prefix-default-language-hint sc-prefix-default-language-warning"
+              />
+              <Label htmlFor="sc-prefix-default-language" className="cursor-pointer">
+                {t('identity.prefixDefaultLanguage.label')}
+              </Label>
+            </div>
+            <p id="sc-prefix-default-language-hint" className="text-xs text-muted-foreground">
+              {t('identity.prefixDefaultLanguage.hint')}
+            </p>
+            {urlLanguages.length > 0 && (
+              <>
+                <p id="sc-prefix-default-language-prefixes" className="text-xs font-medium">
+                  {t('identity.prefixDefaultLanguage.prefixesHeading')}
+                </p>
+                <ul aria-labelledby="sc-prefix-default-language-prefixes" className="grid gap-0.5 text-xs font-mono">
+                  {urlLanguages.map((l) => (
+                    <li key={l.languageCode}>{`${l.languageCode} → /${l.prefixed ? l.prefix : ''}`}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <p id="sc-prefix-default-language-warning" className="text-xs text-muted-foreground">
+              {t('identity.prefixDefaultLanguage.urlChangeWarning')}
             </p>
           </div>
 

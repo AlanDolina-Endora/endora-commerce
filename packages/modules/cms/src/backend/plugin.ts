@@ -129,6 +129,8 @@ export interface CmsModuleHandle {
    * for a composition root to forget.
    */
   setReservedSlugSegmentsResolver: (resolver: ReservedSlugSegmentsResolver) => void;
+  /** Feature 167 — the channels' storefront language prefixes → channel codes. */
+  setLanguagePrefixesResolver: (resolver: () => Promise<ReadonlyMap<string, readonly string[]>>) => void;
   getColorPaletteWriter: () => ColorPaletteWriter | null;
   setAssetResolver: (resolver: CmsAssetResolver | null) => void;
   /** Feature 163 — the default sharing image, read per request for the request's channel. */
@@ -228,6 +230,9 @@ export function cmsModule(options: CmsModuleOptions): {
     },
     setReservedSlugSegmentsResolver: (resolver) => {
       pageService.setReservedSegmentsResolver(resolver);
+    },
+    setLanguagePrefixesResolver: (resolver) => {
+      pageService.setLanguagePrefixesResolver(resolver);
     },
     getColorPaletteWriter: () => colorPaletteWriter,
     setAssetResolver: (resolver) => {

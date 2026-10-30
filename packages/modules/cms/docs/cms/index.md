@@ -353,9 +353,9 @@ not have with `400 CMS_LANGUAGE_NOT_IN_CHANNEL_SCOPE`.
 On the storefront:
 
 - **Each language is served at its own slug** — and, for a nested page, at its
-  ancestors' slugs in that language. The address in a language other than the
-  channel's default carries `?lang=<language>`, as a product's does:
-  `/o-nas` in the default language, `/about-us?lang=en-US` in English.
+  ancestors' slugs in that language, under that language's path prefix, as a
+  product's address is: `/pl/o-nas` in Polish, `/en/about-us` in English (`/o-nas`
+  when the channel does not prefix its default language — see *Sales channels*).
 - **A page is found by its slug in any of its languages**, and by its own slug,
   and served in the visitor's language. When the address asked for is not the
   page's address in that language — a visitor switched language on the page —
@@ -1381,8 +1381,8 @@ page render.
 | GET    | `/hooks/by-code?code=…&language=…`| Ordered active Block list for the named Hook.                  |
 
 The resolved Page also carries `path` (its public path in the channel and the
-served language), `url` (that path as the storefront links it, `?lang=`
-included outside the default language), `alternates` (`{language, url}` for
+served language), `url` (that path as the storefront links it, under the
+language's path prefix), `alternates` (`{language, url}` for
 every language it is served in), `name` in the served language,
 `breadcrumbs` (`visible`, `scheme`, `overlay: true` only when the trail lies
 over the first section, and the `trail` of ancestors, each

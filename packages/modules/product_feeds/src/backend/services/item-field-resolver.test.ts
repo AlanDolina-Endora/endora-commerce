@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveFeedItem } from './item-field-resolver.js';
+import { feedLinkLanguage, resolveFeedItem } from './item-field-resolver.js';
 import type {
   FeedItemSource,
   FeedResolutionContext,
@@ -22,6 +22,8 @@ const CONTEXT: FeedResolutionContext = {
   pricePresentation: 'gross',
   taxCountry: 'PL',
   storefrontOrigin: 'https://shop.example.com',
+  // Feature 167 — the channel's URL-language facts: links carry the language prefix.
+  channelUrl: { languages: ['pl-PL', 'en-US'], defaultLanguage: 'pl-PL', prefixDefaultLanguage: true },
   salesChannelId: '00000000-0000-4000-8000-000000000001',
   priceListId: null,
 };
@@ -85,7 +87,7 @@ describe('resolveFeedItem — every source kind (FR-003)', () => {
     [field({ outputName: 'a', sourceKind: 'stock_quantity' }), '7'],
     [
       field({ outputName: 'a', sourceKind: 'link' }),
-      'https://shop.example.com/p/blue-widget?lang=pl-PL',
+      'https://shop.example.com/pl/p/blue-widget',
     ],
     [field({ outputName: 'a', sourceKind: 'image_link' }), 'https://cdn.example.com/a.jpg'],
     [
@@ -236,15 +238,30 @@ describe('resolveFeedItem — identity defaults (FR-041)', () => {
 });
 
 describe('resolveFeedItem — link (FR-042)', () => {
-  it('builds the link from the channel storefront origin, /p/<slug> and ?lang=', () => {
+  it('builds the link from the origin and the prefixed product path, never ?lang= (feature 167)', () => {
     const out = resolveFeedItem({
       fields: [field({ outputName: 'link', sourceKind: 'link' })],
       item: ITEM,
       context: CONTEXT,
     });
-    expect(valueOf(out.fields, 'link')).toBe(
-      'https://shop.example.com/p/blue-widget?lang=pl-PL',
-    );
+    expect(valueOf(out.fields, 'link')).toBe('https://shop.example.com/pl/p/blue-widget');
+  });
+
+  it('leaves the default language unprefixed with the setting off, prefixes another language', () => {
+    const off = { ...CONTEXT, channelUrl: { ...CONTEXT.channelUrl, prefixDefaultLanguage: false } };
+    const link = (context: FeedResolutionContext) =>
+      valueOf(resolveFeedItem({ fields: [field({ outputName: 'link', sourceKind: 'link' })], item: ITEM, context }).fields, 'link');
+    expect(link(off)).toBe('https://shop.example.com/p/blue-widget');
+    expect(link({ ...off, languageCode: 'en-US' })).toBe('https://shop.example.com/en/p/blue-widget');
+  });
+
+  it('links the channel default language when the feed language is not a channel language (FR-034)', () => {
+    const out = resolveFeedItem({
+      fields: [field({ outputName: 'link', sourceKind: 'link' })],
+      item: ITEM,
+      context: { ...CONTEXT, languageCode: 'de-DE' },
+    });
+    expect(valueOf(out.fields, 'link')).toBe('https://shop.example.com/pl/p/blue-widget');
   });
 
   it('never emits a double slash when the origin carries a trailing slash', () => {
@@ -254,7 +271,7 @@ describe('resolveFeedItem — link (FR-042)', () => {
       context: { ...CONTEXT, storefrontOrigin: 'https://shop.example.com/' },
     });
     expect(valueOf(out.fields, 'link')).toBe(
-      'https://shop.example.com/p/blue-widget?lang=pl-PL',
+      'https://shop.example.com/pl/p/blue-widget',
     );
   });
 
@@ -527,5 +544,13 @@ describe('resolveFeedItem — an x.xx50 price is published as a pack of ten, nev
 
     const unpackable = resolveFeedItem({ fields, item: { ...ITEM, ...prices }, context });
     expect(unpackable.skipReason).toBe('sub_cent_price_without_pack_field');
+  });
+});
+
+describe('feedLinkLanguage (feature 167)', () => {
+  it('is the feed language when the channel serves it (exact, then primary subtag), else the default', () => {
+    expect(feedLinkLanguage(CONTEXT)).toBe('pl-PL');
+    expect(feedLinkLanguage({ ...CONTEXT, languageCode: 'en' })).toBe('en-US');
+    expect(feedLinkLanguage({ ...CONTEXT, languageCode: 'de-DE' })).toBe('pl-PL');
   });
 });

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isoDateTimeSchema, uuidSchema } from './common.js';
+import { storefrontPagePath, type ChannelUrlFacts } from './storefront-language-path.js';
 
 /**
  * Feature 163 (`specs/163-product-data-scopes/`) — product URL keys per language and
@@ -33,25 +34,33 @@ export interface ProductPathInput {
   key: string;
   /** The content language the URL is for — already resolved against the channel. */
   languageCode: string;
-  /** The channel's default content language. */
-  channelDefaultLanguage: string;
+  /** The channel's URL-language facts (feature 167): its languages, default and prefix setting. */
+  channel: ChannelUrlFacts;
 }
 
 /**
- * The storefront path of a product page: `/p/<key>`, plus `?lang=<L>` when L is not
- * the channel's default language.
+ * The storefront path of a product page: `/p/<key>` under the language's path prefix
+ * (`/en/p/drill`, or `/p/wiertarka` for the default language of a channel that does
+ * not prefix it).
  *
  * **This is the only place a product URL is composed.** Every URL the platform
  * emits for a product — the admin's preview link, the resolve answer's redirect
- * target, the PDP's canonical and alternates, the sitemap — is built here by the
- * backend, so a later language path prefix changes this one function. A key is
- * valid only in its own language (K1), which is why a non-default language has to
- * travel with the link.
+ * target, the PDP's canonical and alternates, the sitemap, the product feeds — is
+ * built here by the backend. A key is valid only in its own language (K1), so the
+ * language travels with the link as its path prefix
+ * (`specs/167-storefront-locale-path/`, which replaced 163's interim `?lang=`).
  */
 export function productPath(input: ProductPathInput): string {
-  const base = `/p/${encodeURIComponent(input.key)}`;
-  if (input.languageCode === input.channelDefaultLanguage) return base;
-  return `${base}?lang=${encodeURIComponent(input.languageCode)}`;
+  return storefrontPagePath({
+    path: `/p/${encodeURIComponent(input.key)}`,
+    languageCode: input.languageCode,
+    channel: input.channel,
+  });
+}
+
+/** The unprefixed product path — the `x-default` target (`specs/167-storefront-locale-path/` url-shape §8). */
+export function productDefaultPath(key: string): string {
+  return `/p/${encodeURIComponent(key)}`;
 }
 
 // --- Admin read — GET /api/v1/admin/catalog/products/:id/url-keys (§1) -----------
@@ -152,8 +161,19 @@ export type UrlRedirectNotFoundDetails = z.infer<typeof urlRedirectNotFoundDetai
 export const productKeyResolutionSchema = z.discriminatedUnion('kind', [
   /** `key` is the effective key at (channel, language). */
   z.object({ kind: z.literal('product'), productId: uuidSchema, key: z.string() }),
-  /** `path` = {@link productPath} built by catalog; the storefront answers a permanent redirect to it. */
-  z.object({ kind: z.literal('redirect'), key: z.string(), languageCode: languageCodeSchema, path: z.string() }),
+  /**
+   * `path` = {@link productPath} built by catalog. `permanent: true` — a former key (163),
+   * answered 308; `false` — a current key of the same product in another channel
+   * language (feature 167, FR-024), answered 307 because the mapping depends on key data
+   * that can change hands.
+   */
+  z.object({
+    kind: z.literal('redirect'),
+    key: z.string(),
+    languageCode: languageCodeSchema,
+    path: z.string(),
+    permanent: z.boolean(),
+  }),
 ]);
 export type ProductKeyResolution = z.infer<typeof productKeyResolutionSchema>;
 
@@ -164,12 +184,13 @@ export type ProductKeyResolution = z.infer<typeof productKeyResolutionSchema>;
  * canonical for the request's (channel, language), and one alternate per channel
  * language where the product is available to the **anonymous** audience (FR-074 —
  * `hreflang` advertises only what a crawler may open). The storefront renders them
- * verbatim: it does not know the channel's default language, so it composes no
- * product URL of its own.
+ * verbatim: it composes no product URL of its own.
  */
 export const productPagePathsSchema = z.object({
   canonical: z.string(),
   alternates: z.array(z.object({ languageCode: languageCodeSchema, path: z.string() })),
+  /** {@link productDefaultPath} of the key at the channel's default language — `hreflang="x-default"`. */
+  xDefault: z.string(),
 });
 export type ProductPagePaths = z.infer<typeof productPagePathsSchema>;
 

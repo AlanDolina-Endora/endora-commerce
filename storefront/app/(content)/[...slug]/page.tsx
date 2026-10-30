@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import type { CmsResolvedPage } from '@endora-commerce/contracts';
 import { Breadcrumbs, type BreadcrumbCrumb } from '../../../components/Breadcrumbs';
 import { CmsPageRenderer } from '../../../components/CmsPageRenderer';
@@ -8,17 +8,18 @@ import { OrganizationJsonLd } from '../../../components/seo/OrganizationJsonLd';
 import { getCmsPageBySlug, normalizeCmsUrlPath } from '../../../lib/api/cms';
 import { getHomepageConfig } from '../../../lib/api/homepage';
 import { tForLocale } from '../../../lib/i18n/messages';
-import { requestedLanguage } from '../../../lib/i18n/requested-language';
 import { getServerContext } from '../../../lib/server-context';
 import { cmsSocialMetadata } from '../../../lib/seo/cms-share-metadata';
 import { canonicalPath } from '../../../lib/seo/route-seo';
 import { cmsRenderLocation, type PageSearchParams } from '../../../lib/page-builder/render-location';
 import { seo } from './seo';
+import { localePermanentRedirect, localizedAlternates } from '../../../lib/i18n/navigation';
+import { stripLocalePrefix, type UrlLanguageState } from '../../../lib/i18n/locale-path';
 
 interface PageProps {
   params: Promise<{ slug: string[] }>;
   /** `lang` — the language a link asked for (R24), as on a product page. */
-  searchParams?: Promise<PageSearchParams & { lang?: string | string[] }>;
+  searchParams?: Promise<PageSearchParams>;
 }
 
 /**
@@ -36,20 +37,21 @@ interface PageProps {
  * is rendered by `CmsPageRenderer` here exactly as it is on the home page.
  */
 
-export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const search = (await searchParams) ?? {};
   const path = normalizeCmsUrlPath(slug.join('/'));
-  const { ctx } = await getServerContext({ langOverride: requestedLanguage(search.lang) });
+  const { ctx, urlState } = await getServerContext();
   const page = await getCmsPageBySlug(path, ctx);
   if (!page) return { title: 'Not found', robots: { index: false, follow: false } };
   // R19D: the canonical address is the page's public path, which differs from
   // the request for the flat slug of a nested page (that request redirects).
-  // R24: it is the backend's URL for the served language — the path in that
-  // language, with `?lang=` when it is not the channel default; the fallback
-  // covers an answer cached before the field existed.
-  const canonical = page.url ?? canonicalPath(seo.route, { slug: publicPath(page, path).split('/') });
-  const languages = hreflangAlternates(page);
+  // R24 (amended by feature 167): the backend's URL for the served language — the
+  // page's path in that language under the language prefix; the fallback covers an
+  // answer cached before the field existed. The alternates are every language's own
+  // URL (its own slug, OR-7), plus `x-default` — the default language's unprefixed URL.
+  const fallback = await localizedAlternates(canonicalPath(seo.route, { slug: publicPath(page, path).split('/') }));
+  const canonical = page.url ?? fallback.canonical;
+  const languages = page.alternates !== undefined ? hreflangAlternates(page, urlState) : fallback.languages;
   // Feature 163 (FR-033, FR-034): the sharing card — image, locale and its
   // alternates.
   const social = cmsSocialMetadata(page, canonical);
@@ -57,8 +59,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     title: social.title,
     description: page.meta.description ?? undefined,
     keywords: page.meta.keywords ?? undefined,
-    // Indexable (FR-010/FR-012). R24: each language at its own URL, so the
-    // languages are `hreflang` alternates — only when there are several.
+    // Indexable (FR-010/FR-012). R24 + feature 167: each language at its own URL.
     alternates: { canonical, ...(languages ? { languages } : {}) },
     openGraph: social.openGraph,
     twitter: social.twitter,
@@ -69,7 +70,7 @@ export default async function CmsContentPage({ params, searchParams }: PageProps
   const { slug } = await params;
   const query = (await searchParams) ?? {};
   const path = normalizeCmsUrlPath(slug.join('/'));
-  const { ctx, locale, modules } = await getServerContext({ langOverride: requestedLanguage(query.lang) });
+  const { ctx, locale, modules } = await getServerContext();
   const t = tForLocale(locale);
   const [page, { cmsPageSlug }] = await Promise.all([
     getCmsPageBySlug(path, ctx),
@@ -100,15 +101,15 @@ export default async function CmsContentPage({ params, searchParams }: PageProps
   const canonical = publicPath(page, path);
   const flatSlugs = page.path && page.path !== page.slug ? [normalizeCmsUrlPath(page.slug)] : [];
   if (cmsPageSlug !== null && [path, canonical, ...flatSlugs].includes(normalizeCmsUrlPath(cmsPageSlug))) {
-    permanentRedirect('/');
+    return await localePermanentRedirect('/');
   }
 
   // R19D (T285): one address per page. The flat slug of a page served under
   // its parent's path still resolves, and answers a permanent redirect to it.
-  // R24: one address per page *and language* — the slug of another language
-  // (a reader who switched language) answers a redirect to the served one's
-  // URL, which the backend built, `?lang=` included.
-  if (canonical !== path) permanentRedirect(page.url ?? `/${canonical}`);
+  // R24: one address per page *and language* — the slug of another language (a
+  // reader who switched language) answers a permanent redirect to the served one's
+  // URL, which the backend built under the language prefix (feature 167).
+  if (canonical !== path) return await localePermanentRedirect(page.url ?? `/${canonical}`);
 
   // Feature 163 (FR-030, FR-031): Home › the ancestors the backend resolved for
   // this channel › the page. An ancestor this channel does not serve arrives
@@ -126,10 +127,9 @@ export default async function CmsContentPage({ params, searchParams }: PageProps
     { href: `/${path}`, label: page.name },
   ];
 
-  // R24 — `?lang=` writes this page in the override's language, which the root
-  // layout's `<html lang>` does not know (L-1), so the page marks its own
-  // content's language (WCAG 3.1.2), as the product page does (T155, B3).
-  // `contents`: the wrapper draws no box, so the sections lay out as before.
+  // R24 — the page marks its own content's language (WCAG 3.1.2): it is the path
+  // language (feature 167) unless the page has no content in it and is served in
+  // another of its languages. `contents`: the wrapper draws no box.
   return (
     <div lang={page.language} className="contents">
       {/* Feature 163 (FR-035): the organisation's data on every CMS page, not only on `/`. */}
@@ -175,14 +175,21 @@ export default async function CmsContentPage({ params, searchParams }: PageProps
 const DEFAULT_BREADCRUMBS: CmsResolvedPage['breadcrumbs'] = { visible: true, scheme: 'light', trail: [] };
 
 /**
- * The `hreflang` alternates (R24): the backend's URL of every language the page
- * is served in, or `undefined` for a page in one language — and for an answer
- * cached before the field existed.
+ * The `hreflang` alternates (R24, feature 167): the backend's prefixed URL of every
+ * language the page is served in, plus `x-default` — the default language's URL
+ * without its prefix (url-shape §8), when the page is served in the default language.
+ * A page in one language lists that one (FR-030: the languages it is available in).
  */
-function hreflangAlternates(page: CmsResolvedPage): Record<string, string> | undefined {
+function hreflangAlternates(page: CmsResolvedPage, urlState: UrlLanguageState): Record<string, string> | undefined {
   const alternates = page.alternates ?? [];
-  if (alternates.length < 2) return undefined;
-  return Object.fromEntries(alternates.map((alternate) => [alternate.language, alternate.url]));
+  if (alternates.length === 0) return undefined;
+  const languages: Record<string, string> = Object.fromEntries(
+    alternates.map((alternate) => [alternate.language, alternate.url]),
+  );
+  const defaultLanguage = urlState.languages.find((l) => l.isDefault)?.languageCode;
+  const defaultUrl = defaultLanguage ? languages[defaultLanguage] : undefined;
+  if (defaultUrl) languages['x-default'] = stripLocalePrefix(defaultUrl, urlState);
+  return languages;
 }
 
 /**

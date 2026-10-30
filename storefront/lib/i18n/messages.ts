@@ -15,6 +15,7 @@ export type MessageKey =
   | 'a11y.navigating'
   | 'a11y.navigatingSlow'
   | 'nav.home'
+  | 'header.language'
   | 'nav.catalog'
   | 'nav.search'
   | 'nav.account'
@@ -436,6 +437,7 @@ export const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'a11y.navigating': 'Loading the next page.',
     'a11y.navigatingSlow': 'Still loading. The next page is taking longer than usual.',
     'nav.home': 'Home',
+    'header.language': 'Language',
     'nav.catalog': 'Catalog',
     'nav.search': 'Search',
     'nav.account': 'Account',
@@ -834,6 +836,7 @@ export const MESSAGES: Record<string, Record<MessageKey, string>> = {
     'a11y.navigating': 'Wczytywanie następnej strony.',
     'a11y.navigatingSlow': 'Nadal wczytujemy. Następna strona ładuje się dłużej niż zwykle.',
     'nav.home': 'Strona główna',
+    'header.language': 'Język',
     'nav.catalog': 'Katalog',
     'nav.search': 'Wyszukiwanie',
     'nav.account': 'Konto',

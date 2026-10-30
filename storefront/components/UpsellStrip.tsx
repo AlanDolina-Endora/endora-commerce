@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { formatMoneyObject } from '../lib/i18n/money';
+import { LocalizedAnchor } from '../lib/i18n/localized-link';
 
 /**
  * UpsellStrip — Industria-themed up-sell card grid (feature 027 US1).
@@ -43,7 +44,7 @@ export function UpsellStrip({ upsells, locale, strings }: UpsellStripProps): Rea
             key={u.productId}
             className="rounded-md border border-line bg-surface p-[14px] transition hover:border-[var(--ink-700)] hover:shadow-sm"
           >
-            <a href={`/p/${u.productSlug}`} className="flex flex-col gap-1.5 text-inherit">
+            <LocalizedAnchor href={`/p/${u.productSlug}`} className="flex flex-col gap-1.5 text-inherit">
               <span className="line-clamp-2 text-[13px] font-medium leading-[1.3] text-fg">
                 {u.productName}
               </span>
@@ -56,7 +57,7 @@ export function UpsellStrip({ upsells, locale, strings }: UpsellStripProps): Rea
               >
                 {u.unitPrice ? formatMoney(u.unitPrice) : strings.noPriceLabel}
               </span>
-            </a>
+            </LocalizedAnchor>
           </li>
         ))}
       </ul>

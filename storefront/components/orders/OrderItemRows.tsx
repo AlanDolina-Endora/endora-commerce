@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
 import { GroupedLineRows, orderSectionTotals } from '../line-groups/GroupedLineRows';
 import type { OrderSummary } from '../../lib/api/orders';
 import { formatMoney } from '../../lib/i18n/money';
+import { LocalizedLink } from '../../lib/i18n/localized-link';
 
 /**
  * The rows of the order detail's *Items* table, inside its `<tbody>` — feature
@@ -29,7 +29,7 @@ export function OrderItemRows(props: {
       renderRow={(it) => (
         <tr key={it.id}>
           <td>
-            <Link href={`/p/${it.productId}`}>{it.productSnapshot.name}</Link>
+            <LocalizedLink href={`/p/${it.productId}`}>{it.productSnapshot.name}</LocalizedLink>
             <br />
             <small className="text-subtle">SKU: {it.variantSnapshot?.sku ?? it.productSnapshot.sku}</small>
           </td>

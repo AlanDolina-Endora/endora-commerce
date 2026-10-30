@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import type {
-  Actor,
-  PublicSalesChannel,
-  SalesChannelAccessResponse,
+import {
+  channelUrlLanguageAliases,
+  channelUrlLanguages,
+  type Actor,
+  type PublicSalesChannel,
+  type SalesChannelAccessResponse,
 } from '@endora-commerce/contracts';
 import {
   getResolvedChannel,
@@ -82,6 +84,11 @@ export async function registerSalesChannelsStorefrontRoutes(
       // schema is the half this change makes true.
       logoUrl: null,
       anonymousAccess: channel.anonymousAccess,
+      // Feature 167 (FR-004) — the derived URL languages, so no consumer re-derives
+      // them: the storefront middleware parses its path prefix against these.
+      prefixDefaultLanguage: channel.prefixDefaultLanguage,
+      urlLanguages: channelUrlLanguages(channel),
+      urlLanguageAliases: channelUrlLanguageAliases(channel),
     };
     return { data };
   });

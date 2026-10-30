@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { ProductLinkSummary } from './ProductLinksSections';
 import { formatMoney } from '../lib/i18n/money';
 import { toAbsoluteAssetUrl } from '../lib/asset-url';
+import { LocalizedAnchor } from '../lib/i18n/localized-link';
 
 /**
  * Feature 002 US4 — "You may also need" section on the
@@ -43,7 +44,7 @@ export function CrossSellSection(props: {
             key={link.id}
             className="overflow-hidden rounded-md border border-line bg-surface transition hover:border-[var(--ink-700)] hover:shadow-sm"
           >
-            <a
+            <LocalizedAnchor
               href={`/p/${link.product.slug}`}
               className="flex flex-col gap-1.5 p-[10px] text-inherit"
             >
@@ -65,7 +66,7 @@ export function CrossSellSection(props: {
                   {formatMoney(link.product.price.amount, link.product.price.currency, props.locale, { unitPrice: true })}
                 </span>
               ) : null}
-            </a>
+            </LocalizedAnchor>
           </li>
         ))}
       </ul>

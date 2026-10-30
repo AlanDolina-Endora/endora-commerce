@@ -207,6 +207,7 @@ describe('worked examples — §10.16 and §10.18 an x.xx50 unit price agrees on
           pricePresentation: 'net',
           taxCountry: null,
           storefrontOrigin: 'https://shop.example.com',
+          channelUrl: { languages: ['pl-PL'], defaultLanguage: 'pl-PL', prefixDefaultLanguage: true },
           salesChannelId: retailId,
           priceListId: null,
         },

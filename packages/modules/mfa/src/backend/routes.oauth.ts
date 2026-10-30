@@ -13,9 +13,13 @@ import {
   SESSION_COOKIE_NAME,
   ADMIN_SESSION_COOKIE_NAME,
   MFA_CHALLENGE_COOKIE_NAME,
+  channelUrlLanguages,
+  firstLanguageTag,
+  storefrontPagePathFor,
 } from '@endora-commerce/contracts';
 import type {
   AuthSessionPort,
+  ChannelUrlFacts,
   FederatedSignInOptionsResponse,
   MfaLoginPort,
 } from '@endora-commerce/contracts';
@@ -71,6 +75,18 @@ export interface MfaOAuthDeps {
    * on the channel the transaction was started on.
    */
   customerChannelAccess: Pick<CustomerChannelAccess, 'permits'>;
+  /**
+   * Feature 167 (FR-034) — the URL-language facts of the channel a customer sign-in
+   * started on (the system default when none). Absent: storefront paths unprefixed.
+   */
+  channelUrlFactsFor?: (salesChannelId: string | null) => Promise<ChannelUrlFacts | null>;
+}
+
+/** The channel language whose path prefix `next` starts with, or null. */
+function languageOfPath(next: string, channel: ChannelUrlFacts | null): string | null {
+  if (!channel) return null;
+  const first = next.split(/[/?#]/)[1]?.toLowerCase() ?? '';
+  return channelUrlLanguages(channel).find((l) => l.prefixed && l.prefix === first)?.languageCode ?? null;
 }
 
 /**
@@ -161,9 +177,15 @@ function sanitiseNext(input: string | undefined): string {
   return input;
 }
 
-function loginRedirect(deps: MfaOAuthDeps, surface: Surface, message: string): string {
+function loginRedirect(
+  deps: MfaOAuthDeps,
+  surface: Surface,
+  message: string,
+  pagePath: (path: string) => string = (path) => path,
+): string {
   const base = frontendBase(deps, surface);
-  return `${base}/login?error=${encodeURIComponent(message)}`;
+  const path = `/login?error=${encodeURIComponent(message)}`;
+  return `${base}${surface === 'customer' ? pagePath(path) : path}`;
 }
 
 /**
@@ -230,6 +252,14 @@ function registerStart(app: FastifyInstance, deps: MfaOAuthDeps, surface: Surfac
       }
 
       const next = sanitiseNext(request.query.next);
+      // Feature 167 — the starting page's language: the prefix of the `next` the
+      // storefront sent (its browser path), else the browser's first language.
+      const channelFacts =
+        surface === 'customer' && deps.channelUrlFactsFor ? await deps.channelUrlFactsFor(salesChannelId) : null;
+      const language =
+        surface === 'customer'
+          ? (languageOfPath(next, channelFacts) ?? firstLanguageTag(request.headers['accept-language']) ?? null)
+          : null;
       const codeVerifier = randomBytes(32).toString('base64url');
       const nonce = randomBytes(16).toString('base64url');
       const binding = randomBytes(32).toString('base64url');
@@ -240,6 +270,7 @@ function registerStart(app: FastifyInstance, deps: MfaOAuthDeps, surface: Surfac
         pkceVerifier: codeVerifier,
         nonce,
         next,
+        language,
         browserBinding: digest(binding),
       });
       reply.setCookie(OAUTH_BINDING_COOKIE_NAME, binding, {
@@ -289,6 +320,12 @@ function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Sur
       return reply.redirect(loginRedirect(deps, surface, 'This sign-in attempt has expired.'));
     }
     await deps.challengeStore.consumeOAuthTransaction(state);
+    // Feature 167 — from here on the transaction is this browser's: the pages it
+    // returns to carry the language of the page that started it.
+    const channelFacts =
+      surface === 'customer' && deps.channelUrlFactsFor ? await deps.channelUrlFactsFor(tx.salesChannelId) : null;
+    const pagePath = (path: string): string =>
+      storefrontPagePathFor({ path, channel: channelFacts, requestedLanguage: tx.language ?? null });
 
     const redirectUri = `${deps.backendBaseUrl}/api/v1/auth/${surface}/oauth/${provider}/callback`;
     let identity;
@@ -301,7 +338,7 @@ function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Sur
         redirectUri,
       });
     } catch {
-      return reply.redirect(loginRedirect(deps, surface, 'Sign-in failed. Please try again.'));
+      return reply.redirect(loginRedirect(deps, surface, 'Sign-in failed. Please try again.', pagePath));
     }
 
     const result =
@@ -314,7 +351,7 @@ function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Sur
     if (!result.ok) {
       if (result.reason === 'sales_channel_sign_in_required') {
         return reply.redirect(
-          loginRedirect(deps, surface, SALES_CHANNEL_SIGN_IN_REQUIRED_LOGIN_ERROR),
+          loginRedirect(deps, surface, SALES_CHANNEL_SIGN_IN_REQUIRED_LOGIN_ERROR, pagePath),
         );
       }
       const message =
@@ -325,7 +362,7 @@ function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Sur
             : result.reason === 'blocked'
               ? ACCOUNT_BLOCKED_MESSAGE
               : 'No account found. Please create an account first.';
-      return reply.redirect(loginRedirect(deps, surface, message));
+      return reply.redirect(loginRedirect(deps, surface, message, pagePath));
     }
 
     // Feature 154 — a customer signs in only on a sales channel its
@@ -338,7 +375,7 @@ function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Sur
       !(await deps.customerChannelAccess.permits(result.organizationId, tx.salesChannelId))
     ) {
       return reply.redirect(
-        loginRedirect(deps, surface, SALES_CHANNEL_NOT_PERMITTED_LOGIN_ERROR),
+        loginRedirect(deps, surface, SALES_CHANNEL_NOT_PERMITTED_LOGIN_ERROR, pagePath),
       );
     }
 
@@ -365,7 +402,7 @@ function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Sur
           signed: false,
         });
         return reply.redirect(
-          `${deps.storefrontBaseUrl}/login/mfa?next=${encodeURIComponent(sanitiseNext(tx.next))}`,
+          `${deps.storefrontBaseUrl}${pagePath(`/login/mfa?next=${encodeURIComponent(sanitiseNext(tx.next))}`)}`,
         );
       }
       // The Admin UI holds the pending challenge in memory, as after its own
@@ -377,7 +414,7 @@ function registerCallback(app: FastifyInstance, deps: MfaOAuthDeps, surface: Sur
       );
     }
     if (decision.kind === 'setup') {
-      return reply.redirect(loginRedirect(deps, surface, SETUP_REQUIRED_MESSAGE[surface]));
+      return reply.redirect(loginRedirect(deps, surface, SETUP_REQUIRED_MESSAGE[surface], pagePath));
     }
 
     const session = await deps.sessionService.createSession(

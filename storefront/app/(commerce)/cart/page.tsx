@@ -1,6 +1,4 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import {
   CART_UNAVAILABLE,
   getCart,
@@ -47,6 +45,8 @@ import {
 import { droppedBelowMinimumReason } from '../../../lib/batchReport';
 import { tForLocale } from '../../../lib/i18n/messages';
 import { cartActionFailure } from '../../../lib/cart-action-failure';
+import { localeRedirect } from '../../../lib/i18n/navigation';
+import { LocalizedLink } from '../../../lib/i18n/localized-link';
 
 /**
  * Not indexed (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010): an
@@ -108,9 +108,9 @@ export default async function CartPage({
           <p className="m-0 mb-[18px] text-[14px] text-muted">
             {absentStrings.unavailable.body}
           </p>
-          <Link href="/catalog" className="btn btn--dark">
+          <LocalizedLink href="/catalog" className="btn btn--dark">
             {absentStrings.browseCatalog}
-          </Link>
+          </LocalizedLink>
         </div>
       </div>
     );
@@ -167,9 +167,9 @@ export default async function CartPage({
         <div className="rounded-md border border-line bg-surface px-[24px] py-[48px] text-center">
           <h1 className="m-0 mb-2 text-[22px] font-semibold text-fg">{strings.heading}</h1>
           <p className="m-0 mb-[18px] text-[14px] text-muted">{strings.empty}</p>
-          <Link href="/catalog" className="btn btn--dark">
+          <LocalizedLink href="/catalog" className="btn btn--dark">
             {strings.browseCatalog}
-          </Link>
+          </LocalizedLink>
         </div>
       </div>
     );
@@ -259,9 +259,9 @@ export default async function CartPage({
             ))}
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-[22px] py-[18px]">
-              <Link href="/catalog" className="btn btn--ghost">
+              <LocalizedLink href="/catalog" className="btn btn--ghost">
                 ← {strings.continueShopping}
-              </Link>
+              </LocalizedLink>
               <CartConvertButtons
                 disabled={cart.items.length === 0}
                 disabledReason={null}
@@ -361,9 +361,9 @@ function Breadcrumbs({
         gap: 6,
       }}
     >
-      <Link href="/" style={{ color: 'inherit' }}>
+      <LocalizedLink href="/" style={{ color: 'inherit' }}>
         {strings.home}
-      </Link>
+      </LocalizedLink>
       <span aria-hidden="true">/</span>
       <span style={{ color: 'var(--ink-900)' }}>{strings.cart}</span>
     </nav>
@@ -422,7 +422,7 @@ async function updateAction(formData: FormData): Promise<void> {
   // The backend words its refusal (the minimum sentence) in the language it is asked in.
   const { locale, ctx } = await getServerContext();
   const t = tForLocale(locale);
-  if (edit.kind === 'invalid') redirect(cartLineEditErrorHref(itemId, t('cart.line.quantityInvalid'), typedValue));
+  if (edit.kind === 'invalid') return await localeRedirect(cartLineEditErrorHref(itemId, t('cart.line.quantityInvalid'), typedValue));
   try {
     // `quantity: 0` removes the line (FR-007, contract §2), whatever its minimum.
     const quantity = edit.kind === 'remove' ? 0 : edit.quantity;
@@ -430,9 +430,9 @@ async function updateAction(formData: FormData): Promise<void> {
     if (result.newAnonCookie) await setAnonCartCookie(result.newAnonCookie);
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : t('cart.line.updateFailed');
-    redirect(cartLineEditErrorHref(itemId, message, typedValue));
+    return await localeRedirect(cartLineEditErrorHref(itemId, message, typedValue));
   }
-  redirect('/cart');
+  return await localeRedirect('/cart');
 }
 
 async function removeAction(formData: FormData): Promise<void> {
@@ -445,9 +445,9 @@ async function removeAction(formData: FormData): Promise<void> {
   } catch (err) {
     const message =
       err instanceof StorefrontApiError ? err.detail : tForLocale(locale)('cart.line.removeFailed');
-    redirect(`/cart?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/cart?error=${encodeURIComponent(message)}`);
   }
-  redirect('/cart');
+  return await localeRedirect('/cart');
 }
 
 async function saveToListAction(formData: FormData): Promise<void> {
@@ -455,12 +455,12 @@ async function saveToListAction(formData: FormData): Promise<void> {
   const itemId = (formData.get('itemId') as string) ?? '';
   const jar = await readJar();
   if (!jar.session) {
-    redirect('/cart?error=' + encodeURIComponent('Sign in to save to a list.'));
+    return await localeRedirect('/cart?error=' + encodeURIComponent('Sign in to save to a list.'));
   }
   try {
     const lists = await listShoppingLists(jar.session ?? '').catch(() => []);
     if (lists.length === 0) {
-      redirect(
+      return await localeRedirect(
         '/cart?error=' +
           encodeURIComponent(
             'You have no shopping list yet. Create one from the account menu.',
@@ -469,18 +469,18 @@ async function saveToListAction(formData: FormData): Promise<void> {
     }
     const target = lists[0]!;
     await saveCartItemToShoppingList(jar, itemId, target.id);
-    redirect(`/cart?listAdded=${encodeURIComponent(target.name)}`);
+    return await localeRedirect(`/cart?listAdded=${encodeURIComponent(target.name)}`);
   } catch (err) {
     const message =
       err instanceof StorefrontApiError ? err.detail : 'Could not save line to list.';
-    redirect(`/cart?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/cart?error=${encodeURIComponent(message)}`);
   }
 }
 
 async function applyCouponAction(formData: FormData): Promise<void> {
   'use server';
   const code = ((formData.get('code') as string) ?? '').trim().toUpperCase();
-  if (!code) redirect('/cart?couponError=coupon_format_invalid');
+  if (!code) return await localeRedirect('/cart?couponError=coupon_format_invalid');
   try {
     const result = await applyCartCoupon(await readJar(), code);
     if (result.outcome === 'rejected') {
@@ -489,14 +489,14 @@ async function applyCouponAction(formData: FormData): Promise<void> {
         qs.set('couponShortfall', String(result.shortfall.amount));
         qs.set('couponShortfallCurrency', result.shortfall.currency);
       }
-      redirect(`/cart?${qs.toString()}`);
+      return await localeRedirect(`/cart?${qs.toString()}`);
     }
   } catch (err) {
     const message =
       err instanceof StorefrontApiError ? err.detail : 'Could not apply coupon.';
-    redirect(`/cart?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/cart?error=${encodeURIComponent(message)}`);
   }
-  redirect('/cart');
+  return await localeRedirect('/cart');
 }
 
 async function clearCouponAction(): Promise<void> {
@@ -506,7 +506,7 @@ async function clearCouponAction(): Promise<void> {
   } catch {
     // Idempotent — silent fall-through is the spec.
   }
-  redirect('/cart');
+  return await localeRedirect('/cart');
 }
 
 async function convertToQrAction(formData: FormData): Promise<void> {
@@ -514,13 +514,13 @@ async function convertToQrAction(formData: FormData): Promise<void> {
   const note = ((formData.get('note') as string) ?? '').trim() || null;
   try {
     const result = await convertCartToQuoteRequest(await readJar(), note);
-    redirect(`/quote-requests/${result.quoteRequestSlug}?from=cart`);
+    return await localeRedirect(`/quote-requests/${result.quoteRequestSlug}?from=cart`);
   } catch (err) {
     const message =
       err instanceof StorefrontApiError
         ? err.detail
         : 'Could not convert cart to a quote request.';
-    redirect(`/cart?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/cart?error=${encodeURIComponent(message)}`);
   }
 }
 
@@ -535,9 +535,9 @@ async function submitForApprovalAction(): Promise<void> {
     // A refusal the backend worded (FR-039's minimum refusal, in the request's
     // language) passes through; anything else is the catalogue's sentence.
     const message = cartActionFailure(err, locale, 'cart.submitForApprovalFailed');
-    redirect(`/cart?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/cart?error=${encodeURIComponent(message)}`);
   }
-  redirect('/cart');
+  return await localeRedirect('/cart');
 }
 
 /* === Inline locale string catalogue =================================== */

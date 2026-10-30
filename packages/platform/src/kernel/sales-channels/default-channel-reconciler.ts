@@ -154,6 +154,9 @@ export class DefaultChannelReconciler {
       // Feature 154 (FR-003) — open to anonymous visitors, stated here rather
       // than left to the column default so the intent is in the code.
       anonymousAccess: true,
+      // Feature 167 (OR-1) — a channel created after the upgrade is prefixed; stated
+      // here rather than left to the column default so the intent is in the code.
+      prefixDefaultLanguage: true,
       systemDefault: true,
       version: 1,
       // Legacy column preserved for one release (research R-12).

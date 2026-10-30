@@ -89,5 +89,9 @@
   "identity.anonymousAccess.hint": "When off, visitors must sign in, and only customers whose organization is assigned to this channel can use the store. With automatic moderation, anyone who registers a business here gets access.",
   "identity.anonymousAccess.pricesHint": "Whether anonymous visitors see prices is a separate setting, the unauthenticated display mode: for every channel in Pricing settings, or for this channel alone on the Settings screen.",
   "identity.anonymousAccess.pricesLink": "Open Pricing settings",
+  "identity.prefixDefaultLanguage.label": "Prefix the default language in URLs",
+  "identity.prefixDefaultLanguage.hint": "When on, every storefront address starts with its language, the default one included: /pl/p/drill, /en/p/drill. When off, an address without a language is the default language (/p/drill) and only the other languages are prefixed. Addresses that change keep working through redirects.",
+  "identity.prefixDefaultLanguage.prefixesHeading": "Language prefixes in storefront URLs",
+  "identity.prefixDefaultLanguage.urlChangeWarning": "Changing the channel's languages or this switch changes the storefront's URLs. Old addresses are redirected; browsers may keep a redirect they cached for up to an hour.",
   "list.badge.signInRequired": "Sign-in required"
 }

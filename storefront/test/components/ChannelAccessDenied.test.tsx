@@ -57,6 +57,8 @@ vi.mock('next/headers', () => ({
 vi.mock('../../app/globals.css', () => ({}));
 vi.mock('../../lib/server-context', () => ({
   getServerContext: async () => ({
+    // Feature 167 — no URL languages known: paths stay as written.
+    urlState: { languages: [], aliases: [], current: 'en-US' },
     config: { languages: [], defaultLanguageCode: state.locale },
     locale: state.locale,
     currency: undefined,

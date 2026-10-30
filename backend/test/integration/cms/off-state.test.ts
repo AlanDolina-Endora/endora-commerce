@@ -7,7 +7,7 @@ import {
   teardownBackendServer,
   type BackendServerHandle,
 } from '../../helpers/test-server.js';
-import { expectModuleAbsent } from '../../helpers/off-state.js';
+import { expectModuleAbsent, withModuleOff } from '../../helpers/off-state.js';
 
 /**
  * `cms` off-state — Constitution XVII item 6.
@@ -88,6 +88,50 @@ describe('cms off-state (Constitution XVII)', () => {
       expect(survived, 'a brand-token row must survive the off/on cycle').toHaveLength(1);
     } finally {
       await h.em().execute('delete from cms_brand_tokens where id = ?', [rowId]);
+    }
+  });
+
+  // Feature 167 (T078) — the CMS slug reservation is the cms side of the language
+  // prefixes; with cms off nothing reserves, and the channels' languages and their
+  // derived URL languages are untouched: a channel language edit succeeds and the
+  // public channel read still answers the prefixes the storefront parses.
+  it('leaves channel language edits and the URL languages alone while off', async () => {
+    const code = `cms-off-167-${Date.now()}`;
+    const created = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/sales-channels',
+      cookies: admin,
+      payload: {
+        code,
+        name: { 'en-US': 'cms off' },
+        languages: ['en-US'],
+        defaultLanguage: 'en-US',
+        currencies: ['PLN'],
+        defaultCurrency: 'PLN',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    try {
+      await withModuleOff('cms', 'deactivated', async () => {
+        const patched = await h.app.inject({
+          method: 'PATCH',
+          url: `/api/v1/admin/sales-channels/${code}`,
+          cookies: admin,
+          payload: { expectedVersion: 1, languages: ['en-US', 'pl-PL'] },
+        });
+        expect(patched.statusCode).toBe(200);
+        const identity = await h.app.inject({
+          method: 'GET',
+          url: '/api/v1/storefront/sales-channel',
+          headers: { 'x-sales-channel': code },
+        });
+        expect(identity.statusCode).toBe(200);
+        const data = (identity.json() as { data: { urlLanguages: Array<{ prefix: string }> } }).data;
+        expect(data.urlLanguages.map((l) => l.prefix)).toEqual(['en', 'pl']);
+      });
+    } finally {
+      await h.app.inject({ method: 'POST', url: `/api/v1/admin/sales-channels/${code}/deactivate`, cookies: admin });
+      await h.app.inject({ method: 'DELETE', url: `/api/v1/admin/sales-channels/${code}`, cookies: admin });
     }
   });
 

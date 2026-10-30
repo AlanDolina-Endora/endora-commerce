@@ -141,6 +141,29 @@ Both drop the shared Redis entry first and the local one second, with the key ma
 
 Membership lookups go through MikroORM directly (no cache layer); if you need them faster, add a Redis layer keyed by `(entityType, entityId)` with a short TTL — the hooks are already in place.
 
+## Storefront URLs and the language prefix {#storefront-urls}
+
+Every storefront page URL carries the language as its first segment. Never compose one by
+hand — the derivation lives in `@endora-commerce/contracts`:
+
+- `channelUrlLanguages(channel)` / `channelUrlLanguageAliases(channel)` — the derived
+  prefix of every channel language (and split aliases). `channel` is any
+  `ChannelUrlFacts` (`languages`, `defaultLanguage`, `prefixDefaultLanguage`); the cached
+  channel (`getResolvedChannel()`, `SalesChannelResolutionPort`) satisfies it.
+- `storefrontPagePath({ path, languageCode, channel })` — a logical path (`/c/tools`,
+  `/verify?token=…`) under the language's prefix; throws on a language the channel lacks.
+- `storefrontPagePathFor({ path, channel, requestedLanguage })` — for messages: the
+  requested language when the channel serves it, else the channel default; the logical
+  path when no channel is known. **Every e-mail, redirect or feed that links a storefront
+  page goes through this or `productPath`.**
+- `productPath({ key, languageCode, channel })` — a product page. It used to take
+  `channelDefaultLanguage` and append `?lang=`; it now takes `channel` and never appends
+  `?lang=`. `productDefaultPath(key)` is the unprefixed `x-default` target.
+
+`GET /api/v1/storefront/sales-channel` answers `prefixDefaultLanguage`, `urlLanguages` and
+`urlLanguageAliases`, so a headless storefront never re-derives them. The admin channel
+shapes carry `prefixDefaultLanguage`; it is written by the audited identity Command.
+
 ## Testing your channel-aware code
 
 Use the existing `setupBackendServer()` test harness — it boots the full stack with a fresh `default` channel reconciled against the test seed (`en-US` / `PLN`). For raw-DB-level tests, use `setupTestDb()` and call `DefaultChannelReconciler.run()` yourself, optionally overriding the bootstrap defaults if your test seeds different language/currency codes.

@@ -31,6 +31,9 @@ import { errorBodyOf, setChannelStatus } from '../../helpers/product-scope-fixtu
  * Keys are written through the admin PUT (the Command of Phase 16); the channel
  * pair is this suite's own, both offering `en-US` (default) and `pl-PL`.
  */
+/** Every channel this file inserts: en-US default, pl-PL, created after feature 167's migration (prefixed). */
+const CHANNEL_URL_FACTS = { languages: ['en-US', 'pl-PL'], defaultLanguage: 'en-US', prefixDefaultLanguage: true };
+
 describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
   let h: BackendServerHandle;
   const run = randomUUID().slice(0, 8);
@@ -126,8 +129,27 @@ describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
       kind: 'redirect',
       key: to,
       languageCode: language,
-      // The target is the one helper's answer — channels default to en-US here.
-      path: productPath({ key: to, languageCode: language, channelDefaultLanguage: 'en-US' }),
+      // The target is the one helper's answer — channels default to en-US here and,
+      // created after feature 167's migration, prefix it.
+      path: productPath({ key: to, languageCode: language, channel: CHANNEL_URL_FACTS }),
+      // A former key, or another current key of L: a property of the URL (308).
+      permanent: true,
+    });
+  }
+
+  async function expectCrossLanguageRedirect(
+    key: string,
+    channel: { code: string },
+    language: string,
+    to: string,
+  ): Promise<void> {
+    expect(await resolve(key, channel, language)).toEqual({
+      kind: 'redirect',
+      key: to,
+      languageCode: language,
+      path: productPath({ key: to, languageCode: language, channel: CHANNEL_URL_FACTS }),
+      // A current key of another language can change hands: answered 307.
+      permanent: false,
     });
   }
 
@@ -182,8 +204,55 @@ describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
     // In pl-PL it became the product's redirect `(pl-PL, drill)` (US7 #8).
     await expectRedirect(k('drill'), c1, 'pl-PL', k('wiertarka'));
     await expectRedirect(k('drill'), c2, 'pl-PL', k('wiertarka'));
-    // A key the product holds only in pl-PL is not a key of en-US (K1).
-    await expectAbsent(k('wiertarka'), c1, 'en-US');
+    // A key the product holds only in pl-PL is not a key of en-US (K1): the page is
+    // never rendered under it — feature 167 (FR-024) answers a temporary redirect to
+    // the product's own en-US key instead.
+    await expectCrossLanguageRedirect(k('wiertarka'), c1, 'en-US', k('drill'));
+  });
+
+  // -- Feature 167 (FR-024, research R-9): a key of another channel language ----
+
+  it('redirects (not permanently) a current key of another channel language to the key of L', async () => {
+    const p = await insertProduct(k('grinder'));
+    await putKeys(p, {
+      languageKeys: [
+        { languageCode: 'pl-PL', key: k('szlifierka') },
+        { languageCode: 'en-US', key: k('angle-grinder') },
+      ],
+    });
+    await expectCrossLanguageRedirect(k('szlifierka'), c1, 'en-US', k('angle-grinder'));
+    await expectCrossLanguageRedirect(k('angle-grinder'), c2, 'pl-PL', k('szlifierka'));
+  });
+
+  it('answers not-found when the product is not reachable in L', async () => {
+    const p = await insertProduct(k('sander'));
+    await putKeys(p, { languageKeys: [{ languageCode: 'pl-PL', key: k('szlifierka-tasmowa') }] });
+    await sql(
+      `insert into product_channel_language_scopes (product_id, sales_channel_id, language_code, status, created_at, updated_at)
+       values (?, ?, 'en-US', 'inactive', now(), now())`,
+      [p, c1.id],
+    );
+    try {
+      await expectAbsent(k('szlifierka-tasmowa'), c1, 'en-US');
+    } finally {
+      await sql(`delete from product_channel_language_scopes where product_id = ?`, [p]);
+    }
+  });
+
+  it('does not consider a key of a language the channel does not serve (XII)', async () => {
+    const p = await insertProduct(k('planer'));
+    // Written directly: the test dictionary seeds no de-DE, and the point is a key row
+    // of a language outside the channel's list.
+    await sql(
+      `insert into product_url_keys (id, product_id, language_code, sales_channel_id, key, created_at, updated_at)
+       values (gen_random_uuid(), ?, 'de-DE', null, ?, now(), now())`,
+      [p, k('hobel')],
+    );
+    try {
+      await expectAbsent(k('hobel'), c1, 'en-US');
+    } finally {
+      await sql(`delete from product_url_keys where product_id = ? and language_code = 'de-DE'`, [p]);
+    }
   });
 
   it('redirects another current key of the product in L to its effective key at (C, L)', async () => {
@@ -353,18 +422,35 @@ describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
       });
       expect(res.statusCode, res.body).toBe(200);
       return (res.json() as {
-        data: { slug: string; paths: { canonical: string; alternates: Array<{ languageCode: string; path: string }> } };
+        data: { slug: string; paths: { canonical: string; alternates: Array<{ languageCode: string; path: string }>; xDefault: string } };
       }).data;
     };
 
     const atC1pl = await pdp(c1, 'pl-PL');
     expect(atC1pl.slug).toBe(k('klucz'));
-    expect(atC1pl.paths.canonical).toBe(`/p/${k('klucz')}?lang=pl-PL`);
+    expect(atC1pl.paths.canonical).toBe(`/pl/p/${k('klucz')}`);
     expect([...atC1pl.paths.alternates].sort((a, b) => a.languageCode.localeCompare(b.languageCode))).toEqual([
-      { languageCode: 'en-US', path: `/p/${k('wrench')}` },
-      { languageCode: 'pl-PL', path: `/p/${k('klucz')}?lang=pl-PL` },
+      { languageCode: 'en-US', path: `/en/p/${k('wrench')}` },
+      { languageCode: 'pl-PL', path: `/pl/p/${k('klucz')}` },
     ]);
-    expect((await pdp(c2, 'pl-PL')).paths.canonical).toBe(`/p/${k('klucz-c2')}?lang=pl-PL`);
+    expect((await pdp(c2, 'pl-PL')).paths.canonical).toBe(`/pl/p/${k('klucz-c2')}`);
+    // Feature 167 (url-shape §8) — x-default is the unprefixed URL of the default
+    // language's key, in both setting states.
+    expect(atC1pl.paths.xDefault).toBe(`/p/${k('wrench')}`);
+    await sql(`update sales_channels set prefix_default_language = false where id = ?`, [c1.id]);
+    await h.salesChannels.cache.invalidateAll();
+    try {
+      const off = await pdp(c1, 'en-US');
+      expect(off.paths.canonical).toBe(`/p/${k('wrench')}`);
+      expect([...off.paths.alternates].sort((a, b) => a.languageCode.localeCompare(b.languageCode))).toEqual([
+        { languageCode: 'en-US', path: `/p/${k('wrench')}` },
+        { languageCode: 'pl-PL', path: `/pl/p/${k('klucz')}` },
+      ]);
+      expect(off.paths.xDefault).toBe(`/p/${k('wrench')}`);
+    } finally {
+      await sql(`update sales_channels set prefix_default_language = true where id = ?`, [c1.id]);
+      await h.salesChannels.cache.invalidateAll();
+    }
     expect((await pdp(c1, 'en-US')).slug).toBe(k('wrench'));
 
     // An alternate is listed only where the product is available to the anonymous audience.
@@ -375,7 +461,7 @@ describe('URL-key resolution at (C, L) (spec 163, T107)', () => {
     );
     try {
       const atC1en = await pdp(c1, 'en-US');
-      expect(atC1en.paths.alternates).toEqual([{ languageCode: 'en-US', path: `/p/${k('wrench')}` }]);
+      expect(atC1en.paths.alternates).toEqual([{ languageCode: 'en-US', path: `/en/p/${k('wrench')}` }]);
     } finally {
       await sql(`delete from product_channel_language_scopes where product_id = ?`, [p]);
     }

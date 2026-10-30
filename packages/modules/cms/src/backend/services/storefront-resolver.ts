@@ -2,6 +2,7 @@ import type { EntityManager } from '@mikro-orm/postgresql';
 import {
   cmsLocalizedPage,
   cmsPageUrl,
+  type ChannelUrlFacts,
   type CmsAssetEmbedResolution,
   type CmsPageIndexEntry,
   type CmsPageTranslations,
@@ -18,7 +19,7 @@ import {
   loadChannelPageNodes,
   type ChannelPageNode,
 } from './page-paths.js';
-import type { CmsCache } from './cms-cache.js';
+import { CmsCache } from './cms-cache.js';
 
 export type CmsAssetResolver = (assetId: string) => Promise<CmsAssetEmbedResolution | null>;
 
@@ -87,7 +88,30 @@ export type ResolvedChannel = {
   id: string;
   code: string;
   defaultLanguage: string;
+  /**
+   * Feature 167 — the channel's languages and *prefix the default language* setting,
+   * for the language prefix on every CMS URL answered. Optional for callers that
+   * predate them: the default language alone, prefixed (the column default).
+   */
+  languages?: readonly string[];
+  prefixDefaultLanguage?: boolean;
 };
+
+/** The URL-language facts of a resolved channel (feature 167). */
+function channelUrlFactsOf(channel: ResolvedChannel): ChannelUrlFacts {
+  return {
+    languages: channel.languages && channel.languages.length > 0 ? channel.languages : [channel.defaultLanguage],
+    defaultLanguage: channel.defaultLanguage,
+    prefixDefaultLanguage: channel.prefixDefaultLanguage ?? true,
+  };
+}
+
+/** Whether the channel serves `language` — only those get a URL (feature 167, FR-005). */
+function servesLanguage(facts: ChannelUrlFacts, language: string): boolean {
+  return (
+    facts.defaultLanguage === language || facts.languages.some((l) => l.toLowerCase() === language.toLowerCase())
+  );
+}
 
 function toChannelRow(channel: ResolvedChannel): ChannelRow {
   return { id: channel.id, code: channel.code, default_language: channel.defaultLanguage };
@@ -199,8 +223,13 @@ export class StorefrontResolver {
     const channel = toChannelRow(input.resolvedChannel);
 
     const cacheLanguage = input.language ?? channel.default_language;
+    // Feature 167 — the answer carries URLs under the channel's language prefixes, so
+    // the cache entry is keyed by the facts they are derived from too: a flipped
+    // *prefix the default language* or a changed language list misses it.
+    const urlFacts = channelUrlFactsOf(input.resolvedChannel);
+    const cacheChannel = CmsCache.pageChannel(channel.code, urlFacts);
     if (this.cache) {
-      const cached = await this.cache.getPage(input.slug, channel.code, cacheLanguage);
+      const cached = await this.cache.getPage(input.slug, cacheChannel, cacheLanguage);
       if (cached) return this.withDefaultShareImage(cached, channel);
     }
 
@@ -241,15 +270,22 @@ export class StorefrontResolver {
     ];
     const assets = await this.resolveAssetsForTrees(embedTrees);
     const languages = this.servableLanguages(page, language);
+    // Feature 167 — every URL under the language's path prefix; a language the
+    // channel does not serve has no URL there, so it is not an alternate, and a page
+    // served in one is addressed in the channel default language.
     const urlIn = (lang: string, langPath: string): string =>
-      cmsPageUrl({ path: langPath, languageCode: lang, channelDefaultLanguage: channel.default_language });
+      cmsPageUrl({
+        path: langPath,
+        languageCode: servesLanguage(urlFacts, lang) ? lang : urlFacts.defaultLanguage,
+        channel: urlFacts,
+      });
 
     const resolved: CmsResolvedPage = {
       id: page.id,
       slug: page.slug,
       path,
       url: urlIn(language, path),
-      alternates: languages.map((lang) => ({
+      alternates: languages.filter((lang) => servesLanguage(urlFacts, lang)).map((lang) => ({
         language: lang,
         url: urlIn(
           lang,
@@ -279,7 +315,7 @@ export class StorefrontResolver {
       languages,
     };
     if (this.cache) {
-      await this.cache.setPage(input.slug, channel.code, cacheLanguage, resolved);
+      await this.cache.setPage(input.slug, cacheChannel, cacheLanguage, resolved);
     }
     return this.withDefaultShareImage(resolved, channel);
   }
@@ -422,14 +458,16 @@ export class StorefrontResolver {
       }
       return paths.get(pageId);
     };
+    const urlFacts = channelUrlFactsOf(channel);
     return rows.map((row) => {
-      const languages = row.servable_languages ?? [];
+      // Feature 167 — only the languages the channel serves have a URL here.
+      const languages = (row.servable_languages ?? []).filter((language) => servesLanguage(urlFacts, language));
       const primary = languages.includes(channel.defaultLanguage) ? channel.defaultLanguage : languages[0];
       const urlIn = (language: string) =>
         cmsPageUrl({
           path: pathIn(row.id, language) ?? row.slug,
           languageCode: language,
-          channelDefaultLanguage: channel.defaultLanguage,
+          channel: urlFacts,
         });
       return {
         slug: row.slug,

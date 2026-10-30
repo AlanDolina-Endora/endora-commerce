@@ -50,6 +50,7 @@ const FAKE_CHANNEL = {
   name: { en: 'Default' },
   active: true,
   anonymousAccess: true,
+  prefixDefaultLanguage: true,
   systemDefault: true,
   defaultLanguage: 'en',
   defaultCurrency: 'PLN',

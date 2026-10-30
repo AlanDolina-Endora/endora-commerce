@@ -63,6 +63,29 @@ That list links each store when the channel's **Storefront URL** setting is fill
 
 When this rule was introduced, every existing Organization was assigned the system-default channel and every channel it already had orders on, so no existing customer lost access to a store they had bought in.
 
+## Prefixing the default language in URLs {#prefix-default-language}
+
+On the channel's edit screen, **Prefix the default language in URLs** decides whether the
+channel's default language carries its prefix in storefront addresses (`/pl/p/wiertarka`)
+or not (`/p/wiertarka`). Every other language of the channel is always prefixed
+(`/en/p/drill`). Under the switch the screen lists the prefix of every language of the
+channel, recomputed as you change the languages.
+
+- New channels start with the switch **on**. Channels that existed before the upgrade that
+  introduced the switch start **off**, so their addresses did not change.
+- **Switching it on** moves every default-language address under its prefix. Old addresses
+  are redirected (307) to the language chosen by the visitor's `?lang=`, `lang` cookie or
+  browser languages — nothing indexed or bookmarked breaks.
+- **Switching it off** makes the unprefixed address the default language again; the
+  prefixed one answers a permanent redirect to it.
+- **Changing the channel's languages changes addresses too**: a new language gets a prefix,
+  and adding a second variant of a language (`en-GB` beside `en-US`) switches both to full
+  prefixes (`/en-us`, `/en-gb`) while `/en` keeps redirecting.
+- Browsers may keep a permanent redirect they cached for up to an hour after a change.
+- Operators with read-only access to sales channels see the switch disabled.
+- A CMS page whose slug starts with a language prefix (for example `en`) cannot be saved;
+  an existing one is marked in the CMS page list as hidden by the language prefix.
+
 ## Deactivating a channel
 
 Use the **Deactivate** button on the channel detail page. Deactivation is idempotent and reversible:

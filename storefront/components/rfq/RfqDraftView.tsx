@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useLocalizedPath } from '../../lib/i18n/localized-link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { lineAmountHalfUp, moneySum, unitPriceDisplayText } from '@endora-commerce/contracts';
 import { formatMoney as formatMoneyShared, type FormatMoneyOptions } from '../../lib/i18n/money';
@@ -24,6 +24,7 @@ import type { CreateRfqLine } from '../../lib/api/rfq';
 import { belowMinimumText } from '../../lib/cartMinimum';
 import { formatCount, minimumStatement } from '../../lib/orderMinimum';
 import { tForLocale } from '../../lib/i18n/messages';
+import { LocalizedLink, LocalizedAnchor } from '../../lib/i18n/localized-link';
 
 /**
  * Quote-request draft view — the cart-modelled "review & submit" page at
@@ -59,6 +60,7 @@ export function RfqDraftView(props: {
   const t = strings(pl);
   const proposalsAllowed = props.priceProposalsAllowed;
   const router = useRouter();
+  const localize = useLocalizedPath();
 
   const [items, setItems] = useState<RfqDraftItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -128,14 +130,14 @@ export function RfqDraftView(props: {
         items: buildSubmitItems(items, proposalsAllowed),
       });
       if (!result.ok && result.reason === 'auth') {
-        window.location.href = '/login?next=/quote-request';
+        window.location.href = localize(`/login?next=${encodeURIComponent(localize('/quote-request'))}`);
         return;
       }
       if (!result.ok) {
         throw new Error(result.message || t.errorGeneric);
       }
       clearRfqDraft();
-      router.push(`/quote-requests/success?id=${result.id}`);
+      router.push(localize(`/quote-requests/success?id=${result.id}`));
     } catch (err) {
       setError(err instanceof Error ? err.message : t.errorGeneric);
       setSubmitting(false);
@@ -154,12 +156,12 @@ export function RfqDraftView(props: {
           <h1 className="m-0 mb-2 text-[22px] font-semibold text-fg">{t.heading}</h1>
           <p className="m-0 mb-[18px] text-[14px] text-muted">{t.empty}</p>
           <div className="flex justify-center gap-3">
-            <Link href="/catalog" className="btn btn--dark">
+            <LocalizedLink href="/catalog" className="btn btn--dark">
               {t.browseCatalog}
-            </Link>
-            <Link href="/quote-requests" className="btn btn--outline">
+            </LocalizedLink>
+            <LocalizedLink href="/quote-requests" className="btn btn--outline">
               {t.myRequests}
-            </Link>
+            </LocalizedLink>
           </div>
         </div>
       </div>
@@ -174,9 +176,9 @@ export function RfqDraftView(props: {
           <h1 className="m-0 text-[24px] font-semibold tracking-[-0.02em] text-fg">{t.heading}</h1>
           <p className="mt-1 text-[13px] text-muted">{t.subheading(items.length)}</p>
         </div>
-        <Link href="/quote-requests" className="btn btn--outline btn--sm">
+        <LocalizedLink href="/quote-requests" className="btn btn--outline btn--sm">
           {t.myRequests}
-        </Link>
+        </LocalizedLink>
       </header>
 
       {error ? (
@@ -216,9 +218,9 @@ export function RfqDraftView(props: {
           ))}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-[22px] py-[18px]">
-            <Link href="/catalog" className="btn btn--ghost">
+            <LocalizedLink href="/catalog" className="btn btn--ghost">
               ← {t.continueShopping}
-            </Link>
+            </LocalizedLink>
             <button
               type="button"
               onClick={(): void => {
@@ -372,12 +374,12 @@ export function DraftLine({
 
       <div className="flex min-w-0 flex-col gap-[2px]">
         {line.slug ? (
-          <a
+          <LocalizedAnchor
             href={`/p/${encodeURIComponent(line.slug)}`}
             className="line-clamp-2 text-[14px] font-semibold leading-[1.3] text-fg no-underline hover:underline"
           >
             {line.name}
-          </a>
+          </LocalizedAnchor>
         ) : (
           <span className="line-clamp-2 text-[14px] font-semibold leading-[1.3] text-fg">
             {line.name}
@@ -532,9 +534,9 @@ function Breadcrumbs({ t }: { t: Strings }): ReactNode {
       aria-label="Breadcrumb"
       className="my-[8px] mb-[16px] flex gap-[6px] text-[13px] text-[color:var(--ink-500)]"
     >
-      <Link href="/" className="text-inherit">
+      <LocalizedLink href="/" className="text-inherit">
         {t.home}
-      </Link>
+      </LocalizedLink>
       <span aria-hidden="true">/</span>
       <span className="text-[color:var(--ink-900)]">{t.heading}</span>
     </nav>

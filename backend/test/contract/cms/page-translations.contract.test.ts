@@ -21,8 +21,8 @@ import { AuditLogEntry, SalesChannel } from '@endora-commerce/platform/kernel';
  * - `by-slug` finds the page by its address in the requested language, else in
  *   any other, else by its own slug, and answers it in the requested language
  *   at that language's `path` — so the storefront redirects a switched language
- *   to the page's slug in it. `url` and `alternates` carry `?lang=` for a
- *   language other than the channel default (`cmsPageUrl`).
+ *   to the page's slug in it. `url` and `alternates` carry the language's path
+ *   prefix (`cmsPageUrl`; feature 167 replaced R24's interim `?lang=`).
  */
 const RUN = `pb163t-${randomUUID().slice(0, 8)}`;
 const EN = 'en-US';
@@ -197,13 +197,13 @@ describe('CMS page translations contract (feature 163, R24)', () => {
   it('serves a language at its own slug, name and URL, with every language as an alternate', async () => {
     const { page: created, slug, plSlug } = await about('serve');
     const pl = await resolved(plSlug, PL);
-    expect(pl).toMatchObject({ id: created.id, language: PL, name: 'O nas', path: plSlug, url: `/${plSlug}?lang=${PL}` });
+    expect(pl).toMatchObject({ id: created.id, language: PL, name: 'O nas', path: plSlug, url: `/pl/${plSlug}` });
     expect(pl.alternates).toEqual([
-      { language: EN, url: `/${slug}` },
-      { language: PL, url: `/${plSlug}?lang=${PL}` },
+      { language: EN, url: `/en/${slug}` },
+      { language: PL, url: `/pl/${plSlug}` },
     ]);
     const en = await resolved(slug, EN);
-    expect(en).toMatchObject({ language: EN, name: `Page ${slug}`, path: slug, url: `/${slug}` });
+    expect(en).toMatchObject({ language: EN, name: `Page ${slug}`, path: slug, url: `/en/${slug}` });
   });
 
   it('finds the page by another language’s slug and answers the requested language’s path', async () => {
@@ -307,10 +307,10 @@ describe('CMS page translations contract (feature 163, R24)', () => {
     }).data.pages;
     expect(pages.find((entry) => entry.slug === slug)).toMatchObject({
       path: slug,
-      url: `/${slug}`,
+      url: `/en/${slug}`,
       alternates: [
-        { language: EN, url: `/${slug}` },
-        { language: PL, url: `/${plSlug}?lang=${PL}` },
+        { language: EN, url: `/en/${slug}` },
+        { language: PL, url: `/pl/${plSlug}` },
       ],
     });
   });

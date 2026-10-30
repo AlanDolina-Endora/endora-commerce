@@ -13,6 +13,8 @@ const state = { anonymousAccess: false };
 
 vi.mock('../../lib/server-context', () => ({
   getServerContext: async () => ({
+    // Feature 167 — no URL languages known: paths stay as written.
+    urlState: { languages: [], aliases: [], current: 'en-US' },
     ctx: { locale: 'en-US', salesChannelCode: 'trade' },
     locale: 'en-US',
     anonymousAccess: state.anonymousAccess,

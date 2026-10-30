@@ -1,4 +1,5 @@
-import { CmsRenderProvider, type CmsRenderLocation } from '@endora-commerce/cms-components/components/render-context';
+import type { CmsRenderLocation } from '@endora-commerce/cms-components/components/render-context';
+import { LocalizedCmsRenderProvider } from './LocalizedCmsRenderProvider';
 // Self-contained, prefix-isolated stylesheet for the CMS Page Builder components
 // (feature 041, FR-012a). SSR-safe — bundled globally by Next at build time.
 import '@endora-commerce/cms-components/styles.css';
@@ -58,7 +59,7 @@ export function CmsPageRenderer({
   );
 
   return (
-    <CmsRenderProvider
+    <LocalizedCmsRenderProvider
       embeds={embeds}
       assets={assets}
       mediaBaseUrl={mediaBaseUrl}
@@ -78,6 +79,6 @@ export function CmsPageRenderer({
         <PageBuilderRender data={page.content.data} pageContainer />
       </BlockData>
       <Hook code="cms.page.bottom" />
-    </CmsRenderProvider>
+    </LocalizedCmsRenderProvider>
   );
 }

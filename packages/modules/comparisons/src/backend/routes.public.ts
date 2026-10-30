@@ -8,6 +8,7 @@ import {
   type OrganizationDetailsPort,
   comparisonAddProductInputSchema,
   comparisonSetDisplayModeInputSchema,
+  storefrontPagePathFor,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
 import { productAudienceOf } from '@endora-commerce/platform/http';
@@ -286,6 +287,8 @@ export async function registerComparisonsPublicRoutes(
           customerName: account ? `${account.firstName} ${account.lastName}`.trim() || account.email : null,
           organizationName: organization?.name ?? null,
           storefrontUrl: await storefrontUrlOf(context.settings, channel.id),
+          // Feature 167 — the share page in the document's language.
+          pagePath: (path) => storefrontPagePathFor({ path, channel, requestedLanguage: language }),
           hideEmptyRows: hideEmptyRows === 'true',
           now: new Date(),
         });

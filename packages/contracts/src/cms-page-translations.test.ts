@@ -53,21 +53,30 @@ describe('cmsLocalizedPage (R24)', () => {
   });
 });
 
-describe('cmsPageUrl (R24)', () => {
-  it('is the bare path in the channel default language', () => {
-    expect(cmsPageUrl({ path: 'o-nas', languageCode: 'pl-PL', channelDefaultLanguage: 'pl-PL' })).toBe('/o-nas');
+describe('cmsPageUrl (R24, under the feature 167 language prefix)', () => {
+  const channel = (prefixDefaultLanguage: boolean) => ({
+    languages: ['pl-PL', 'en-US'],
+    defaultLanguage: 'pl-PL',
+    prefixDefaultLanguage,
   });
 
-  it('carries the language when it is not the channel default', () => {
-    expect(cmsPageUrl({ path: 'about-us', languageCode: 'en-US', channelDefaultLanguage: 'pl-PL' })).toBe(
-      '/about-us?lang=en-US',
-    );
+  it('is the bare path in the default language of a channel that does not prefix it', () => {
+    expect(cmsPageUrl({ path: 'o-nas', languageCode: 'pl-PL', channel: channel(false) })).toBe('/o-nas');
+  });
+
+  it('carries the language as its path prefix, never ?lang=', () => {
+    expect(cmsPageUrl({ path: 'about-us', languageCode: 'en-US', channel: channel(false) })).toBe('/en/about-us');
+    expect(cmsPageUrl({ path: 'o-nas', languageCode: 'pl-PL', channel: channel(true) })).toBe('/pl/o-nas');
   });
 
   it('normalises the slashes of a nested path', () => {
-    expect(cmsPageUrl({ path: '/services/consulting/', languageCode: 'pl-PL', channelDefaultLanguage: 'pl-PL' })).toBe(
+    expect(cmsPageUrl({ path: '/services/consulting/', languageCode: 'pl-PL', channel: channel(false) })).toBe(
       '/services/consulting',
     );
+  });
+
+  it('answers the language home for an empty path', () => {
+    expect(cmsPageUrl({ path: '', languageCode: 'en-US', channel: channel(true) })).toBe('/en');
   });
 });
 

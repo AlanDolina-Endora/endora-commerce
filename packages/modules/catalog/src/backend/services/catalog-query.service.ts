@@ -22,6 +22,7 @@ import { resolvePrimaryAssetUrls } from './primary-asset-url.js';
 import { effectiveGallery, loadGalleryChannelOverrides } from './gallery-scopes.js';
 import { loadAttachmentsHiddenInChannel } from './attachment-packaging-scopes.js';
 import { viewerOrganizationFor } from './viewer-organization.js';
+import { channelUrlFactsOf } from './channel-url-facts.js';
 import {
   effectiveAttributeValues,
   effectiveSystemText,
@@ -55,6 +56,7 @@ import {
   ANONYMOUS_PRODUCT_AUDIENCE,
   ERROR_CODES,
   compareDecimal,
+  productDefaultPath,
   productPath,
   decimalText,
   formatUnits,
@@ -192,7 +194,14 @@ export interface CatalogResolvedChannel {
    * may not offer.
    */
   languages?: readonly string[] | undefined;
+  /**
+   * Feature 167 — whether the channel prefixes its default language in storefront
+   * URLs, from the resolved record. Optional only for fixtures that predate it; an
+   * absent value is the column default, on (OR-1).
+   */
+  prefixDefaultLanguage?: boolean | undefined;
 }
+
 
 export interface CatalogQueryContext {
   /** The request's resolved sales channel (from `getResolvedChannel()`). */
@@ -2014,7 +2023,7 @@ export class CatalogQueryService {
   /**
    * Feature 163 (FR-074, `contracts/url-keys-and-redirects.md` §6) — the page's
    * canonical at the request's (C, L) and its alternate-language paths, built with
-   * `productPath()` here because only catalog knows the channel's default language
+   * `productPath()` here because only catalog knows the channel's URL languages
    * and where the product is available. An alternate is listed only for a channel
    * language where the product is available to the **anonymous** audience,
    * whoever is asking: `hreflang` tells a crawler what it may open.
@@ -2028,11 +2037,12 @@ export class CatalogQueryService {
   ): ProductPagePaths {
     const scope = this.#availabilityScope(ctx);
     const channel = scope.channel;
+    const urlFacts = channelUrlFactsOf(ctx.resolvedChannel);
     const pathAt = (languageCode: string): string =>
       productPath({
         key: keys.get(languageCode) ?? product.slug,
         languageCode,
-        channelDefaultLanguage: channel.defaultLanguage,
+        channel: urlFacts,
       });
     const alternates = channel.languages
       .filter((languageCode) =>
@@ -2043,7 +2053,10 @@ export class CatalogQueryService {
         }),
       )
       .map((languageCode) => ({ languageCode, path: pathAt(languageCode) }));
-    return { canonical: pathAt(scope.languageCode), alternates };
+    // Feature 167 (url-shape §8) — `x-default` is the unprefixed URL of the key at the
+    // channel's default language, in both setting states.
+    const xDefault = productDefaultPath(keys.get(channel.defaultLanguage) ?? product.slug);
+    return { canonical: pathAt(scope.languageCode), alternates, xDefault };
   }
 
   /**

@@ -90,6 +90,7 @@ function channel(over: Partial<SalesChannelDetail> = {}): SalesChannelDetail {
     name: { 'en-US': 'Serwis A' },
     active: true,
     anonymousAccess: true,
+    prefixDefaultLanguage: true,
     systemDefault: false,
     defaultLanguage: 'en-US',
     defaultCurrency: 'PLN',

@@ -62,6 +62,14 @@ async function setSetting(h: BackendServerHandle, code: string, value: boolean):
   });
 }
 
+/**
+ * Feature 167 — the storefront page a federated sign-in returns to carries the
+ * started-on channel's language prefix (the mfa unit tests pin which one); these
+ * cases are about the rest of the address.
+ */
+const withoutLanguagePrefix = (location: string | undefined): string =>
+  (location ?? '').replace(/^(https?:\/\/[^/]+)\/[a-z]{2,3}(?:-[a-z0-9]+)?(?=\/login)/, '$1');
+
 describe('mfa sign-in paths — sales-channel access (T045)', () => {
   let h: BackendServerHandle;
 
@@ -142,7 +150,7 @@ describe('mfa sign-in paths — sales-channel access (T045)', () => {
       const sessionsBefore = await sessionCount();
       const res = await callback(await start(OTHER));
       expect(res.statusCode).toBe(302);
-      expect(res.headers['location']).toBe(`${STOREFRONT}/login?error=sales_channel_not_permitted`);
+      expect(withoutLanguagePrefix(res.headers['location'])).toBe(`${STOREFRONT}/login?error=sales_channel_not_permitted`);
       expect(res.cookies.find((c) => c.name === 'b2b_session' && c.value)).toBeUndefined();
       expect(await sessionCount()).toBe(sessionsBefore);
     });
@@ -186,7 +194,7 @@ describe('mfa sign-in paths — sales-channel access (T045)', () => {
       const organizationsBefore = await h.em().count(Organization, {});
       const res = await callback(await start(CLOSED), email);
       expect(res.statusCode).toBe(302);
-      expect(res.headers['location']).toBe(
+      expect(withoutLanguagePrefix(res.headers['location'])).toBe(
         `${STOREFRONT}/login?error=sales_channel_sign_in_required`,
       );
       expect(res.cookies.find((c) => c.name === 'b2b_session' && c.value)).toBeUndefined();
