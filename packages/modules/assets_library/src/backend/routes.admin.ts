@@ -65,15 +65,19 @@ export function isVisibleAssetGuard(handler: unknown): boolean {
  * (status, code, message), before the handler reads a body or a multipart
  * stream — so a hidden asset's replace stages no bytes. The restricted owners
  * are asked whether or not the row exists, so a hidden id and a missing id
- * issue the same first reads. `routes.admin.guard.test.ts` fails a route that
- * takes an asset id without it.
+ * issue the same first reads. An id not in the canonical uuid spelling
+ * answers not-found too, and the handler sees the id in lower case.
+ * `routes.admin.guard.test.ts` fails a route that takes an asset id without it.
  */
 function createRequireVisibleAsset(
   visibility: AdminRoutesDeps['visibility'],
 ): (req: FastifyRequest, reply: FastifyReply) => Promise<void> {
   const guard = async (req: FastifyRequest): Promise<void> => {
-    const { id } = req.params as { id: string };
-    await visibility.assertVisible(id);
+    const params = req.params as { id: string };
+    // The handler reads the canonical id the guard checked, never the spelling
+    // the caller sent: a non-canonical one has already answered not-found
+    // (review T055, F-1).
+    params.id = await visibility.assertVisible(params.id);
   };
   (guard as unknown as Record<symbol, unknown>)[VISIBLE_ASSET_GUARD] = true;
   return guard;

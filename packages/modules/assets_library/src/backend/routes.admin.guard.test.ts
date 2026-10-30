@@ -22,7 +22,7 @@ function isGate(fn: unknown): boolean {
   return typeof fn === 'function' && (fn as unknown as Record<symbol, unknown>)[GATE] === true;
 }
 
-async function recordRoutes(): Promise<RecordedRoute[]> {
+async function recordRoutes(visibility: Partial<AssetVisibility> = {}): Promise<RecordedRoute[]> {
   const routes: RecordedRoute[] = [];
   const record =
     (method: string) =>
@@ -49,7 +49,7 @@ async function recordRoutes(): Promise<RecordedRoute[]> {
       throw new Error('not used while registering');
     },
     requireAdmin,
-    visibility: {} as AssetVisibility,
+    visibility: visibility as AssetVisibility,
   } as unknown as AdminRoutesDeps;
   await registerAssetsLibraryAdminRoutes(app, deps);
   return routes;
@@ -142,6 +142,41 @@ describe('requireVisibleAsset on every :id route (R-7)', () => {
       expect(
         unguardedAssetIdRoutes([{ method: 'DELETE', url: '/api/v1/admin/assets/folders/:folderId', preHandler: gate }]),
       ).toEqual([]);
+    });
+  });
+
+  // Review T055, F-1: the handler must never see the spelling the caller sent.
+  describe('the guard hands the handler the id it checked', () => {
+    async function guardOver(visibility: Partial<AssetVisibility>): Promise<(req: unknown) => Promise<void>> {
+      const routes = await recordRoutes(visibility);
+      const route = routes.find((r) => r.url === '/api/v1/admin/assets/:id' && r.method === 'GET')!;
+      return (route.preHandler as unknown[]).find(isVisibleAssetGuard) as (req: unknown) => Promise<void>;
+    }
+
+    it('replaces the parameter with the canonical id assertVisible answers', async () => {
+      const asked: string[] = [];
+      const guard = await guardOver({
+        assertVisible: async (id: string) => {
+          asked.push(id);
+          return id.toLowerCase();
+        },
+      });
+      const req = { params: { id: 'AAAAAAAA-0000-4000-8000-0000000000A1' } };
+      await guard(req);
+      expect(asked).toEqual(['AAAAAAAA-0000-4000-8000-0000000000A1']);
+      expect(req.params.id).toBe('aaaaaaaa-0000-4000-8000-0000000000a1');
+    });
+
+    it('lets a refusal through untouched, leaving the parameter as sent', async () => {
+      const refusal = new Error('not found');
+      const guard = await guardOver({
+        assertVisible: async () => {
+          throw refusal;
+        },
+      });
+      const req = { params: { id: 'aaaaaaaa00004000800000000000000a1' } };
+      await expect(guard(req)).rejects.toBe(refusal);
+      expect(req.params.id).toBe('aaaaaaaa00004000800000000000000a1');
     });
   });
 });

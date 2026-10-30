@@ -225,11 +225,21 @@ export class AssetVisibility {
   /**
    * The by-id guard's question (R-7): pass, or throw the error a missing row
    * gets. The restricted descriptors are asked whether or not the row exists,
-   * so a hidden id and a missing one issue the same first reads. An id that is
-   * not a uuid names no asset; it is left to the service, as before.
+   * so a hidden id and a missing one issue the same first reads.
+   *
+   * **Only the canonical spelling passes** (review T055, F-1). Postgres also
+   * reads a uuid without hyphens, in braces or grouped otherwise, so an id
+   * that is not canonical may still name a row — and the owners, whose hits
+   * are keyed by the canonical id, would not match it. Any such spelling
+   * answers as a missing asset, for every caller and asking nobody; the
+   * canonical form in upper case is checked — and refused — as its lower-case
+   * self, which is the id the service names when the row is missing. Answers
+   * the id the handler must use from here on, always lower case.
    */
-  async assertVisible(assetId: string): Promise<void> {
-    if (!isAssetIdShaped(assetId)) return;
-    if ((await this.hiddenAmong([assetId])).has(assetId)) throw assetNotFound(assetId);
+  async assertVisible(assetId: string): Promise<string> {
+    if (!isAssetIdShaped(assetId)) throw assetNotFound(assetId);
+    const canonical = assetId.toLowerCase();
+    if ((await this.hiddenAmong([canonical])).has(canonical)) throw assetNotFound(canonical);
+    return canonical;
   }
 }

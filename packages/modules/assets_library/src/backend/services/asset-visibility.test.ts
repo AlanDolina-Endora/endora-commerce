@@ -498,10 +498,52 @@ describe('AssetVisibility.assertVisible (R-7, FR-012)', () => {
     expect(tasks.calls.findReferences).toEqual([[A1], [A2]]);
   });
 
-  it('leaves an id that is not a uuid to the service, asking nobody', async () => {
-    const tasks = restricted('tasks', 'task_attachment', {}, []);
+  // T055 F-1: Postgres also parses a uuid without hyphens, in braces or
+  // grouped otherwise, so "not canonical" does not mean "names no asset". Every
+  // such spelling answers as a missing asset, for every caller, asking nobody.
+  const SPELLINGS: Array<[string, string]> = [
+    ['not a uuid', 'not-a-uuid'],
+    ['without hyphens', A1.replaceAll('-', '')],
+    ['in braces', `{${A1}}`],
+    ['grouped otherwise', `${A1.replaceAll('-', '').slice(0, 4)}-${A1.replaceAll('-', '').slice(4)}`],
+    ['with a trailing space', `${A1} `],
+  ];
+
+  it.each(SPELLINGS)('answers an id %s exactly as a missing asset, asking nobody', async (_label, spelled) => {
+    for (const context of [asAdmin(), asWildcard(), asSystem()]) {
+      const tasks = restricted('tasks', 'task_attachment', { [A1]: ['t1'] }, ['t1']);
+      const h = harness([tasks], { context });
+      const thrown = await h.visibility.assertVisible(spelled).then(
+        () => null,
+        (err: unknown) => err,
+      );
+      const missing = assetNotFound(spelled);
+      expect(thrown).toBeInstanceOf(HttpError);
+      const err = thrown as HttpError;
+      expect([err.statusCode, err.code, err.message, err.details]).toEqual([
+        missing.statusCode,
+        missing.code,
+        missing.message,
+        missing.details,
+      ]);
+      expect(tasks.calls.findReferences).toEqual([]);
+    }
+  });
+
+  it('answers the canonical id in lower case, and checks an upper-case spelling as that id', async () => {
+    const tasks = restricted('tasks', 'task_attachment', { [A1]: ['t1'] }, ['t1']);
     const h = harness([tasks]);
-    await h.visibility.assertVisible('not-a-uuid');
-    expect(tasks.calls.findReferences).toEqual([]);
+    expect(await h.visibility.assertVisible(A1)).toBe(A1);
+    expect(await h.visibility.assertVisible(A1.toUpperCase())).toBe(A1);
+    expect(tasks.calls.findReferences).toEqual([[A1], [A1]]);
+
+    const hiddenTasks = restricted('tasks', 'task_attachment', { [A1]: ['t1'] }, []);
+    const hidden = harness([hiddenTasks]);
+    // Refused as the lower-case id, which is what the service names for a missing row.
+    await expect(hidden.visibility.assertVisible(A1.toUpperCase())).rejects.toMatchObject({
+      statusCode: 404,
+      code: ERROR_CODES.ASSET_NOT_FOUND,
+      message: assetNotFound(A1).message,
+    });
   });
 });

@@ -403,6 +403,63 @@ describe('assets library — reference visibility (feature 166)', () => {
       }
     });
 
+    /**
+     * Review T055, F-1: Postgres also reads a uuid without hyphens, in braces
+     * or grouped otherwise, so a guard that left every non-canonical id to the
+     * service let a hidden file through by its other spellings. The canonical
+     * form in upper case is the same id in another case.
+     */
+    const spellings = (id: string): Array<[string, string]> => {
+      const bare = id.replaceAll('-', '');
+      return [
+        ['without hyphens', bare],
+        ['in braces', `{${id}}`],
+        ['in upper case', id.toUpperCase()],
+        ['grouped otherwise', `${bare.slice(0, 4)}-${bare.slice(4, 16)}-${bare.slice(16)}`],
+      ];
+    };
+
+    it('every by-id route answers every other spelling of a hidden file exactly as the same spelling of a random uuid', async () => {
+      for (const [who, person] of [['B', B], ['N', N]] as const) {
+        for (const route of BY_ID_ROUTES) {
+          const missing = randomUUID();
+          const canonical = normalised(await route.send(missing, person.cookies), missing);
+          const hiddenSpellings = spellings(files.privateTask);
+          const missingSpellings = spellings(missing);
+          for (const [index, [spelling, hiddenId]] of hiddenSpellings.entries()) {
+            const missingId = missingSpellings[index]![1];
+            const label = `${who} · row ${route.row} ${route.name} · ${spelling}`;
+            const hidden = await route.send(encodeURIComponent(hiddenId), person.cookies);
+            const none = await route.send(encodeURIComponent(missingId), person.cookies);
+            expect(none.statusCode, `${label} (random uuid): ${none.body}`).toBe(404);
+            expect(none.json().error.code, label).toBe(ERROR_CODES.ASSET_NOT_FOUND);
+            // The answer names the spelling sent, or its lower case for the canonical form.
+            const echoed = (sent: string) => (spelling === 'in upper case' ? sent.toLowerCase() : sent);
+            expect(normalised(hidden, echoed(hiddenId)), label).toEqual(normalised(none, echoed(missingId)));
+            expect(normalised(hidden, echoed(hiddenId)), label).toEqual(canonical);
+          }
+        }
+      }
+    });
+
+    it('a visible file answers only to its canonical spelling, in either case — for every reader, the control included', async () => {
+      for (const [who, cookies] of [['A', A.cookies], ['B', B.cookies], ['W', W]] as const) {
+        for (const [spelling, id] of spellings(files.unused)) {
+          for (const suffix of ['', '/url']) {
+            const response = await inject('GET', `/api/v1/admin/assets/${encodeURIComponent(id)}${suffix}`, cookies);
+            const label = `${who} · GET /assets/:id${suffix} · ${spelling}: ${response.body}`;
+            if (spelling === 'in upper case') {
+              expect(response.statusCode, label).toBe(200);
+              if (suffix === '') expect(response.json().data.id, label).toBe(files.unused);
+            } else {
+              expect(response.statusCode, label).toBe(404);
+              expect(response.json().error.code, label).toBe(ERROR_CODES.ASSET_NOT_FOUND);
+            }
+          }
+        }
+      }
+    });
+
     it('replacing a hidden file stages no bytes', async () => {
       const before = await storedFiles(store.baseDir);
       const cleanupsBefore = await cleanupCount();
