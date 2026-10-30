@@ -209,7 +209,7 @@ When the module owning restricted records is switched off, its files neither bec
 - **SC-001**: For each reader-restricted kind (Task, Project and Opportunity attachments), a reader who may not see the record gets the same "not found" answer as for a non-existent asset. The test is every library surface and action listed in FR-004 to FR-006, 100% of them.
 - **SC-002**: For every non-restricted kind (product, category, CMS, blog and menu images) and for assets used by nothing, every library reader sees the same results as before the feature: the same items, counts and actions.
 - **SC-003**: The in-use deletion refusal still fires for 100% of assets used by any record, including records the deleting reader cannot see.
-- **SC-004**: A library page of 50 assets, each used by up to 3 records of different kinds, loads in under 1 second for a reader with restricted visibility. That is no more than 20% slower than today's page.
+- **SC-004**: A library page of 50 assets, each used by up to 3 records of different kinds, loads in under 1 second for a reader with restricted visibility. *(Owner ruling 2026-10-30: the earlier clause "no more than 20% slower than today's page" is dropped. Measured at 1.3–1.9× a 280–500 ms baseline, the 20% margin was only 60–100 ms; the ratio is recorded by the benchmark, not gated.)*
 - **SC-005**: Switching any owning module off and on again changes neither which assets each reader sees nor whether any asset can be deleted.
 
 ## Assumptions

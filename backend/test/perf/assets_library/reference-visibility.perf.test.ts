@@ -23,8 +23,9 @@ import { createCrmOpportunity, seedCrmAdmin } from '../../helpers/seed-crm.js';
  * list runs today's query (its first page is 50 hidden files). B's and W's
  * reads are interleaved, so the load of a shared machine falls on both alike.
  *
- * Gated: `GET /assets?limit=50` p95 for B under the budget and at most
- * `PERF_ASSETS_RATIO` × W's. Recorded, not gated:
+ * Gated: `GET /assets?limit=50` p95 for B under the budget. Its ratio to W's
+ * is recorded, not gated: the owner dropped SC-004's 1.2× clause on 2026-10-30
+ * (W's page is 280–500 ms, so 20% left a 60–100 ms margin). Also recorded, not gated:
  * - the by-id answer for a hidden id against a random uuid (FR-012's timing);
  * - `GET /tasks/:id/attachments` for the open Task (50 files): since US3 each
  *   attachment's URL is built from an asset detail, which asks each present
@@ -38,7 +39,6 @@ import { createCrmOpportunity, seedCrmAdmin } from '../../helpers/seed-crm.js';
  *   PERF_RUN                 — set to 'true' to run; otherwise skipped.
  *   PERF_ITERATIONS          — reads measured per reader and figure (default 30)
  *   PERF_ASSETS_LIST_P95_MS  — B's list p95 budget (default 1 000)
- *   PERF_ASSETS_RATIO        — B's p95 over W's, at most (default 1.2)
  *
  * The figures measured when this landed are under T049 in
  * `specs/166-asset-reference-visibility/tasks.md`.
@@ -47,7 +47,6 @@ import { createCrmOpportunity, seedCrmAdmin } from '../../helpers/seed-crm.js';
 const shouldRun = process.env['PERF_RUN'] === 'true';
 const iterations = Number(process.env['PERF_ITERATIONS'] ?? '30');
 const listBudget = Number(process.env['PERF_ASSETS_LIST_P95_MS'] ?? '1000');
-const ratioBudget = Number(process.env['PERF_ASSETS_RATIO'] ?? '1.2');
 
 const VISIBLE = 50;
 const PRIVATE_TASKS = 200;
@@ -256,7 +255,7 @@ describe.skipIf(!shouldRun)('assets library — reference visibility at scale (1
 
   const page = (body: unknown) => (body as { data: Array<{ id: string }> }).data.map((row) => row.id);
 
-  it(`GET /assets?limit=50 for a restricted reader: p95 < ${listBudget} ms and ≤ ${ratioBudget} × the wildcard's`, async () => {
+  it(`GET /assets?limit=50 for a restricted reader: p95 < ${listBudget} ms`, async () => {
     const { restricted, wildcard, medians } = await measurePair(
       '/api/v1/admin/assets?limit=50',
       (status, body) => {
@@ -277,7 +276,6 @@ describe.skipIf(!shouldRun)('assets library — reference visibility at scale (1
         `(medians B ${medians.restricted.toFixed(1)} ms, W ${medians.wildcard.toFixed(1)} ms)`,
     );
     expect(restricted).toBeLessThan(listBudget);
-    expect(restricted).toBeLessThanOrEqual(wildcard * ratioBudget);
   }, 600_000);
 
   it('records the by-id answer for a hidden id against a random uuid, the attachment list, the permalink count and the folder delete', async () => {
