@@ -112,6 +112,30 @@ przypisania.
 Przy wprowadzeniu tej reguły każda istniejąca organizacja otrzymała domyślny kanał systemowy oraz
 każdy kanał, w którym miała już zamówienia, więc dotychczasowi klienci zachowali dostęp.
 
+## Język w adresach sklepu {#language-in-urls}
+
+Adres strony sklepu wskazuje jej język pierwszym segmentem ścieżki: `/pl/p/wiertarka`,
+`/en/p/drill`, `/en/c/tools`. Dzięki temu adres oznacza jeden język dla każdego
+odwiedzającego i każdej wyszukiwarki, niezależnie od ustawień przeglądarki czy ciasteczka.
+
+- **Prefiksy są wyliczane, nie wpisywane.** Każdy język kanału dostaje podstawowy kod języka
+  małymi literami (`pl`, `en`); gdy kanał ma dwa warianty jednego języka (`en-US`, `en-GB`),
+  oba dostają pełny kod (`/en-us`, `/en-gb`), a krótki `/en` nadal działa, przekierowując do
+  jednego z nich.
+- **Prefiks języka domyślnego w adresach URL** (dla każdego kanału) decyduje, czy język
+  domyślny też ma prefiks. **Włączone** — każdy adres ma prefiks, a adres bez prefiksu jest
+  przekierowywany (307) do języka wskazanego przez `?lang=`, potem ciasteczko `lang`, potem
+  języki przeglądarki, a na końcu język domyślny. **Wyłączone** — adres bez prefiksu oznacza
+  język domyślny i nigdy nie jest przekierowywany ze względu na język; `/<prefiks domyślny>/…`
+  odpowiada trwałym przekierowaniem (308) na adres bez prefiksu; pozostałe języki mają prefiks.
+- Nowe kanały startują z ustawieniem **włączonym**. Kanały istniejące w chwili aktualizacji
+  platformy do tego zachowania zostały ustawione na **wyłączone**, więc ich adresy się nie
+  zmieniły.
+- Stare linki nadal działają: linki bez prefiksu i dawne linki produktów z `?lang=` są
+  przekierowywane na właściwą stronę we właściwym języku.
+- Linki kanoniczne i `hreflang`, mapy witryny, feedy produktowe i e-maile używają adresów z
+  prefiksem; `x-default` to adres bez prefiksu.
+
 ## Motyw storefrontu
 
 `themeCode` kanału określa, którym zestawem tokenów projektowych storefront się wyświetla — kolory,

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
 import { tForLocale } from '../../lib/i18n/messages';
 import type { CheckoutBelowMinimumRow } from '../../lib/cartMinimum';
+import { LocalizedLink } from '../../lib/i18n/localized-link';
 
 /**
  * Feature 155 (FR-013, FR-037) — the checkout's list of basket lines placement will refuse,
@@ -61,12 +61,12 @@ export function BelowMinimumSummary({
           </li>
         ))}
       </ul>
-      <Link
+      <LocalizedLink
         href="/cart"
         className="inline-flex min-h-[44px] items-center rounded-sm border border-line-strong bg-surface px-[14px] text-[14px] font-medium text-fg no-underline hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         ← {t('checkout.belowMinimum.backToCart')}
-      </Link>
+      </LocalizedLink>
     </section>
   );
 }

@@ -215,6 +215,29 @@ Odczyty przypisań idą bezpośrednio przez MikroORM (bez pamięci podręcznej);
 szybciej, dodaj warstwę Redis z kluczem `(entityType, entityId)` i krótkim TTL — hooki są już na
 miejscu.
 
+## Adresy sklepu i prefiks języka {#storefront-urls}
+
+Każdy adres strony sklepu ma język jako pierwszy segment. Nigdy nie składaj go ręcznie —
+wyliczenie jest w `@endora-commerce/contracts`:
+
+- `channelUrlLanguages(channel)` / `channelUrlLanguageAliases(channel)` — wyliczony prefiks
+  każdego języka kanału (i aliasy rozdzielonych języków). `channel` to dowolne
+  `ChannelUrlFacts` (`languages`, `defaultLanguage`, `prefixDefaultLanguage`); spełnia je
+  kanał z pamięci podręcznej (`getResolvedChannel()`, `SalesChannelResolutionPort`).
+- `storefrontPagePath({ path, languageCode, channel })` — ścieżka logiczna (`/c/tools`,
+  `/verify?token=…`) pod prefiksem języka; rzuca wyjątek dla języka spoza kanału.
+- `storefrontPagePathFor({ path, channel, requestedLanguage })` — dla wiadomości: żądany
+  język, jeśli kanał go obsługuje, w przeciwnym razie język domyślny kanału; ścieżka logiczna,
+  gdy kanał nie jest znany. **Każdy e-mail, przekierowanie i feed z linkiem do strony sklepu
+  przechodzi przez tę funkcję albo `productPath`.**
+- `productPath({ key, languageCode, channel })` — strona produktu. Wcześniej przyjmowała
+  `channelDefaultLanguage` i dopisywała `?lang=`; teraz przyjmuje `channel` i nigdy nie
+  dopisuje `?lang=`. `productDefaultPath(key)` to adres `x-default` bez prefiksu.
+
+`GET /api/v1/storefront/sales-channel` zwraca `prefixDefaultLanguage`, `urlLanguages` i
+`urlLanguageAliases`, więc storefront headless nigdy ich nie wylicza sam. Kształty kanału w
+panelu mają `prefixDefaultLanguage`; zapisuje je audytowana komenda tożsamości kanału.
+
 ## Testowanie kodu zależnego od kanału
 
 Korzystaj z istniejącego środowiska `setupBackendServer()` — uruchamia ono cały stos ze świeżym

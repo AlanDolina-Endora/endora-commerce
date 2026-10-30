@@ -32,7 +32,7 @@ const state: {
   policy: { kind: 'none' },
   reachability: 'reachable',
   probes: 0,
-  identity: { kind: 'value', value: { code: 'retail', anonymousAccess: true } },
+  identity: { kind: 'value', value: { code: 'retail', anonymousAccess: true, prefixDefaultLanguage: true, urlLanguages: [], urlLanguageAliases: [] } },
 };
 
 vi.mock('../../lib/seo/crawler-policy', () => ({
@@ -71,7 +71,7 @@ beforeEach(() => {
   state.policy = { kind: 'none' };
   state.reachability = 'reachable';
   state.probes = 0;
-  state.identity = { kind: 'value', value: { code: 'retail', anonymousAccess: true } };
+  state.identity = { kind: 'value', value: { code: 'retail', anonymousAccess: true, prefixDefaultLanguage: true, urlLanguages: [], urlLanguageAliases: [] } };
   vi.mocked(readRobotsPolicy).mockClear();
 });
 
@@ -197,7 +197,7 @@ describe.each([
 describe('a store closed to anonymous visitors', () => {
   const CLOSED: ChannelIdentityRead = {
     kind: 'value',
-    value: { code: 'trade', anonymousAccess: false },
+    value: { code: 'trade', anonymousAccess: false, prefixDefaultLanguage: true, urlLanguages: [], urlLanguageAliases: [] },
   };
 
   it.each(['/', '/catalog', '/p/pump', '/c/valves', '/cart', '/checkout', '/register-customer', '/compare'])(

@@ -1,10 +1,12 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
+import { feedLinkLanguage } from './item-field-resolver.js';
 import {
   grossAmountHalfUp,
   type CatalogCategoryReadPort,
   type CatalogCategoryRecord,
   type CatalogGalleryPort,
   type CatalogProductReadPort,
+  type CatalogProductUrlKeyReadPort,
   type CatalogProductRecord,
   type CatalogProductVariantRecord,
   type FeedRunFailureCode,
@@ -207,6 +209,8 @@ export interface FeedGenerationDeps {
    * which asks `assets_library` and drops whatever is not publicly reachable.
    */
   catalogGallery: CatalogGalleryPort;
+  /** Feature 167 (FR-033) — each product's effective URL key per channel language. */
+  catalogUrlKeys: Pick<CatalogProductUrlKeyReadPort, 'effectiveKeys'>;
   selection: ProductSelectionService;
   runs: FeedRunService;
   artefactStore: ArtefactStorePort;
@@ -605,6 +609,11 @@ export class FeedGenerationService {
       pricePresentation: feed.pricePresentation,
       taxCountry: feed.taxCountry ?? null,
       storefrontOrigin,
+      channelUrl: {
+        languages: channel.languages,
+        defaultLanguage: channel.defaultLanguage,
+        prefixDefaultLanguage: channel.prefixDefaultLanguage,
+      },
       salesChannelId: channel.id,
       priceListId: feed.priceListId ?? null,
     };
@@ -754,6 +763,16 @@ export class FeedGenerationService {
     const { salesChannelId } = prepared;
     const products = await this.deps.catalogProducts.findByIds(productIds);
     if (products.length === 0) return [];
+    // Feature 167 (FR-033) — a feed line links the product on its key in the feed's
+    // language; the global slug only where the product has none there.
+    const urlKeys = await this.deps.catalogUrlKeys.effectiveKeys(productIds, salesChannelId);
+    const feedLanguage = feedLinkLanguage(prepared.context).toLowerCase();
+    const urlKeyOf = (productId: string, slug: string): string => {
+      for (const [language, key] of urlKeys.get(productId) ?? []) {
+        if (language.toLowerCase() === feedLanguage) return key;
+      }
+      return slug;
+    };
 
     // No `EntityManager` here any more: with the gallery select gone, every row
     // this method builds a feed line from belongs to another module and arrives
@@ -843,7 +862,7 @@ export class FeedGenerationService {
 
       const base: Omit<FeedItemSource, 'variantId' | 'sku' | 'groupingId'> = {
         productId: product.id,
-        slug: product.slug,
+        slug: urlKeyOf(product.id, product.slug),
         productType: product.type,
         name: product.name,
         description: product.description,

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
 import type { CartSummary } from '../lib/api/cart';
+import { LocalizedLink } from '../lib/i18n/localized-link';
 
 /** The `aria-describedby` targets — distinct, so a page that renders both never duplicates an id. */
 const CHECKOUT_BLOCKED_ID = 'cart-checkout-blocked';
@@ -121,8 +121,8 @@ export function CartPrimaryCta({
   // bounce them to login unexpectedly.
   const checkoutHref = authenticated ? '/checkout' : '/login?next=/checkout';
   return (
-    <Link href={checkoutHref} className="btn btn--dark btn--lg btn--block">
+    <LocalizedLink href={checkoutHref} className="btn btn--dark btn--lg btn--block">
       {strings.checkout} →
-    </Link>
+    </LocalizedLink>
   );
 }

@@ -29,6 +29,7 @@ const CHANNEL: CachedChannel = {
   name: { 'en-US': 'Probe' },
   active: true,
   anonymousAccess: true,
+  prefixDefaultLanguage: true,
   systemDefault: false,
   defaultLanguage: 'en-US',
   defaultCurrency: 'PLN',

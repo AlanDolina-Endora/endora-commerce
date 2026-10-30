@@ -25,6 +25,7 @@ const summary = {
   defaultCurrency: 'PLN',
   themeCode: null,
   logoAssetId: null,
+  prefixDefaultLanguage: true,
   version: 1,
   createdAt: '2026-10-18T10:00:00.000Z',
   updatedAt: '2026-10-18T10:00:00.000Z',
@@ -79,10 +80,64 @@ describe('anonymousAccess on the channel shapes', () => {
       currencies: ['PLN'],
       themeCode: null,
       logoUrl: null,
+      prefixDefaultLanguage: true,
+      urlLanguages: [{ languageCode: 'en-US', prefix: 'en', prefixed: true, isDefault: true }],
+      urlLanguageAliases: [],
     };
     expect(PublicSalesChannelSchema.safeParse(identity).success).toBe(false);
     expect(
       PublicSalesChannelSchema.parse({ ...identity, anonymousAccess: false }).anonymousAccess,
+    ).toBe(false);
+  });
+});
+
+describe('prefixDefaultLanguage on the channel shapes (feature 167)', () => {
+  const withAccess = { ...summary, anonymousAccess: true };
+
+  it('is required on the admin summary and detail', () => {
+    const { prefixDefaultLanguage: _omitted, ...without } = withAccess;
+    expect(SalesChannelSummarySchema.safeParse(without).success).toBe(false);
+    expect(SalesChannelSummarySchema.parse({ ...withAccess, prefixDefaultLanguage: false }).prefixDefaultLanguage).toBe(false);
+    const detail = { ...withAccess, languages: ['en-US'], currencies: ['PLN'], logoUrl: null };
+    expect(SalesChannelDetailSchema.parse(detail).prefixDefaultLanguage).toBe(true);
+  });
+
+  it('defaults to on for a new channel (OR-1)', () => {
+    expect(SalesChannelCreateBodySchema.parse(createBody).prefixDefaultLanguage).toBe(true);
+    expect(SalesChannelCreateBodySchema.parse({ ...createBody, prefixDefaultLanguage: false }).prefixDefaultLanguage).toBe(false);
+  });
+
+  it('is optional on update and not defaulted', () => {
+    expect(SalesChannelUpdateBodySchema.parse({}).prefixDefaultLanguage).toBeUndefined();
+    expect(SalesChannelUpdateBodySchema.parse({ prefixDefaultLanguage: false }).prefixDefaultLanguage).toBe(false);
+  });
+
+  it('the public read answers the flag, the URL languages (min 1) and the split aliases', () => {
+    const identity = {
+      code: 'trade',
+      name: { en: 'Trade' },
+      defaultLanguage: 'pl-PL',
+      defaultCurrency: 'PLN',
+      languages: ['pl-PL', 'en-US', 'en-GB'],
+      currencies: ['PLN'],
+      themeCode: null,
+      logoUrl: null,
+      anonymousAccess: true,
+      prefixDefaultLanguage: false,
+      urlLanguages: [
+        { languageCode: 'pl-PL', prefix: 'pl', prefixed: false, isDefault: true },
+        { languageCode: 'en-US', prefix: 'en-us', prefixed: true, isDefault: false },
+        { languageCode: 'en-GB', prefix: 'en-gb', prefixed: true, isDefault: false },
+      ],
+      urlLanguageAliases: [{ alias: 'en', languageCodes: ['en-US', 'en-GB'] }],
+    };
+    expect(PublicSalesChannelSchema.parse(identity).urlLanguageAliases).toHaveLength(1);
+    expect(PublicSalesChannelSchema.safeParse({ ...identity, urlLanguages: [] }).success).toBe(false);
+    const { urlLanguageAliases: _a, ...noAliases } = identity;
+    expect(PublicSalesChannelSchema.safeParse(noAliases).success).toBe(false);
+    expect(
+      PublicSalesChannelSchema.safeParse({ ...identity, urlLanguages: [{ ...identity.urlLanguages[0], prefix: 'PL' }] })
+        .success,
     ).toBe(false);
   });
 });

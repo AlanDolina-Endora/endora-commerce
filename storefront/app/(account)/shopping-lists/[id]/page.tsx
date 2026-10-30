@@ -1,6 +1,4 @@
 import { Fragment, type ReactNode } from 'react';
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import {
   clearShoppingListItems,
@@ -25,6 +23,8 @@ import {
 import { tForLocale } from '../../../../lib/i18n/messages';
 import { LIST_QUANTITY_MAX, parseListQuantity } from '../../../../lib/shoppingListQuantity';
 import type { Metadata } from 'next';
+import { localeRedirect } from '../../../../lib/i18n/navigation';
+import { LocalizedLink } from '../../../../lib/i18n/localized-link';
 
 /**
  * Not indexed (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010): an
@@ -68,7 +68,7 @@ export default async function ShoppingListDetailPage({
 }): Promise<ReactNode> {
   const session = await getSessionCookie();
   const { id } = await params;
-  if (!session) redirect(`/login?next=/account/shopping-lists/${id}`);
+  if (!session) return await localeRedirect(`/login?next=/account/shopping-lists/${id}`);
   const sp = await searchParams;
   let list;
   try {
@@ -112,7 +112,7 @@ export default async function ShoppingListDetailPage({
     <>
       <h2>{list.name}</h2>
       <p>
-        <Link href="/shopping-lists">← All lists</Link>
+        <LocalizedLink href="/shopping-lists">← All lists</LocalizedLink>
       </p>
       {sp.error ? <p className="b2b-auth__error">{sp.error}</p> : null}
       {sp.cartAdded ? (
@@ -150,7 +150,7 @@ export default async function ShoppingListDetailPage({
           {sp.rfqSkipped && Number(sp.rfqSkipped) > 0
             ? `, skipped ${sp.rfqSkipped} archived row(s)`
             : ''}
-          . <Link href={`/quote-requests/${sp.rfqId}`}>Open the RFQ</Link>.
+          . <LocalizedLink href={`/quote-requests/${sp.rfqId}`}>Open the RFQ</LocalizedLink>.
         </p>
       ) : null}
 
@@ -177,7 +177,7 @@ export default async function ShoppingListDetailPage({
       <h3 className="mt-10 mb-4">Items</h3>
       {list.items.length === 0 ? (
         <p className="muted">
-          No items yet. Find a product on the <Link href="/catalog">catalog</Link> and add it from
+          No items yet. Find a product on the <LocalizedLink href="/catalog">catalog</LocalizedLink> and add it from
           its detail page (coming next).
         </p>
       ) : (
@@ -233,10 +233,10 @@ export default async function ShoppingListDetailPage({
                         );
                       }
                       return (
-                        <Link href={`/p/${product.slug}`} className="flex flex-col">
+                        <LocalizedLink href={`/p/${product.slug}`} className="flex flex-col">
                           <span className="font-medium text-fg">{product.name}</span>
                           <span className="text-xs text-fg-soft">SKU: {product.sku}</span>
-                        </Link>
+                        </LocalizedLink>
                       );
                     })()}
                     {it.variantId ? (
@@ -345,70 +345,70 @@ function RemoveItemForm({ itemId }: { itemId: string }): ReactNode {
 async function renameAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const listId = (formData.get('listId') as string) ?? '';
   const name = ((formData.get('name') as string) ?? '').trim();
   try {
     await renameShoppingList(session, listId, name);
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : 'Rename failed.';
-    redirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
   }
-  redirect(`/shopping-lists/${listId}`);
+  return await localeRedirect(`/shopping-lists/${listId}`);
 }
 
 async function updateQtyAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const listId = (formData.get('listId') as string) ?? '';
   const itemId = (formData.get('itemId') as string) ?? '';
   const quantity = parseListQuantity(formData.get('quantity'));
   if (quantity === null) {
-    redirect(`/shopping-lists/${listId}?qtyError=${encodeURIComponent(itemId)}`);
+    return await localeRedirect(`/shopping-lists/${listId}?qtyError=${encodeURIComponent(itemId)}`);
   }
   try {
     await updateShoppingListItem(session, listId, itemId, { quantity });
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : 'Update failed.';
-    redirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
   }
-  redirect(`/shopping-lists/${listId}`);
+  return await localeRedirect(`/shopping-lists/${listId}`);
 }
 
 async function removeAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const listId = (formData.get('listId') as string) ?? '';
   const itemId = (formData.get('itemId') as string) ?? '';
   try {
     await removeShoppingListItem(session, listId, itemId);
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : 'Remove failed.';
-    redirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
   }
-  redirect(`/shopping-lists/${listId}`);
+  return await localeRedirect(`/shopping-lists/${listId}`);
 }
 
 async function clearListAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const listId = (formData.get('listId') as string) ?? '';
   try {
     await clearShoppingListItems(session, listId);
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : 'Clear failed.';
-    redirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
   }
-  redirect(`/shopping-lists/${listId}`);
+  return await localeRedirect(`/shopping-lists/${listId}`);
 }
 
 async function convertAllToCartAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const listId = (formData.get('listId') as string) ?? '';
   // The success redirect must live OUTSIDE the try: Next's `redirect()` signals
   // by throwing `NEXT_REDIRECT`, which a surrounding catch would swallow and
@@ -419,51 +419,51 @@ async function convertAllToCartAction(formData: FormData): Promise<void> {
     result = await convertShoppingListToCart(session, listId);
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : 'Convert failed.';
-    redirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
   }
   // Flush the cart route's Router Cache so the newly added lines show on the
   // next visit instead of a stale (empty) cached page.
   revalidatePath('/cart');
-  redirect(cartConversionRedirect(listId, result));
+  return await localeRedirect(cartConversionRedirect(listId, result));
 }
 
 async function convertSelectedToCartAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const listId = (formData.get('listId') as string) ?? '';
   const itemIds = (formData.getAll('itemIds') as string[]).filter(Boolean);
   if (itemIds.length === 0) {
-    redirect(`/shopping-lists/${listId}?error=Select+at+least+one+item.`);
+    return await localeRedirect(`/shopping-lists/${listId}?error=Select+at+least+one+item.`);
   }
   let result: Awaited<ReturnType<typeof convertShoppingListToCart>>;
   try {
     result = await convertShoppingListToCart(session, listId, itemIds);
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : 'Convert failed.';
-    redirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
   }
   revalidatePath('/cart');
-  redirect(cartConversionRedirect(listId, result));
+  return await localeRedirect(cartConversionRedirect(listId, result));
 }
 
 async function convertAllToRfqAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const listId = (formData.get('listId') as string) ?? '';
   let result: Awaited<ReturnType<typeof convertShoppingListToRfq>>;
   try {
     result = await convertShoppingListToRfq(session, listId);
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : 'Convert failed.';
-    redirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
   }
   // Without this, Next's Router Cache keeps serving the previously cached
   // (often empty) quote-requests list, so the freshly created RFQ looks like
   // it was never created even though the API persisted it.
   revalidatePath('/quote-requests');
-  redirect(
+  return await localeRedirect(
     `/shopping-lists/${listId}?rfqId=${result.rfqId}&rfqAdded=${result.added}&rfqSkipped=${result.skipped.length}`,
   );
 }
@@ -471,21 +471,21 @@ async function convertAllToRfqAction(formData: FormData): Promise<void> {
 async function convertSelectedToRfqAction(formData: FormData): Promise<void> {
   'use server';
   const session = await getSessionCookie();
-  if (!session) redirect('/login');
+  if (!session) return await localeRedirect('/login');
   const listId = (formData.get('listId') as string) ?? '';
   const itemIds = (formData.getAll('itemIds') as string[]).filter(Boolean);
   if (itemIds.length === 0) {
-    redirect(`/shopping-lists/${listId}?error=Select+at+least+one+item.`);
+    return await localeRedirect(`/shopping-lists/${listId}?error=Select+at+least+one+item.`);
   }
   let result: Awaited<ReturnType<typeof convertShoppingListToRfq>>;
   try {
     result = await convertShoppingListToRfq(session, listId, itemIds);
   } catch (err) {
     const message = err instanceof StorefrontApiError ? err.detail : 'Convert failed.';
-    redirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
+    return await localeRedirect(`/shopping-lists/${listId}?error=${encodeURIComponent(message)}`);
   }
   revalidatePath('/quote-requests');
-  redirect(
+  return await localeRedirect(
     `/shopping-lists/${listId}?rfqId=${result.rfqId}&rfqAdded=${result.added}&rfqSkipped=${result.skipped.length}`,
   );
 }

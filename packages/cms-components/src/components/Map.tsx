@@ -20,7 +20,7 @@ import {
   DEFAULT_BOX_PROPS,
 } from '../fields/shared-fields.js';
 import { BUTTON_SPEC_OBJECT_FIELDS } from './Button.js';
-import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
+import { useCmsRenderAssets, useCmsRenderMediaBaseUrl, useCmsRenderLocalizePath } from './render-context.js';
 import { blockLink, blockLinkTarget, type LinkHrefEnv } from '../utils/link-href.js';
 
 /** R17 (T220): the most markers a map takes; the list shows each by its label or position. */
@@ -90,9 +90,11 @@ function LeafletMap({
 }): React.ReactElement {
   const assets = useCmsRenderAssets();
   const mediaBaseUrl = useCmsRenderMediaBaseUrl();
+  // Feature 167 — an internal link takes the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
   // Read by the map's effect without re-creating the map when the render context changes.
   const linkEnv = useRef<LinkHrefEnv>({});
-  linkEnv.current = { assets, ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}) };
+  linkEnv.current = { assets, ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}), localizePath };
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMapHandle | null>(null);
 

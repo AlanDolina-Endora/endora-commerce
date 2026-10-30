@@ -10,7 +10,7 @@ import {
 import { colorValueToCss } from '../utils/color-value.js';
 import { resolveLinkHref } from '../utils/link-href.js';
 import { resolveCmsIcon } from './icon-catalog.js';
-import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
+import { useCmsRenderAssets, useCmsRenderMediaBaseUrl, useCmsRenderLocalizePath } from './render-context.js';
 
 /**
  * The style-and-fill classes of a button: the base tier's always, and a
@@ -106,7 +106,9 @@ export function ButtonView({ button, className, look: blockLook }: ButtonViewPro
   const look = mergedLook(button, blockLook);
   const assets = useCmsRenderAssets();
   const mediaBaseUrl = useCmsRenderMediaBaseUrl();
-  const link = resolveLinkHref(button.link, { assets, mediaBaseUrl });
+  // Feature 167 — an internal link takes the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
+  const link = resolveLinkHref(button.link, { assets, mediaBaseUrl, localizePath });
   const Icon = resolveCmsIcon(button.icon);
   const iconOnly = Icon !== null && button.iconPosition === 'only' && button.label.trim() !== '';
   const iconAtEnd = button.iconPosition === 'end' || button.iconPosition === undefined;

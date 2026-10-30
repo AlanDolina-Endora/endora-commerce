@@ -17,6 +17,7 @@ import {
 } from '../lib/api/search';
 import { toAbsoluteAssetUrl } from '../lib/asset-url';
 import { formatMoney as formatUnitPrice } from '../lib/i18n/money';
+import { LocalizedAnchor, useLocalizedPath } from '../lib/i18n/localized-link';
 
 /**
  * SearchAutocomplete — feature 006 / US1 / T015.
@@ -83,6 +84,7 @@ export interface SearchAutocompleteProps {
 }
 
 export function SearchAutocomplete(props: SearchAutocompleteProps): ReactNode {
+  const localize = useLocalizedPath();
   const [value, setValue] = useState('');
   const [response, setResponse] = useState<SuggestResponse | null>(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -224,7 +226,7 @@ export function SearchAutocomplete(props: SearchAutocompleteProps): ReactNode {
       const hit = response.data[activeIndex];
       if (hit) {
         e.preventDefault();
-        window.location.href = `/p/${encodeURIComponent(hit.slug)}`;
+        window.location.href = localize(`/p/${encodeURIComponent(hit.slug)}`);
       }
     } else if (e.key === 'Escape') {
       setOpen(false);
@@ -278,7 +280,7 @@ export function SearchAutocomplete(props: SearchAutocompleteProps): ReactNode {
                     i === activeIndex ? 'bg-surface-alt' : 'hover:bg-surface-alt'
                   }`}
                 >
-                  <a
+                  <LocalizedAnchor
                     href={`/p/${encodeURIComponent(p.slug)}`}
                     className="flex items-center gap-3 px-3 py-2"
                   >
@@ -311,13 +313,13 @@ export function SearchAutocomplete(props: SearchAutocompleteProps): ReactNode {
                         yourPrice: props.yourPriceLabel,
                       })}
                     </span>
-                  </a>
+                  </LocalizedAnchor>
                 </li>
               ))}
               <li className="text-[13px] font-medium text-accent [&>a]:block [&>a]:px-3 [&>a]:py-2 hover:bg-surface-alt">
-                <a href={`/search?q=${encodeURIComponent(value.trim())}`}>
+                <LocalizedAnchor href={`/search?q=${encodeURIComponent(value.trim())}`}>
                   {props.seeAllResultsLabel}
-                </a>
+                </LocalizedAnchor>
               </li>
             </>
           )}

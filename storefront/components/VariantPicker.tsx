@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { formatMoney } from '../lib/i18n/money';
+import { LocalizedAnchor } from '../lib/i18n/localized-link';
 
 /**
  * VariantPicker — server-rendered variant selector for configurable
@@ -69,7 +70,7 @@ export function VariantPicker({
           const outOfStock = v.stockLevel != null && v.stockLevel <= 0;
           return (
             <li key={v.id}>
-              <a
+              <LocalizedAnchor
                 href={`/p/${productSlug}?variant=${encodeURIComponent(v.sku)}`}
                 aria-current={isSelected ? 'true' : undefined}
                 aria-disabled={outOfStock ? 'true' : undefined}
@@ -99,7 +100,7 @@ export function VariantPicker({
                     {outOfStock ? labels.outOfStock : `${labels.stockLevel}: ${v.stockLevel}`}
                   </span>
                 ) : null}
-              </a>
+              </LocalizedAnchor>
             </li>
           );
         })}

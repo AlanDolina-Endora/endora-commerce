@@ -26,7 +26,7 @@ import { resolveLinkHref } from '../utils/link-href.js';
 import { BUTTON_SPEC_OBJECT_FIELDS } from './Button.js';
 import { InlineRich } from './InlineRich.js';
 import { Picture } from './Picture.js';
-import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
+import { useCmsRenderAssets, useCmsRenderMediaBaseUrl, useCmsRenderLocalizePath } from './render-context.js';
 import { hasImage, isEmptyInline, usesCustom, type TextSize } from './section-parts.js';
 import { ITEM_TAGS_FIELD, itemTagsAttribute } from './carousel/carousel-filter.js';
 import { ItemText, itemFontField } from './item-text.js';
@@ -155,7 +155,9 @@ function restingColorParts(part: 'title' | 'label', colors: TierColors): { class
 function LinkTileBody({ props, tier }: { props: LinkTileProps; tier: BreakpointTier | null }): ReactNode {
   const assets = useCmsRenderAssets();
   const mediaBaseUrl = useCmsRenderMediaBaseUrl();
-  const link = resolveLinkHref(props.link, { assets, mediaBaseUrl });
+  // Feature 167 — an internal link takes the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
+  const link = resolveLinkHref(props.link, { assets, mediaBaseUrl, localizePath });
   const ratio = tileRatio(props.ratio);
   const image = props.image;
   const label = props.labelStyle === 'none' ? '' : (props.linkLabel?.trim() ?? '');

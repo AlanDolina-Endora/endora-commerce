@@ -5,7 +5,7 @@ import { createColorField, withHideOn } from '@endora-commerce/page-builder-core
 import type { AnnouncementBarProps } from '../schema/component-types.js';
 import { resolveColorValue } from '../utils/color-value.js';
 import { BUTTON_SPEC_OBJECT_FIELDS } from './Button.js';
-import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
+import { useCmsRenderAssets, useCmsRenderMediaBaseUrl, useCmsRenderLocalizePath } from './render-context.js';
 import { blockLink, blockLinkTarget, carriedBlockLink } from '../utils/link-href.js';
 
 const AnnouncementBarRender: PuckComponent<AnnouncementBarProps> = (props) => {
@@ -18,8 +18,10 @@ const AnnouncementBarRender: PuckComponent<AnnouncementBarProps> = (props) => {
   } = props;
   const assets = useCmsRenderAssets();
   const mediaBaseUrl = useCmsRenderMediaBaseUrl();
+  // Feature 167 — an internal link takes the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
   // R17 (T212): any kind of link; a URL stored before renders as it always did.
-  const link = blockLinkTarget(blockLink(storedLink, href), { assets, ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}) });
+  const link = blockLinkTarget(blockLink(storedLink, href), { assets, ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}), localizePath });
 
   const inner = <span className="cmsc-pb-announcement__text">{text}</span>;
 

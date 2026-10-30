@@ -8,6 +8,7 @@ import type {
 } from '@endora-commerce/contracts';
 import { ComparisonApiError, getSharedComparison } from '../lib/api/comparisons';
 import { tForLocale } from '../lib/i18n/messages';
+import { LocalizedAnchor } from '../lib/i18n/localized-link';
 
 /**
  * `<SharedComparisonTable>` — feature 007 / US2 / T043.
@@ -165,9 +166,9 @@ export function SharedComparisonTable(props: {
                       )}
                     </div>
                     <div className="industria-cmp-card__sku">{p.sku}</div>
-                    <a href={`/p/${p.slug}`} className="industria-cmp-card__name">
+                    <LocalizedAnchor href={`/p/${p.slug}`} className="industria-cmp-card__name">
                       {localised(p.name)}
-                    </a>
+                    </LocalizedAnchor>
                     <div className="industria-cmp-card__price">
                       {p.price ? `${p.price.amount} ${p.price.currency}` : '—'}
                     </div>
@@ -200,9 +201,9 @@ export function SharedComparisonTable(props: {
               {view.products.map((p) => (
                 <td key={p.id}>
                   <div className="industria-compare-table__actions">
-                    <a href={`/p/${p.slug}`} className="btn btn--outline btn--sm">
+                    <LocalizedAnchor href={`/p/${p.slug}`} className="btn btn--outline btn--sm">
                       Karta produktu
-                    </a>
+                    </LocalizedAnchor>
                   </div>
                 </td>
               ))}

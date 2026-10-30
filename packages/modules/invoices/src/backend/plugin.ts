@@ -1,3 +1,4 @@
+import type { ChannelUrlFacts } from '@endora-commerce/contracts';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type {
@@ -86,6 +87,8 @@ export interface InvoicesModuleOptions {
   resolveRecipientEmail: (order: OrderRecord) => Promise<string | null>;
   /** US5 — channel default language (BCP-47). */
   resolveLanguage: (salesChannelId: string | null) => Promise<string>;
+  /** Feature 167 (OR-14) — a channel's URL-language facts, for the e-mail's order-page link. */
+  channelUrlFactsFor?: (salesChannelId: string | null) => Promise<ChannelUrlFacts | null>;
   /** Feature 059 — emits `invoice.issued.v1` / `invoice.corrected.v1`. */
   eventBus?: InvoicesEventBus;
   /** FR-035 — audit-log recorder for issuance / correction. */
@@ -172,6 +175,7 @@ export function invoicesModule(options: InvoicesModuleOptions): {
     getSender: options.getTransactionalEmailSender,
     resolveRecipientEmail: options.resolveRecipientEmail,
     resolveLanguage: options.resolveLanguage,
+    ...(options.channelUrlFactsFor ? { channelUrlFactsFor: options.channelUrlFactsFor } : {}),
   });
   emailOnReadyHolder.dispatch = async (invoiceId) => {
     await emailDispatcher.dispatch(invoiceId);

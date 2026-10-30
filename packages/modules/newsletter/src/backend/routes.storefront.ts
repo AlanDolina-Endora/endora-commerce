@@ -27,6 +27,12 @@ export interface NewsletterStorefrontDeps {
   resolveDefaultChannelId: () => Promise<string | null>;
   /** Storefront base used for post-confirm/unsubscribe redirects. */
   storefrontBaseUrl: string;
+  /**
+   * Feature 167 (FR-034) — a storefront page path under the language prefix of the
+   * subscriber's channel (its default language: a subscriber records none). Absent,
+   * or for no subscriber: the logical path.
+   */
+  subscriberPagePath?: (subscriberId: string | null, path: string) => Promise<string>;
 }
 
 /**
@@ -38,6 +44,9 @@ export async function registerNewsletterStorefrontRoutes(
   app: FastifyInstance,
   deps: NewsletterStorefrontDeps,
 ): Promise<void> {
+  const pagePath = (subscriberId: string | null, path: string): Promise<string> =>
+    deps.subscriberPagePath ? deps.subscriberPagePath(subscriberId, path) : Promise.resolve(path);
+
   app.get('/api/v1/newsletter/status', async (request, reply) => {
     const { channel } = request.query as { channel?: string };
     const channelId = channel ? await deps.resolveChannelIdByCode(channel) : null;
@@ -71,15 +80,19 @@ export async function registerNewsletterStorefrontRoutes(
     const claims = token ? deps.tokens.verify(token, 'confirm') : null;
     if (claims) await deps.subscribers.confirm(claims.id);
     const status = claims ? 'ok' : 'invalid';
-    return reply.redirect(`${deps.storefrontBaseUrl}/newsletter/confirm?status=${status}`);
+    const path = await pagePath(claims?.id ?? null, `/newsletter/confirm?status=${status}`);
+    return reply.redirect(`${deps.storefrontBaseUrl}${path}`);
   });
 
   app.get('/api/v1/newsletter/unsubscribe', { config: { salesChannelAccess: 'open' } }, async (request, reply) => {
     const { token } = request.query as { token?: string };
-    const valid = token ? deps.tokens.verify(token, 'unsubscribe') !== null : false;
-    return reply.redirect(
-      `${deps.storefrontBaseUrl}/newsletter/unsubscribe?token=${encodeURIComponent(token ?? '')}&valid=${valid}`,
+    const claims = token ? deps.tokens.verify(token, 'unsubscribe') : null;
+    const valid = claims !== null;
+    const path = await pagePath(
+      claims?.id ?? null,
+      `/newsletter/unsubscribe?token=${encodeURIComponent(token ?? '')}&valid=${valid}`,
     );
+    return reply.redirect(`${deps.storefrontBaseUrl}${path}`);
   });
 
   app.post('/api/v1/newsletter/unsubscribe', { config: { salesChannelAccess: 'open' } }, async (request, reply) => {

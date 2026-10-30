@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   productKeyResolutionSchema,
+  productDefaultPath,
+  productPagePathsSchema,
   productPath,
   productSlugSchema,
   productUrlKeysResponseSchema,
@@ -20,21 +22,38 @@ const Q = '00000000-0000-4000-8000-0000000000a2';
 const C = '00000000-0000-4000-8000-0000000000c1';
 const R = '00000000-0000-4000-8000-0000000000f1';
 
-describe('productPath — the only product URL composer', () => {
-  it('answers /p/<key> in the channel default language', () => {
-    expect(productPath({ key: 'drill', languageCode: 'pl-PL', channelDefaultLanguage: 'pl-PL' })).toBe('/p/drill');
+const plEn = (prefixDefaultLanguage: boolean) => ({
+  languages: ['pl-PL', 'en-US', 'de-DE'],
+  defaultLanguage: 'pl-PL',
+  prefixDefaultLanguage,
+});
+
+describe('productPath — the only product URL composer (feature 167: prefixed, never ?lang=)', () => {
+  it('prefixes every language when the channel prefixes its default language', () => {
+    expect(productPath({ key: 'wiertarka', languageCode: 'pl-PL', channel: plEn(true) })).toBe('/pl/p/wiertarka');
+    expect(productPath({ key: 'drill', languageCode: 'en-US', channel: plEn(true) })).toBe('/en/p/drill');
   });
 
-  it('adds ?lang=<L> in any other language, preserving the case of L', () => {
-    expect(productPath({ key: 'bohrer', languageCode: 'de-DE', channelDefaultLanguage: 'pl-PL' })).toBe(
-      '/p/bohrer?lang=de-DE',
-    );
+  it('leaves the default language unprefixed with the setting off; others are prefixed', () => {
+    expect(productPath({ key: 'wiertarka', languageCode: 'pl-PL', channel: plEn(false) })).toBe('/p/wiertarka');
+    expect(productPath({ key: 'bohrer', languageCode: 'de-DE', channel: plEn(false) })).toBe('/de/p/bohrer');
   });
 
-  it('URL-encodes the key and the language', () => {
-    expect(productPath({ key: 'a b/c', languageCode: 'x y', channelDefaultLanguage: 'pl-PL' })).toBe(
-      '/p/a%20b%2Fc?lang=x%20y',
-    );
+  it('never appends ?lang=', () => {
+    for (const on of [true, false]) {
+      for (const languageCode of ['pl-PL', 'en-US', 'de-DE']) {
+        expect(productPath({ key: 'x', languageCode, channel: plEn(on) })).not.toContain('lang=');
+      }
+    }
+  });
+
+  it('URL-encodes the key', () => {
+    expect(productPath({ key: 'a b/c', languageCode: 'en-US', channel: plEn(true) })).toBe('/en/p/a%20b%2Fc');
+  });
+
+  it('productDefaultPath is the unprefixed x-default target', () => {
+    expect(productDefaultPath('wiertarka')).toBe('/p/wiertarka');
+    expect(productDefaultPath('a b')).toBe('/p/a%20b');
   });
 });
 
@@ -83,7 +102,7 @@ describe('productUrlKeysResponseSchema', () => {
       globalKey: 'drill',
       languageKeys: [{ languageCode: 'de-DE', key: 'bohrer' }],
       channelKeys: [{ channelId: C, languageCode: 'de-DE', key: 'bohrer-b2b', orphaned: false }],
-      effective: [{ channelId: C, languageCode: 'de-DE', key: 'bohrer-b2b', source: 'channel_language', url: '/p/bohrer-b2b?lang=de-DE' }],
+      effective: [{ channelId: C, languageCode: 'de-DE', key: 'bohrer-b2b', source: 'channel_language', url: '/de/p/bohrer-b2b' }],
     };
     expect(productUrlKeysResponseSchema.safeParse({ data }).success).toBe(true);
     expect(
@@ -98,10 +117,24 @@ describe('productKeyResolutionSchema', () => {
   it('discriminates product from redirect', () => {
     expect(productKeyResolutionSchema.parse({ kind: 'product', productId: P, key: 'drill' }).kind).toBe('product');
     expect(
-      productKeyResolutionSchema.parse({ kind: 'redirect', key: 'old', languageCode: 'de-DE', path: '/p/bohrer?lang=de-DE' })
+      productKeyResolutionSchema.parse({ kind: 'redirect', key: 'old', languageCode: 'de-DE', path: '/de/p/bohrer', permanent: true })
         .kind,
     ).toBe('redirect');
     expect(productKeyResolutionSchema.safeParse({ kind: 'redirect', key: 'old' }).success).toBe(false);
+  });
+
+  it('requires `permanent` on a redirect (feature 167: former key vs another language\'s key)', () => {
+    const redirect = { kind: 'redirect', key: 'wiertarka', languageCode: 'en-US', path: '/en/p/drill' };
+    expect(productKeyResolutionSchema.safeParse(redirect).success).toBe(false);
+    expect(productKeyResolutionSchema.safeParse({ ...redirect, permanent: false }).success).toBe(true);
+  });
+});
+
+describe('productPagePathsSchema', () => {
+  it('requires xDefault (feature 167)', () => {
+    const paths = { canonical: '/en/p/drill', alternates: [{ languageCode: 'en-US', path: '/en/p/drill' }] };
+    expect(productPagePathsSchema.safeParse(paths).success).toBe(false);
+    expect(productPagePathsSchema.safeParse({ ...paths, xDefault: '/p/wiertarka' }).success).toBe(true);
   });
 });
 

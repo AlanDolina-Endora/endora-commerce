@@ -134,13 +134,23 @@ describe('URL redirects with seo off (spec 163, T108)', () => {
       for (const [key, language] of [
         [k('old'), 'en-US'],
         [k('old'), 'pl-PL'],
-        [k('new'), 'pl-PL'],
       ] as const) {
         const res = await resolveRaw(key, language);
         expect(res.statusCode, `${key} ${language}: ${res.body}`).toBe(404);
         expect((res.json() as { error: { code: string } }).error.code).toBe(ERROR_CODES.PRODUCT_NOT_FOUND);
         expect(errorBodyOf(res)).toEqual(absent[language]);
       }
+      // Feature 167 (FR-024) — `new` is a former pl-PL key, whose redirect row is seo's
+      // and hidden while off, but it is also the product's **current** en-US key, and a
+      // current key of another channel language answers a temporary redirect to the
+      // product's key in the path language whatever seo's state: no redirect row is read.
+      const crossLanguage = await resolveRaw(k('new'), 'pl-PL');
+      expect(crossLanguage.statusCode, crossLanguage.body).toBe(200);
+      expect(productKeyResolutionSchema.parse((crossLanguage.json() as { data: unknown }).data)).toMatchObject({
+        kind: 'redirect',
+        key: k('nowy'),
+        permanent: false,
+      });
       // Current keys are catalog's and keep serving.
       const current = await resolveRaw(k('nowy'), 'pl-PL');
       expect(current.statusCode, current.body).toBe(200);

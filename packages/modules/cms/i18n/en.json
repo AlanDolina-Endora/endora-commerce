@@ -129,6 +129,8 @@
   "hooksList.title": "CMS Hooks",
   "pagesList.cardTitle": "Pages",
   "pagesList.description": "Create and publish Page Builder content scoped by sales channel and language.",
+  "pagesList.shadowedByLanguagePrefix": "Hidden by language prefix /{prefix}",
+  "pagesList.shadowedByLanguagePrefixHint": "/{prefix} is a storefront language prefix on these sales channels: {channels}. The page is not reachable at its own address there; change its slug.",
   "pagesList.empty": "No pages found.",
   "pagesList.loading": "Loading CMS pages...",
   "pagesList.new": "New page",

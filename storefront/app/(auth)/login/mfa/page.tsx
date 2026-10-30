@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { verifyCustomerMfa } from '../../../../lib/api/auth';
 import {
@@ -15,6 +14,7 @@ import {
   signInErrorParam,
 } from '../../../../lib/auth/sign-in-errors';
 import type { Metadata } from 'next';
+import { localeRedirect } from '../../../../lib/i18n/navigation';
 
 /**
  * Not indexed (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010): an
@@ -38,7 +38,7 @@ export default async function MfaPage({
   const nextPath = sanitiseNext(params.next);
   const challengeId = await getMfaChallengeCookie();
   if (!challengeId) {
-    redirect(`/login?next=${encodeURIComponent(nextPath)}`);
+    return await localeRedirect(`/login?next=${encodeURIComponent(nextPath)}`);
   }
 
   const { locale } = await getServerContext();
@@ -59,7 +59,7 @@ async function verifyAction(formData: FormData): Promise<void> {
   const next = sanitiseNext((formData.get('next') as string) ?? '/account');
   const challengeId = await getMfaChallengeCookie();
   if (!challengeId) {
-    redirect(`/login?next=${encodeURIComponent(next)}`);
+    return await localeRedirect(`/login?next=${encodeURIComponent(next)}`);
   }
 
   let result;
@@ -72,18 +72,18 @@ async function verifyAction(formData: FormData): Promise<void> {
       // Another code would not change that, so the challenge is dropped and the
       // buyer is shown the refusal on the sign-in page, as the password step does.
       await clearMfaChallengeCookie();
-      redirect(`/login?error=${message}&next=${encodeURIComponent(next)}`);
+      return await localeRedirect(`/login?error=${message}&next=${encodeURIComponent(next)}`);
     }
-    redirect(`/login/mfa?error=${encodeURIComponent(message)}&next=${encodeURIComponent(next)}`);
+    return await localeRedirect(`/login/mfa?error=${encodeURIComponent(message)}&next=${encodeURIComponent(next)}`);
   }
   if (!result.sessionCookieValue) {
-    redirect(
+    return await localeRedirect(
       `/login/mfa?error=${encodeURIComponent('Verification failed. Please try again.')}&next=${encodeURIComponent(next)}`,
     );
   }
   await setSessionCookie(result.sessionCookieValue);
   await clearMfaChallengeCookie();
-  redirect(next);
+  return await localeRedirect(next);
 }
 
 function sanitiseNext(input: string | undefined): string {

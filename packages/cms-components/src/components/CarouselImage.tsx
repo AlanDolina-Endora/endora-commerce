@@ -28,7 +28,7 @@ import { DEFAULT_MEDIA_CORNER_RADIUS, mediaRadiusVars } from '../utils/media-rad
 import { BUTTON_SPEC_OBJECT_FIELDS } from './Button.js';
 import { InlineRich } from './InlineRich.js';
 import { Picture } from './Picture.js';
-import { useCmsRenderAssets, useCmsRenderMediaBaseUrl } from './render-context.js';
+import { useCmsRenderAssets, useCmsRenderMediaBaseUrl, useCmsRenderLocalizePath } from './render-context.js';
 import { hasImage, isEmptyInline, usesCustom, type TextSize } from './section-parts.js';
 import { ITEM_TAGS_FIELD, itemTagsAttribute } from './carousel/carousel-filter.js';
 import { ItemText, itemFontField } from './item-text.js';
@@ -170,11 +170,13 @@ function CarouselImageBody({
 }): ReactNode {
   const assets = useCmsRenderAssets();
   const mediaBaseUrl = useCmsRenderMediaBaseUrl();
+  // Feature 167 — an internal link takes the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
   const placement: CarouselCaptionPlacement = PLACEMENTS.has(props.captionPlacement ?? '')
     ? (props.captionPlacement as CarouselCaptionPlacement)
     : 'bottom-center';
   const showCaption = placement !== 'none' && !isEmptyInline(props.caption);
-  const link = resolveLinkHref(props.link, { assets, mediaBaseUrl });
+  const link = resolveLinkHref(props.link, { assets, mediaBaseUrl, localizePath });
   const image = props.image;
 
   const media = hasImage(image) ? (

@@ -37,6 +37,8 @@ const CHANNEL = {
   code: 'web',
   name: { 'en-US': 'Web' },
   defaultLanguage: 'en-US',
+  languages: ['en-US', 'pl-PL', 'de-DE'],
+  prefixDefaultLanguage: true,
   active: true,
   systemDefault: true,
 };
@@ -316,7 +318,15 @@ describe('seo — the sitemap reads memberships through the sanctioned bridge ac
     const cmsPages = {
       findByIds: async (ids: readonly string[]) =>
         ids.map((id) =>
-          id === 'pg-off' ? pageRecord(id, { active: false }) : pageRecord(id, { slug: 'live-page' }),
+          id === 'pg-off'
+            ? pageRecord(id, { active: false })
+            : // Feature 167 — the page exists in two of the channel's three languages.
+              pageRecord(id, {
+                slug: 'live-page',
+                languages: ['en-US', 'pl-PL'],
+                // 163 R24: the page's own slug in Polish.
+                translations: { 'pl-PL': { slug: 'zywa-strona' } },
+              }),
         ),
     } as unknown as CmsPageReadPort;
 
@@ -353,10 +363,18 @@ describe('seo — the sitemap reads memberships through the sanctioned bridge ac
     const { payload } = await service.regenerateForChannel('web');
 
     expect(seen.sort()).toEqual(['category', 'cms-page', 'product']);
-    expect(payload).toContain('https://shop.test/p/live-product');
-    expect(payload).toContain('https://shop.test/c/live-category');
-    // The CMS URL comes from `slug`, not from the entity's deprecated `path`.
-    expect(payload).toContain('https://shop.test/live-page');
+    expect(payload).toContain('https://shop.test/en/p/live-product');
+    // Feature 167 (FR-032) — a category per channel language, under its prefix.
+    for (const prefix of ['en', 'pl', 'de']) expect(payload).toContain(`https://shop.test/${prefix}/c/live-category`);
+    expect(payload).not.toContain('https://shop.test/c/live-category');
+    // The CMS URL comes from `slug`, not from the entity's deprecated `path` — per
+    // language the page has that the channel serves.
+    expect(payload).toContain('https://shop.test/en/live-page');
+    // R24: each language at its own slug.
+    expect(payload).toContain('https://shop.test/pl/zywa-strona');
+    expect(payload).not.toContain('https://shop.test/pl/live-page');
+    expect(payload).not.toContain('https://shop.test/de/live-page');
+    expect(payload).not.toContain('lang=');
     expect(payload).not.toContain('legacy-');
     // The three excluded rows produce no URL at all.
     expect(payload).not.toContain('slug-p-private');
@@ -394,7 +412,7 @@ describe('seo — the sitemap reads memberships through the sanctioned bridge ac
     expect(received).toBe(1200);
   });
 
-  it('emits one URL per live language with the effective key there, `?lang` off the default (163 T112, FR-074)', async () => {
+  it('emits one URL per live language with the effective key there, prefixed, never ?lang= (163 T112, FR-074; 167 FR-031)', async () => {
     const membership = membershipStub({ product: ['p-1'] }, []);
     const askedFor: Array<{ ids: readonly string[]; channelId: string }> = [];
     const service = new SitemapGeneratorService(
@@ -434,9 +452,9 @@ describe('seo — the sitemap reads memberships through the sanctioned bridge ac
     const { payload } = await service.regenerateForChannel('web');
 
     expect(askedFor).toEqual([{ ids: ['p-1'], channelId: 'chan-1' }]);
-    expect(payload).toContain('<loc>https://shop.test/p/drill</loc>');
-    expect(payload).toContain('<loc>https://shop.test/p/wiertarka?lang=pl-PL</loc>');
+    expect(payload).toContain('<loc>https://shop.test/en/p/drill</loc>');
+    expect(payload).toContain('<loc>https://shop.test/pl/p/wiertarka</loc>');
     expect(payload).not.toContain('bohrer');
-    expect(payload).not.toContain('/p/drill?lang=pl-PL');
+    expect(payload).not.toContain('lang=');
   });
 });

@@ -1,8 +1,8 @@
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { ProductSummary } from '@endora-commerce/contracts';
 import { tForLocale } from '../lib/i18n/messages';
 import { DEFAULT_VAT_RATE, formatMoney, grossUnitPriceFromNet } from '../lib/i18n/money';
+import { LocalizedLink } from '../lib/i18n/localized-link';
 
 /**
  * List-view row for the catalog. Same data surface as `<ProductCard>`,
@@ -39,7 +39,7 @@ export function ProductRow(props: {
 
   return (
     <article className="grid grid-cols-[88px_minmax(0,1fr)_170px_170px_130px] items-center gap-[20px] rounded-md border border-line bg-surface p-[16px] transition hover:border-[var(--ink-700)] hover:shadow-sm max-[920px]:grid-cols-[64px_minmax(0,1fr)]">
-      <Link
+      <LocalizedLink
         href={`/p/${product.slug}`}
         className="grid h-[88px] w-[88px] place-items-center overflow-hidden rounded-sm border border-line bg-surface-alt"
         aria-label={product.name}
@@ -52,15 +52,15 @@ export function ProductRow(props: {
             className="h-full w-full object-contain p-[6px]"
           />
         ) : null}
-      </Link>
+      </LocalizedLink>
       <div className="min-w-0">
         <div className="flex gap-[6px] font-mono text-[11px] text-muted">
           <span className="font-medium text-fg-soft">{product.sku}</span>
         </div>
         <h3 className="mt-[4px] mb-[6px] text-[14px] font-semibold text-fg">
-          <Link href={`/p/${product.slug}`} className="text-inherit hover:text-accent">
+          <LocalizedLink href={`/p/${product.slug}`} className="text-inherit hover:text-accent">
             {product.name}
-          </Link>
+          </LocalizedLink>
         </h3>
       </div>
       <div className="max-[920px]:col-start-2">{renderStock(product, t)}</div>
@@ -84,9 +84,9 @@ export function ProductRow(props: {
         )}
       </div>
       <div className="flex justify-end max-[920px]:col-start-2 max-[920px]:justify-start">
-        <Link href={`/p/${product.slug}`} className="btn btn--outline btn--sm">
+        <LocalizedLink href={`/p/${product.slug}`} className="btn btn--outline btn--sm">
           {t('product.details')}
-        </Link>
+        </LocalizedLink>
       </div>
     </article>
   );

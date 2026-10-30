@@ -233,6 +233,8 @@ export * from './product-value-resolver.js';
 export * from './storefront-value-overrides.js';
 export * from './product-scopes.js';
 export * from './product-url-keys.js';
+// Feature 167 — the storefront language path prefix (`specs/167-storefront-locale-path/`).
+export * from './storefront-language-path.js';
 export * from './mfa.js';
 export * from './prompt-actions.js';
 export * from './pwa.js';

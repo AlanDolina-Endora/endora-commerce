@@ -25,6 +25,7 @@ function generation(): FeedGenerationService {
     catalogProducts: { findByIds: async () => products, listVariantsByProductIds: async () => [] },
     catalogCategories: { listAssignmentsForProducts: async () => [], findByIds: async () => [] },
     catalogGallery: { listForProducts: async () => [] },
+    catalogUrlKeys: { effectiveKeys: async () => new Map() },
     resolvePublicImageUrls: async () => new Map(),
     resolveAvailability: async () => new Map(),
     resolveAnonymousPrice: async () =>
@@ -45,6 +46,8 @@ const scope = (pricePresentation: 'gross' | 'net'): FeedItemHydrationScope => ({
     pricePresentation,
     taxCountry: 'PL',
     storefrontOrigin: 'https://shop.example.com',
+    // Feature 167 — the channel's URL-language facts: links carry the language prefix.
+    channelUrl: { languages: ['pl-PL', 'en-US'], defaultLanguage: 'pl-PL', prefixDefaultLanguage: true },
     salesChannelId: 'channel-1',
     priceListId: null,
   },

@@ -7,10 +7,20 @@ import {
 } from '@endora-commerce/page-builder-core';
 import { absolutizeMediaUrl } from './resolve-image-url.js';
 
-/** What a link needs from the render environment: the asset map and the API origin. */
+/** What a link needs from the render environment: the asset map, the API origin and the path localizer. */
 export interface LinkHrefEnv {
   assets?: Record<string, { url: string }>;
   mediaBaseUrl?: string | undefined;
+  /**
+   * Puts the page language's prefix on an internal storefront path
+   * (`specs/167-storefront-locale-path/`, FR-020). The storefront passes its own;
+   * absent — in the editor, in a test — paths are returned unchanged.
+   */
+  localizePath?: ((path: string) => string) | undefined;
+}
+
+function localized(path: string, env: LinkHrefEnv): string {
+  return env.localizePath ? env.localizePath(path) : path;
 }
 
 /** The attributes of a rendered link. */
@@ -42,17 +52,19 @@ export function resolveLinkHref(link: LinkValue | null | undefined, env: LinkHre
   switch (link.kind) {
     case 'url': {
       const href = link.href?.trim() ?? '';
-      return href && isSafeLinkUrl(href) ? withTarget(href, link.target) : null;
+      if (!href || !isSafeLinkUrl(href)) return null;
+      // A root-relative path is a storefront page: it takes the page language.
+      return withTarget(href.startsWith('/') && !href.startsWith('//') ? localized(href, env) : href, link.target);
     }
     case 'page': {
       const slug = link.slug?.trim().replace(/^\/+/, '') ?? '';
-      return slug ? withTarget(`/${slug}`, link.target) : null;
+      return slug ? withTarget(localized(`/${slug}`, env), link.target) : null;
     }
     case 'product':
     case 'category': {
       const slug = link.slug?.trim() ?? '';
       if (!slug) return null;
-      return withTarget(`/${link.kind === 'product' ? 'p' : 'c'}/${encodeURIComponent(slug)}`, link.target);
+      return withTarget(localized(`/${link.kind === 'product' ? 'p' : 'c'}/${encodeURIComponent(slug)}`, env), link.target);
     }
     case 'asset': {
       if (!link.fileAssetId) return null;

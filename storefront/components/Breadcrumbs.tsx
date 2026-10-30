@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { JsonLd } from '../lib/seo/JsonLd';
 import { absoluteUrl } from '../lib/seo/site-url';
+import { LocalizedLink } from '../lib/i18n/localized-link';
 
 export interface BreadcrumbCrumb {
   /**
@@ -81,7 +81,7 @@ export function Breadcrumbs(props: { crumbs: BreadcrumbCrumb[]; scheme?: Breadcr
                 {c.label}
               </span>
             ) : c.href !== null ? (
-              <Link href={c.href}>{c.label}</Link>
+              <LocalizedLink href={c.href}>{c.label}</LocalizedLink>
             ) : (
               <span>{c.label}</span>
             )}

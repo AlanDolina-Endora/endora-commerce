@@ -58,6 +58,29 @@ Assignments are kept in the channel's `organization` membership and are managed 
 
 When this rule was introduced, every existing Organization was assigned the system-default channel and every channel it already had orders on, so existing customers kept their access.
 
+## Language in storefront URLs {#language-in-urls}
+
+A storefront URL names its language as its first path segment: `/pl/p/wiertarka`,
+`/en/p/drill`, `/en/c/tools`. A URL therefore means one language for every visitor and every
+search engine, whatever their browser or cookie says.
+
+- **Prefixes are derived, never typed.** Each channel language gets the lower-case primary
+  subtag (`pl`, `en`); when the channel has two variants of one language (`en-US`, `en-GB`)
+  both get their full tag (`/en-us`, `/en-gb`), and the short `/en` keeps working by
+  redirecting to one of them.
+- **Prefix the default language in URLs** (per channel) decides whether the default
+  language is prefixed too. **On** — every URL is prefixed and a URL without a prefix is
+  redirected (307) to the language chosen by `?lang=`, then the `lang` cookie, then the
+  browser's languages, then the default. **Off** — a URL without a prefix is the default
+  language and is never redirected for language; `/<default prefix>/…` answers a permanent
+  redirect (308) to the unprefixed URL; every other language is prefixed.
+- New channels start **on**. Channels that existed when the platform was upgraded to this
+  behaviour were set **off**, so their addresses did not move.
+- Old links keep working: unprefixed links and the former `?lang=` product links are
+  redirected to the right page in the right language.
+- Canonical and `hreflang` links, the sitemaps, product feeds and e-mails all use the
+  prefixed addresses; `x-default` is the unprefixed address.
+
 ## Storefront theme
 
 A channel's `themeCode` selects which set of design tokens the storefront renders in — colour, typography, spacing, corner radius, elevation. It is chosen from a list on the channel's identity form, and the list holds the themes the storefront actually implements; a channel that names none renders in the default theme.

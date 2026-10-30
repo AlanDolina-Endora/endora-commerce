@@ -17,6 +17,7 @@
 
 import { z } from 'zod';
 import { isoDateTimeSchema, uuidSchema } from './common.js';
+import { channelUrlLanguageAliasSchema, channelUrlLanguageSchema } from './storefront-language-path.js';
 
 // ---------------------------------------------------------------------------
 // (1) Identity primitives
@@ -52,6 +53,13 @@ export const SalesChannelSummarySchema = z.object({
    * channel are answered. Independent of the anonymous price-visibility flag.
    */
   anonymousAccess: z.boolean(),
+  /**
+   * Does the default language carry its path prefix in storefront URLs
+   * (`specs/167-storefront-locale-path/`, OR-1)? Every other channel language always
+   * does. On for new channels; channels that existed when feature 167 was installed
+   * were switched off by its migration so their URLs did not move (OR-10).
+   */
+  prefixDefaultLanguage: z.boolean(),
   systemDefault: z.boolean(),
   defaultLanguage: z.string(),
   defaultCurrency: z.string(),
@@ -133,6 +141,8 @@ export const SalesChannelCreateBodySchema = z
     active: z.boolean().optional().default(true),
     /** Open to anonymous visitors unless the operator turns it off (feature 154, FR-003). */
     anonymousAccess: z.boolean().optional().default(true),
+    /** Prefix the default language in storefront URLs unless the operator turns it off (feature 167, OR-1). */
+    prefixDefaultLanguage: z.boolean().optional().default(true),
   })
   .superRefine((v, ctx) => {
     if (!v.languages.includes(v.defaultLanguage)) {
@@ -153,7 +163,8 @@ export const SalesChannelCreateBodySchema = z
 export type SalesChannelCreateBody = z.infer<typeof SalesChannelCreateBodySchema>;
 /**
  * What a client sends to create a channel: the body **before** defaults apply,
- * so `active` and `anonymousAccess` may be left out (both default to `true`).
+ * so `active`, `anonymousAccess` and `prefixDefaultLanguage` may be left out (all
+ * default to `true`).
  */
 export type SalesChannelCreateRequest = z.input<typeof SalesChannelCreateBodySchema>;
 
@@ -184,6 +195,7 @@ export const SalesChannelUpdateBodySchema = z
     defaultCurrency: z.string().optional(),
     active: z.boolean().optional(),
     anonymousAccess: z.boolean().optional(),
+    prefixDefaultLanguage: z.boolean().optional(),
   })
   .superRefine((v, ctx) => {
     if (v.defaultLanguage !== undefined && v.languages && !v.languages.includes(v.defaultLanguage)) {
@@ -306,6 +318,16 @@ export const PublicSalesChannelSchema = z.object({
    * every read is refused. Says nothing about the viewer.
    */
   anonymousAccess: z.boolean(),
+  /** Whether the default language carries its path prefix (feature 167). */
+  prefixDefaultLanguage: z.boolean(),
+  /**
+   * The URL language of every channel language, derived by `channelUrlLanguages`
+   * (`specs/167-storefront-locale-path/contracts/url-shape.md` §2) so no consumer
+   * re-derives it (FR-004). Channel order, the default language included.
+   */
+  urlLanguages: z.array(channelUrlLanguageSchema).min(1),
+  /** Primary subtags shared by several channel languages, answered 307 to one of them (FR-015). */
+  urlLanguageAliases: z.array(channelUrlLanguageAliasSchema),
 });
 export type PublicSalesChannel = z.infer<typeof PublicSalesChannelSchema>;
 

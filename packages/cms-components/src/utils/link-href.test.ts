@@ -69,3 +69,35 @@ describe('resolveLinkHref', () => {
     });
   });
 });
+
+/**
+ * Feature 167 (`specs/167-storefront-locale-path/`, FR-020) — an internal link of an
+ * operator-authored block carries the page language's prefix: the storefront passes
+ * its `localizePath` in the render environment; without one, paths are unchanged.
+ */
+describe('resolveLinkHref — localizePath', () => {
+  const localizePath = (path: string): string => (path.startsWith('/en') ? path : `/en${path === '/' ? '' : path}`);
+
+  it('localizes page, product and category links and root-relative URLs', () => {
+    expect(resolveLinkHref({ kind: 'page', slug: 'about-us' }, { localizePath })).toEqual({ href: '/en/about-us' });
+    expect(resolveLinkHref({ kind: 'product', slug: 'drill' }, { localizePath })).toEqual({ href: '/en/p/drill' });
+    expect(resolveLinkHref({ kind: 'category', slug: 'tools' }, { localizePath })).toEqual({ href: '/en/c/tools' });
+    expect(resolveLinkHref({ kind: 'url', href: '/catalog?sort=price' }, { localizePath })).toEqual({
+      href: '/en/catalog?sort=price',
+    });
+  });
+
+  it('leaves external URLs, anchors and assets alone', () => {
+    expect(resolveLinkHref({ kind: 'url', href: 'https://example.com/x' }, { localizePath })).toEqual({
+      href: 'https://example.com/x',
+    });
+    expect(resolveLinkHref({ kind: 'anchor', anchor: 'contact' }, { localizePath })).toEqual({ href: '#contact' });
+    expect(resolveLinkHref({ kind: 'asset', fileAssetId: ASSET }, { localizePath, mediaBaseUrl: 'https://api.test' })?.href).toBe(
+      `https://api.test/assets/file/${ASSET}`,
+    );
+  });
+
+  it('is the identity when no localizePath is given', () => {
+    expect(resolveLinkHref({ kind: 'category', slug: 'tools' })).toEqual({ href: '/c/tools' });
+  });
+});

@@ -611,6 +611,9 @@ on desktop only if so configured, and never for visitors who prefer reduced moti
   not the channel's default language. An address MUST be unique within one channel and one
   language. A request for the page under another language's address MUST redirect permanently to
   the page's address in the served language.
+  **Superseded in part by `specs/167-storefront-locale-path/` (2026-10-29):** the language is the
+  address's path prefix (`/<prefix>/<slug in that language>`) instead of `?lang=`; the home page
+  has an address per language too (`/<prefix>`) and declares its alternates.
 - **FR-035**: The deployment MUST be able to publish organisation structured data: name, logo,
   address, contact details and social profiles.
 

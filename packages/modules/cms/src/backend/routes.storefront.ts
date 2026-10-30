@@ -14,9 +14,18 @@ function resolvedChannel(request: FastifyRequest): {
   id: string;
   code: string;
   defaultLanguage: string;
+  languages: readonly string[];
+  prefixDefaultLanguage: boolean;
 } {
   const ch = getResolvedChannel(request);
-  return { id: ch.id, code: ch.code, defaultLanguage: ch.defaultLanguage };
+  return {
+    id: ch.id,
+    code: ch.code,
+    defaultLanguage: ch.defaultLanguage,
+    // Feature 167 — the channel's URL-language facts, for the CMS page URLs answered.
+    languages: ch.languages,
+    prefixDefaultLanguage: ch.prefixDefaultLanguage,
+  };
 }
 
 export async function registerCmsStorefrontRoutes(

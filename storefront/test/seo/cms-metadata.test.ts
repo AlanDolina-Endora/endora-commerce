@@ -21,6 +21,8 @@ vi.mock('../../lib/server-context', () => ({
   getServerContext: async () => ({
     ctx: { locale: 'en-US', salesChannelCode: 'web' },
     locale: 'en-US',
+    // Feature 167 — no URL languages known: the canonical is the logical path.
+    urlState: { languages: [], aliases: [], current: 'en-US' },
   }),
 }));
 vi.mock('../../lib/api/cms', () => ({

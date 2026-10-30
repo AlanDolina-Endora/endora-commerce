@@ -15,6 +15,7 @@ import { Product } from '../entities/product.entity.js';
 import { ProductUrlKey } from '../entities/product-url-key.entity.js';
 import { ProductUrlRedirect } from '../entities/product-url-redirect.entity.js';
 import type { CatalogQueryContext } from './catalog-query.service.js';
+import { channelUrlFactsOf } from './channel-url-facts.js';
 import { inIdChunks } from './sql-id-arrays.js';
 
 /**
@@ -149,13 +150,26 @@ export class UrlKeyResolutionService {
     const em = this.emFactory();
 
     let product = await findCurrentKeyHolder(em, key, languageCode);
+    // A redirect is served only while `seo` is present; otherwise it is a key of
+    // no product, and answers exactly that (FR-111).
+    if (!product && this.seoPresent()) product = await findRedirectTarget(em, key, languageCode);
+    // Feature 167 (FR-024, research R-9) — a current key of the product in another
+    // **channel** language (channel order; a language the channel does not serve is
+    // not considered, XII). It is never served under L (K1): it redirects to the
+    // product's own key at L, temporarily, because a key held in another language
+    // today may be another product's tomorrow.
+    let crossLanguage = false;
     if (!product) {
-      // A redirect is served only while `seo` is present; otherwise it is a key of
-      // no product, and answers exactly that (FR-111).
-      if (!this.seoPresent()) throw notFound();
-      product = await findRedirectTarget(em, key, languageCode);
-      if (!product) throw notFound();
+      for (const other of channel.languages) {
+        if (other === languageCode) continue;
+        product = await findCurrentKeyHolder(em, key, other);
+        if (product) {
+          crossLanguage = true;
+          break;
+        }
+      }
     }
+    if (!product) throw notFound();
 
     // Availability before any answer naming the product: an unavailable target is
     // the absent key's 404, never a redirect that would disclose it (FR-071).
@@ -165,12 +179,15 @@ export class UrlKeyResolutionService {
       (await loadEffectiveKeys(em, [product], { id: channel.id, languages: [languageCode] }))
         .get(product.id)
         ?.get(languageCode) ?? product.slug;
-    if (effective === key) return { kind: 'product', productId: product.id, key };
+    if (effective === key && !crossLanguage) return { kind: 'product', productId: product.id, key };
     return {
       kind: 'redirect',
       key: effective,
       languageCode,
-      path: productPath({ key: effective, languageCode, channelDefaultLanguage: channel.defaultLanguage }),
+      path: productPath({ key: effective, languageCode, channel: channelUrlFactsOf(ctx.resolvedChannel) }),
+      // A former key, or another current key of L that is not the effective one, is
+      // a property of the URL (308); a key of another language is not (307).
+      permanent: !crossLanguage,
     };
   }
 }

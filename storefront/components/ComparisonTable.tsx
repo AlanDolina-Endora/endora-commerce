@@ -17,6 +17,7 @@ import {
 import { CompareAddToCartButton } from './CompareAddToCartButton';
 import { toAbsoluteAssetUrl } from '../lib/asset-url';
 import { tForLocale } from '../lib/i18n/messages';
+import { LocalizedAnchor } from '../lib/i18n/localized-link';
 
 /**
  * Comparison table — feature 007 / T032, restyled to match the Industria
@@ -161,12 +162,12 @@ export function ComparisonTable(props: {
                       )}
                     </div>
                     <div className="industria-cmp-card__sku">{p.sku}</div>
-                    <a
+                    <LocalizedAnchor
                       href={`/p/${p.slug}`}
                       className="industria-cmp-card__name"
                     >
                       {localised(p.name)}
-                    </a>
+                    </LocalizedAnchor>
                     <div className="industria-cmp-card__price">
                       {p.price
                         ? `${p.price.amount} ${p.price.currency}`
@@ -216,9 +217,9 @@ export function ComparisonTable(props: {
                       minOrderQuantity={p.minOrderQuantity ?? null}
                       locale={locale}
                     />
-                    <a href={`/p/${p.slug}`} className="btn btn--outline btn--sm">
+                    <LocalizedAnchor href={`/p/${p.slug}`} className="btn btn--outline btn--sm">
                       Karta produktu
-                    </a>
+                    </LocalizedAnchor>
                   </div>
                 </td>
               ))}

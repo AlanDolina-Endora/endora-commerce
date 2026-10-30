@@ -37,6 +37,7 @@ function channel(name: string): CachedChannel {
     name: { en: name },
     active: true,
     anonymousAccess: true,
+    prefixDefaultLanguage: true,
     systemDefault: true,
     defaultLanguage: 'en',
     defaultCurrency: 'PLN',
@@ -256,20 +257,38 @@ describe('SalesChannelsCache carries anonymousAccess', () => {
       'languages',
       'logoAssetId',
       'name',
+      'prefixDefaultLanguage',
       'systemDefault',
       'themeCode',
       'version',
     ]);
   });
 
-  it('keys v4, so an entry cached in the v3 shape is ignored', async () => {
-    // Issue #492 — the price-visibility flag left the cached shape with its
-    // column. A process still running the v3 code reads v3 keys and never meets
-    // an entry without the flag it reads.
-    expect(SALES_CHANNELS_CACHE_KEY_PREFIX).toBe('sales-channels:v4:');
+  it('keys v5, so an entry cached in the v4 shape is ignored', async () => {
+    // Feature 167 — `prefixDefaultLanguage` joined the cached shape. A process
+    // still running the v4 code reads v4 keys and never meets an entry without
+    // the flag every storefront URL emitter reads.
+    expect(SALES_CHANNELS_CACHE_KEY_PREFIX).toBe('sales-channels:v5:');
     const controls = fakeRedis();
-    controls.store.set(`sales-channels:v3:${CODE}`, JSON.stringify(channel('Retail')));
+    controls.store.set(`sales-channels:v4:${CODE}`, JSON.stringify(channel('Retail')));
     const cache = new SalesChannelsCache(controls.redis);
     expect(await cache.get(CODE)).toEqual({ hit: false });
+  });
+});
+
+/** Feature 167 — whether the default language carries its URL prefix rides the cached channel. */
+describe('SalesChannelsCache carries prefixDefaultLanguage', () => {
+  it('maps the entity flag into the cached shape', () => {
+    const entity = new SalesChannel();
+    entity.code = 'trade';
+    entity.name = { en: 'Trade' };
+    entity.defaultLanguage = 'en';
+    entity.defaultCurrency = 'PLN';
+    entity.prefixDefaultLanguage = false;
+    expect(toCachedChannel(entity).prefixDefaultLanguage).toBe(false);
+  });
+
+  it('defaults a new channel to prefixed (OR-1)', () => {
+    expect(new SalesChannel().prefixDefaultLanguage).toBe(true);
   });
 });

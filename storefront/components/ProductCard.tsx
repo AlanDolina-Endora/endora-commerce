@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { ProductSummary, StorefrontProductStock } from '@endora-commerce/contracts';
 import { tForLocale } from '../lib/i18n/messages';
@@ -11,6 +10,7 @@ import { ProductCardActions } from './ProductCardActions';
 import type { PriceDisplay } from '../lib/api/pricing';
 import { toAbsoluteAssetUrl } from '../lib/asset-url';
 import { publicApiBaseUrl } from '../lib/env.mjs';
+import { LocalizedLink } from '../lib/i18n/localized-link';
 
 // Handed to the client `<ProductCardActions>` (shopping-list heart + add to
 // cart), which fetches from the browser — so it must be the public,
@@ -83,7 +83,7 @@ export function ProductCard(props: {
     // the pressed element, so a tap anywhere in the card — the image link, the
     // heading link — lands here.
     <article className="group relative flex flex-col rounded-lg border border-line bg-surface transition hover:-translate-y-[3px] hover:border-[var(--ink-700)] hover:shadow-md active:translate-y-0 active:border-line-strong active:bg-surface-alt active:shadow-none">
-      <Link
+      <LocalizedLink
         href={`/p/${product.slug}`}
         className="relative flex aspect-square items-center justify-center overflow-hidden rounded-t-lg border-b border-line bg-surface-alt"
         aria-label={product.name}
@@ -101,7 +101,7 @@ export function ProductCard(props: {
             aria-hidden="true"
           />
         )}
-      </Link>
+      </LocalizedLink>
       <CompareToggle productId={product.id} salesChannelCode={props.salesChannelCode} />
       {resolved && resolved.salePrice ? (
         <span className="industria-badge industria-badge--sale" aria-label={t('product.requestQuote')}>
@@ -113,11 +113,11 @@ export function ProductCard(props: {
         <div className="flex gap-[6px] font-mono text-[11px] text-muted">
           <span className="font-medium text-fg-soft">{product.sku}</span>
         </div>
-        <Link href={`/p/${product.slug}`} className="text-inherit">
+        <LocalizedLink href={`/p/${product.slug}`} className="text-inherit">
           <h3 className="m-0 line-clamp-2 text-[13px] font-medium leading-[1.4] text-fg">
             {product.name}
           </h3>
-        </Link>
+        </LocalizedLink>
         <div className="mt-auto flex items-end justify-between gap-2 border-t border-line pt-[10px]">
           <div>{renderPriceSlot({ product, locale, resolved, t, vatRate })}</div>
           {stockNode}

@@ -7,6 +7,7 @@
 // happens server-side in the CMS module.
 
 import { z } from 'zod';
+import { storefrontPagePath, type ChannelUrlFacts } from './storefront-language-path.js';
 import { isoDateTimeSchema, uuidSchema } from './common.js';
 import { LlmProviderSchema } from './prompt-actions.js';
 import { cmsBrandTokensSchema } from './cms-brand.js';
@@ -80,6 +81,15 @@ export const cmsPageSummarySchema = z.object({
    * changes address. The resulting path is `cmsPagePublicPaths`'s answer.
    */
   parentPathInUrl: z.boolean(),
+  /**
+   * Feature 167 (FR-041) — present when the page's first slug segment is a storefront
+   * language prefix (or split alias) of a sales channel: `/<prefix>/…` is that
+   * language's page, so the page is not reachable at its own address there. Saves
+   * refuse such a slug; this marks a page that predates the language.
+   */
+  shadowedByLanguagePrefix: z
+    .object({ prefix: z.string(), channelCodes: z.array(z.string()) })
+    .optional(),
   /**
    * R24: the page's name, slug and description per language. `{}` — every
    * language inherits the fields above, which is every page stored before it.
@@ -872,24 +882,30 @@ export interface CmsPageUrlInput {
   path: string;
   /** The language the URL is for — already resolved against the page and channel. */
   languageCode: string;
-  /** The channel's default content language. */
-  channelDefaultLanguage: string;
+  /**
+   * The channel's URL-language facts (feature 167, `specs/167-storefront-locale-path/`):
+   * its languages, default and *prefix the default language* setting.
+   */
+  channel: ChannelUrlFacts;
 }
 
 /**
- * The storefront URL of a CMS page: `/<path>`, plus `?lang=<L>` when L is not
- * the channel's default language (R24) — the rule `productPath` states for a
- * product, for the same reason: a page's slug may be different in every
- * language, and the language a non-default URL is for has to travel with it.
+ * The storefront URL of a CMS page: `/<path>` in the language, under that language's
+ * path prefix (`/en/about`, or `/o-nas` for the default language of a channel that
+ * does not prefix it) — the rule `productPath` states for a product. A page's slug
+ * may differ in every language (R24), so the language travels with the URL as its
+ * prefix; 163 R24's interim `?lang=` is never appended (feature 167, OR-7).
  *
- * The backend calls it for every CMS URL it answers — the resolved page's
- * canonical and alternates, the channel index — so a later language path
- * prefix changes this one function.
+ * The backend calls it for every CMS URL it answers — the resolved page's canonical
+ * and alternates, the channel index.
  */
 export function cmsPageUrl(input: CmsPageUrlInput): string {
-  const base = `/${trimSlashes(input.path)}`;
-  if (input.languageCode === input.channelDefaultLanguage) return base;
-  return `${base}?lang=${encodeURIComponent(input.languageCode)}`;
+  const trimmed = trimSlashes(input.path);
+  return storefrontPagePath({
+    path: trimmed === '' ? '/' : `/${trimmed}`,
+    languageCode: input.languageCode,
+    channel: input.channel,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -984,6 +1000,17 @@ export interface CmsPageRecord {
   updatedAt: Date;
   /** The breadcrumb parent (feature 163). Never part of the page's URL. */
   parentPageId: string | null;
+  /**
+   * The languages the page has content in (feature 167): the sitemap lists the page
+   * under the prefix of each of these the channel serves. Absent — a record from a
+   * reader that predates it — every channel language.
+   */
+  languages?: readonly string[];
+  /**
+   * 163 R24: the page's per-language name, slug and description overrides — the
+   * sitemap lists each language at its own slug (`cmsLocalizedPage`). Absent: none.
+   */
+  translations?: CmsPageTranslations;
 }
 
 /**

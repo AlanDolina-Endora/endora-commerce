@@ -290,5 +290,5 @@ See "Repo map" above.
 
 ## Recent Changes
 - 166-asset-reference-visibility
+- 167-storefront-locale-path
 - 165-task-management
-- feat/163-product-data-scopes

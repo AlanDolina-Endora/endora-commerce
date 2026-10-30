@@ -1,6 +1,4 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { listMyOrders } from '../../../../lib/api/orders';
 import {
   createReturnCase,
@@ -19,6 +17,8 @@ import {
 } from '../../../../lib/returns/returnForm';
 import { ReturnFormLines } from '../../../../components/returns/ReturnFormLines';
 import type { Metadata } from 'next';
+import { localeRedirect } from '../../../../lib/i18n/navigation';
+import { LocalizedLink } from '../../../../lib/i18n/localized-link';
 
 /**
  * Not indexed (`specs/098-storefront-ssr-seo-a11y-suite/`, FR-010): an
@@ -44,7 +44,7 @@ export default async function NewReturnPage({
   searchParams: Promise<{ orderId?: string; kind?: string }>;
 }): Promise<ReactNode> {
   const session = await getSessionCookie();
-  if (!session) redirect('/login?next=/returns/new');
+  if (!session) return await localeRedirect('/login?next=/returns/new');
   const [{ orderId, kind: kindParam }, { locale }] = await Promise.all([searchParams, getServerContext()]);
   const t = tForLocale(locale);
 
@@ -61,15 +61,15 @@ export default async function NewReturnPage({
           <ul>
             {orders.map((o) => (
               <li key={o.id}>
-                <Link href={`/returns/new?orderId=${encodeURIComponent(o.id)}`}>
+                <LocalizedLink href={`/returns/new?orderId=${encodeURIComponent(o.id)}`}>
                   {o.businessId} — {new Date(o.placedAt).toLocaleDateString(locale)}
-                </Link>
+                </LocalizedLink>
               </li>
             ))}
           </ul>
         )}
         <p>
-          <Link href="/returns">{t('returns.new.backToReturns')}</Link>
+          <LocalizedLink href="/returns">{t('returns.new.backToReturns')}</LocalizedLink>
         </p>
       </div>
     );
@@ -88,7 +88,7 @@ export default async function NewReturnPage({
         <h1>{t('returns.new.heading')}</h1>
         <p>{model.notice}</p>
         <p>
-          <Link href="/returns/new">{t('returns.new.chooseAnotherOrder')}</Link>
+          <LocalizedLink href="/returns/new">{t('returns.new.chooseAnotherOrder')}</LocalizedLink>
         </p>
       </div>
     );
@@ -106,7 +106,7 @@ export default async function NewReturnPage({
   async function submit(formData: FormData): Promise<void> {
     'use server';
     const s = await getSessionCookie();
-    if (!s) redirect('/login?next=/returns/new');
+    if (!s) return await localeRedirect('/login?next=/returns/new');
     const lines: CreateReturnCaseInput['lines'] = [];
     // Only the lines this kind allows: a non-returnable line posted into a return anyway (a
     // tampered form) is dropped here, and the API refuses it regardless (FR-019).
@@ -120,7 +120,7 @@ export default async function NewReturnPage({
       if (!reasonId) continue;
       lines.push({ orderItemId, quantity, reasonId });
     }
-    if (lines.length === 0) redirect(backHref);
+    if (lines.length === 0) return await localeRedirect(backHref);
     const comment = String(formData.get('comment') ?? '').trim();
     const created = await createReturnCase(s, {
       orderId: orderId!,
@@ -128,7 +128,7 @@ export default async function NewReturnPage({
       lines,
       ...(comment ? { comment } : {}),
     });
-    redirect(`/returns/${created.id}`);
+    return await localeRedirect(`/returns/${created.id}`);
   }
 
   return (
@@ -140,7 +140,7 @@ export default async function NewReturnPage({
             {t('returns.new.kind.legend')}
           </span>
           {(['return', 'complaint'] as const).map((k) => (
-            <Link
+            <LocalizedLink
               key={k}
               href={returnFormHref(orderId, k)}
               {...(k === kind ? { 'aria-current': 'page' as const } : {})}
@@ -151,7 +151,7 @@ export default async function NewReturnPage({
               }
             >
               {t(k === 'return' ? 'returns.new.kind.return' : 'returns.new.kind.complaint')}
-            </Link>
+            </LocalizedLink>
           ))}
         </nav>
       ) : null}
@@ -177,7 +177,7 @@ export default async function NewReturnPage({
         </button>
       </form>
       <p>
-        <Link href="/returns/new">{t('returns.new.chooseAnotherOrder')}</Link>
+        <LocalizedLink href="/returns/new">{t('returns.new.chooseAnotherOrder')}</LocalizedLink>
       </p>
     </div>
   );

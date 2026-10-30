@@ -56,6 +56,7 @@ export function snapshotSalesChannel(c: SalesChannel): Record<string, unknown> {
     defaultCurrency: c.defaultCurrency,
     active: c.active,
     anonymousAccess: c.anonymousAccess,
+    prefixDefaultLanguage: c.prefixDefaultLanguage,
     systemDefault: c.systemDefault,
     version: c.version,
   };
@@ -96,6 +97,9 @@ export function makeCreateSalesChannelCommand(
         active,
         // Feature 154 (FR-003) — open unless the operator turns it off.
         anonymousAccess: body.anonymousAccess ?? true,
+        // Feature 167 (OR-1) — a new channel prefixes its default language in
+        // storefront URLs unless the operator turns it off.
+        prefixDefaultLanguage: body.prefixDefaultLanguage ?? true,
         systemDefault: false,
         version: 1,
         // Legacy column preserved for one release (research R-12).
@@ -163,6 +167,11 @@ export function makeUpdateSalesChannelCommand(
       // Feature 154 — the access step reads this off the cached channel, which
       // the service drops once this Command has committed.
       if (body.anonymousAccess !== undefined) channel.anonymousAccess = body.anonymousAccess;
+      // Feature 167 — every storefront URL emitter reads this off the cached channel,
+      // which the service drops once this Command has committed.
+      if (body.prefixDefaultLanguage !== undefined) {
+        channel.prefixDefaultLanguage = body.prefixDefaultLanguage;
+      }
       channel.version += 1;
 
       try {

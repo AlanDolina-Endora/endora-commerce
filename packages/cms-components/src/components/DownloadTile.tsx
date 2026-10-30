@@ -23,7 +23,7 @@ import { createIconPickerField } from './IconPickerField.js';
 import { responsivePxVars } from './responsive-px.js';
 import { absolutizeMediaUrl } from '../utils/resolve-image-url.js';
 import { Picture } from './Picture.js';
-import { useCmsRenderAssets, useCmsRenderMediaBaseUrl, type CmsRenderAsset } from './render-context.js';
+import { useCmsRenderAssets, useCmsRenderMediaBaseUrl, type CmsRenderAsset, useCmsRenderLocalizePath } from './render-context.js';
 import { hasImage } from './section-parts.js';
 import { textWeightField } from './typography.js';
 import { singleWeight, textStyleAttrs, type TextStyleValues } from './text-style.js';
@@ -102,10 +102,12 @@ function DownloadTileBody({
 }): ReactNode {
   const assets = useCmsRenderAssets();
   const mediaBaseUrl = useCmsRenderMediaBaseUrl();
+  // Feature 167 — an internal link takes the page language's prefix.
+  const localizePath = useCmsRenderLocalizePath();
   // R20E (T303): the tile links to a page, a product, a URL… (the shared link) instead of a file.
   const pageLink = props.linkTo === 'link';
   const asset = !pageLink && props.fileAssetId ? assets[props.fileAssetId] : undefined;
-  const target = pageLink ? resolveLinkHref(props.link, { assets, ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}) }) : null;
+  const target = pageLink ? resolveLinkHref(props.link, { assets, ...(mediaBaseUrl !== undefined ? { mediaBaseUrl } : {}), localizePath }) : null;
   const title = props.title?.trim() ?? '';
   const subtitle = props.subtitle?.trim() ?? '';
   const label = props.linkLabel?.trim() || (pageLink ? DEFAULT_PAGE_LABEL : DEFAULT_LABEL);

@@ -25,7 +25,7 @@ const state: {
   /** The inbound request headers `next/headers` answers with; `null` = no request scope. */
   requestHeaders: Headers | null;
 } = {
-  identity: { kind: 'value', value: { code: 'retail', anonymousAccess: true } },
+  identity: { kind: 'value', value: { code: 'retail', anonymousAccess: true, prefixDefaultLanguage: true, urlLanguages: [], urlLanguageAliases: [] } },
   requestHeaders: null,
 };
 
@@ -80,7 +80,7 @@ const originalFetch = globalThis.fetch;
 let sent: Array<Record<string, string>> = [];
 
 beforeEach(() => {
-  state.identity = { kind: 'value', value: { code: 'retail', anonymousAccess: true } };
+  state.identity = { kind: 'value', value: { code: 'retail', anonymousAccess: true, prefixDefaultLanguage: true, urlLanguages: [], urlLanguageAliases: [] } };
   state.requestHeaders = null;
   sent = [];
   channelRead.mockReset();
@@ -113,7 +113,7 @@ describe('the middleware stamps the active channel', () => {
 
   it('keeps the value a proxy stamped, and asks about that channel', async () => {
     // A code the identity read does not echo, so an override would show.
-    state.identity = { kind: 'value', value: { code: 'resolved-elsewhere', anonymousAccess: true } };
+    state.identity = { kind: 'value', value: { code: 'resolved-elsewhere', anonymousAccess: true, prefixDefaultLanguage: true, urlLanguages: [], urlLanguageAliases: [] } };
     const response = await middleware(
       new NextRequest('http://shop.test/catalog', { headers: { 'x-sales-channel': 'trade' } }),
     );

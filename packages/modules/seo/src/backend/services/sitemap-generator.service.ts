@@ -3,7 +3,10 @@ import {
   ANONYMOUS_PRODUCT_AUDIENCE,
   isInsideWindow,
   isProductVisibleTo,
+  channelUrlLanguages,
+  cmsLocalizedPage,
   productPath,
+  storefrontPagePath,
   type CatalogProductAvailabilityPort,
   type CatalogProductUrlKeyReadPort,
   type CatalogCategoryReadPort,
@@ -174,22 +177,44 @@ export class SitemapGeneratorService {
       channel.id,
     );
 
+    // Feature 167 (FR-032) — one URL per channel language, under that language's
+    // path prefix (or none for the unprefixed default); categories and CMS pages
+    // share one slug across languages, so each is listed once per language.
+    const channelLanguages = channelUrlLanguages(channel).map((l) => l.languageCode);
+    const pageUrl = (path: string, languageCode: string): string =>
+      `${baseUrl}${storefrontPagePath({ path, languageCode, channel })}`;
     const urls: SitemapUrl[] = [];
     for (const c of categories) {
-      urls.push({
-        loc: `${baseUrl}/c/${c.slug}`,
-        lastmod: c.updatedAt,
-        changefreq: 'weekly',
-        priority: 0.7,
-      });
+      for (const languageCode of channelLanguages) {
+        urls.push({
+          loc: pageUrl(`/c/${c.slug}`, languageCode),
+          lastmod: c.updatedAt,
+          changefreq: 'weekly',
+          priority: 0.7,
+        });
+      }
     }
     for (const page of cmsPages) {
-      urls.push({
-        loc: `${baseUrl}/${page.slug}`,
-        lastmod: page.publishedAt ?? page.updatedAt,
-        changefreq: 'monthly',
-        priority: 0.5,
-      });
+      // A page is listed in the languages it has content in that the channel serves;
+      // a record that names none is listed in every channel language.
+      const own = page.languages ?? [];
+      const languages =
+        own.length === 0
+          ? channelLanguages
+          : channelLanguages.filter((code) => own.some((l) => l.toLowerCase() === code.toLowerCase()));
+      for (const languageCode of languages) {
+        // 163 R24 — each language at its own slug.
+        const slug = cmsLocalizedPage(
+          { name: page.name, slug: page.slug, languages: own, translations: page.translations ?? null },
+          languageCode,
+        ).slug;
+        urls.push({
+          loc: pageUrl(`/${slug}`, languageCode),
+          lastmod: page.publishedAt ?? page.updatedAt,
+          changefreq: 'monthly',
+          priority: 0.5,
+        });
+      }
     }
     for (const p of products) {
       // One URL per live language (FR-074), each on the product's effective key
@@ -198,7 +223,8 @@ export class SitemapGeneratorService {
       for (const languageCode of availability.get(p.id)?.liveLanguages ?? []) {
         const key = productKeys?.get(languageCode) ?? p.slug;
         urls.push({
-          loc: `${baseUrl}${productPath({ key, languageCode, channelDefaultLanguage: channel.defaultLanguage })}`,
+          // Feature 167 — under the language's path prefix, never `?lang=`.
+          loc: `${baseUrl}${productPath({ key, languageCode, channel })}`,
           lastmod: p.updatedAt,
           changefreq: 'daily',
           priority: 0.8,

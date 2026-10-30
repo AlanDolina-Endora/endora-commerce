@@ -58,5 +58,9 @@ export function toCmsPageRecord(page: CmsPage): CmsPageRecord {
     createdAt: page.createdAt,
     updatedAt: page.updatedAt,
     parentPageId: page.parentPageId ?? null,
+    // Feature 167 — the sitemap lists a page under each of its languages' prefixes.
+    languages: [...(page.languages ?? [])],
+    // 163 R24 — each language's own slug, for the sitemap.
+    translations: page.translations ?? {},
   };
 }

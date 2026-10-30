@@ -82,6 +82,7 @@ describe('product_feeds — category assignments come from the catalog port', ()
         ],
       },
       catalogGallery: { listForProducts: async () => [] },
+      catalogUrlKeys: { effectiveKeys: async () => new Map() },
       resolvePublicImageUrls: async () => new Map<string, string>(),
       resolveAvailability: async () => new Map(),
       resolveAnonymousPrice: async () => new Map(),

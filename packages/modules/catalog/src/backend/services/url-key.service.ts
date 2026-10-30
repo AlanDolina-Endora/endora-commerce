@@ -19,6 +19,7 @@ import type { SalesChannelMembershipPort } from '@endora-commerce/platform/kerne
 import { SalesChannel, effectiveState } from '@endora-commerce/platform/kernel';
 import { Product } from '../entities/product.entity.js';
 import { ProductUrlKey } from '../entities/product-url-key.entity.js';
+import { channelUrlFactsOf } from './channel-url-facts.js';
 import { ProductUrlRedirect } from '../entities/product-url-redirect.entity.js';
 
 /**
@@ -658,7 +659,7 @@ export class UrlKeyService {
           languageCode,
           key,
           source,
-          url: productPath({ key, languageCode, channelDefaultLanguage: channel.defaultLanguage }),
+          url: productPath({ key, languageCode, channel: channelUrlFactsOf(channel) }),
         });
       }
     }

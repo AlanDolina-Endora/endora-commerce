@@ -1,3 +1,4 @@
+import type { ChannelUrlFacts } from '@endora-commerce/contracts';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Redis } from 'ioredis';
@@ -136,6 +137,8 @@ export interface MfaModuleOptions {
    * are: a composition without it would issue sessions the rule refuses.
    */
   customerChannelAccess: CustomerChannelAccess;
+  /** Feature 167 — the channel's URL-language facts for the storefront pages sign-in returns to. */
+  channelUrlFactsFor?: (salesChannelId: string | null) => Promise<ChannelUrlFacts | null>;
 }
 
 export interface MfaModuleHandle {
@@ -239,6 +242,7 @@ export function mfaModule(options: MfaModuleOptions): {
         storefrontBaseUrl: options.storefrontBaseUrl ?? 'http://localhost:3000',
         adminBaseUrl: options.adminBaseUrl ?? 'http://localhost:3002',
         customerChannelAccess: options.customerChannelAccess,
+        ...(options.channelUrlFactsFor ? { channelUrlFactsFor: options.channelUrlFactsFor } : {}),
       });
     }
     // Storefront org-admin enforcement (US3).

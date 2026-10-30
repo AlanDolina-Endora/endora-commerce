@@ -102,6 +102,12 @@ async function build(): Promise<Harness> {
     backendBaseUrl: 'https://api.test',
     storefrontBaseUrl: STOREFRONT,
     adminBaseUrl: ADMIN,
+    // Feature 167 — the started-on channel's URL languages (pl-PL default, prefixed; en-US).
+    channelUrlFactsFor: async () => ({
+      languages: ['pl-PL', 'en-US'],
+      defaultLanguage: 'pl-PL',
+      prefixDefaultLanguage: true,
+    }),
     customerChannelAccess: {
       permits,
       assertAccountMayUse: async () => undefined,
@@ -252,7 +258,7 @@ describe('federated sign-in — a blocked customer account', () => {
     const res = await callback(h, state, { [OAUTH_BINDING_COOKIE_NAME]: binding! });
     expect(res.statusCode).toBe(302);
     expect(res.headers['location']).toBe(
-      `${STOREFRONT}/login?error=${encodeURIComponent('This account has been blocked. Please contact support.')}`,
+      `${STOREFRONT}/pl/login?error=${encodeURIComponent('This account has been blocked. Please contact support.')}`,
     );
     expect(h.beginLogin).not.toHaveBeenCalled();
     expect(h.createSession).not.toHaveBeenCalled();
@@ -284,7 +290,7 @@ describe('federated sign-in — the second factor', () => {
 
     expect(res.statusCode).toBe(302);
     expect(res.headers['location']).toBe(
-      `${STOREFRONT}/login/mfa?next=${encodeURIComponent('/account/orders')}`,
+      `${STOREFRONT}/pl/login/mfa?next=${encodeURIComponent('/account/orders')}`,
     );
     expect(h.createSession).not.toHaveBeenCalled();
     expect(sessionCookie(res, 'b2b_session')).toBeUndefined();
@@ -351,7 +357,7 @@ describe('federated sign-in — the sales-channel access rule (feature 154)', ()
     const res = await callback(h, state, { [OAUTH_BINDING_COOKIE_NAME]: binding! });
 
     expect(res.statusCode).toBe(302);
-    expect(res.headers['location']).toBe(`${STOREFRONT}/login?error=sales_channel_not_permitted`);
+    expect(res.headers['location']).toBe(`${STOREFRONT}/pl/login?error=sales_channel_not_permitted`);
     // Decided on the transaction's channel and the account's Organization …
     expect(h.permits).toHaveBeenCalledWith('o1', null);
     // … before a second factor is started or a session issued.
@@ -384,10 +390,45 @@ describe('federated sign-in — the sales-channel access rule (feature 154)', ()
 
     expect(res.statusCode).toBe(302);
     expect(res.headers['location']).toBe(
-      `${STOREFRONT}/login?error=sales_channel_sign_in_required`,
+      `${STOREFRONT}/pl/login?error=sales_channel_sign_in_required`,
     );
     expect(h.beginLogin).not.toHaveBeenCalled();
     expect(h.createSession).not.toHaveBeenCalled();
     expect(sessionCookie(res, 'b2b_session')).toBeUndefined();
+  });
+});
+
+/**
+ * Feature 167 (US6, FR-034) — the storefront pages the federated sign-in returns to
+ * carry the language of the page that started it: the transaction records it from the
+ * prefixed `next` the storefront sends, and `next` itself is passed through unchanged.
+ */
+describe('federated sign-in — the language of the starting page', () => {
+  let h: Harness;
+  beforeEach(async () => {
+    h = await build();
+  });
+  afterEach(async () => {
+    await h.app.close();
+  });
+
+  it('returns an enrolled customer to the code screen in the starting language', async () => {
+    h.setDecision({ kind: 'challenge', challengeId: 'challenge-1' });
+    const { state, binding } = await start(h, 'customer', '/en/account/orders');
+    const res = await callback(h, state, { [OAUTH_BINDING_COOKIE_NAME]: binding! });
+    expect(res.headers['location']).toBe(`${STOREFRONT}/en/login/mfa?next=${encodeURIComponent('/en/account/orders')}`);
+  });
+
+  it('returns a refused customer to the sign-in page in the starting language', async () => {
+    h.setPermitted(false);
+    const { state, binding } = await start(h, 'customer', '/en/cart');
+    const res = await callback(h, state, { [OAUTH_BINDING_COOKIE_NAME]: binding! });
+    expect(res.headers['location']).toBe(`${STOREFRONT}/en/login?error=sales_channel_not_permitted`);
+  });
+
+  it('passes next through unchanged on success', async () => {
+    const { state, binding } = await start(h, 'customer', '/en/account');
+    const res = await callback(h, state, { [OAUTH_BINDING_COOKIE_NAME]: binding! });
+    expect(res.headers['location']).toBe(`${STOREFRONT}/en/account`);
   });
 });
