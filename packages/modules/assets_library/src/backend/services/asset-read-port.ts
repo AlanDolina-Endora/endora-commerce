@@ -1,15 +1,17 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type {
-  AssetBytes,
-  AssetByteStream,
-  AssetReadPort,
-  AssetRecord,
-  ObjectStorageBackendCode,
-  StorageBackendCode,
+import {
+  isAssetIdShaped,
+  type AssetBytes,
+  type AssetByteStream,
+  type AssetReadPort,
+  type AssetRecord,
+  type ObjectStorageBackendCode,
+  type StorageBackendCode,
 } from '@endora-commerce/contracts';
 import { rethrowIfModuleDisabled } from '@endora-commerce/platform/kernel';
 import { Asset } from '../entities/asset.entity.js';
 import { versionedAssetUrl } from './asset-urls.js';
+import type { AssetVisibility } from './asset-visibility.js';
 import type { StorageResolveUrlInput, StorageResolveUrlOutput } from './storage/storage-adapter.js';
 
 /**
@@ -39,6 +41,9 @@ export interface AssetStorageRegistry {
   ): Promise<{ resolveUrl(input: StorageResolveUrlInput): StorageResolveUrlOutput | Promise<StorageResolveUrlOutput> }>;
 }
 
+/** The slice of {@link AssetVisibility} the read model asks — declared so it can be unit-tested over a stub. */
+export type AssetVisibilityReader = Pick<AssetVisibility, 'hiddenAmong'>;
+
 /**
  * The row-level read model `assets_library` publishes (feature 075, Phase P).
  *
@@ -62,12 +67,33 @@ export class AssetReadService implements AssetReadPort {
      */
     private readonly adapters: () => AssetStorageRegistry,
     /**
+     * Which assets the ambient caller may see (feature 166) — the library's one
+     * evaluator, read per call. Required, for the reason `adapters` is.
+     */
+    private readonly visibility: () => AssetVisibilityReader,
+    /**
      * `assets.soft_delete_retention_days` as read now — the reported purge date
      * is `deletedAt` + this (specs/156-asset-stable-url/ owner ruling P1).
      * Optional: a standalone consumer keeps the 30-day default.
      */
     private readonly loadRetentionDays: () => Promise<number> = async () => 30,
   ) {}
+
+  /**
+   * Which of these assets the ambient caller may see (feature 166, research
+   * R-13): the ids that exist, minus the ones {@link AssetVisibility} hides —
+   * one read and one evaluation per call, whatever the batch. A missing id and
+   * one that is not a uuid are absent, exactly as a hidden one is.
+   */
+  async visibleToCaller(assetIds: readonly string[]): Promise<ReadonlySet<string>> {
+    const candidates = [...new Set(assetIds.filter(isAssetIdShaped))];
+    if (candidates.length === 0) return new Set();
+    const rows = await this.emFactory().find(Asset, { id: { $in: candidates } }, { fields: ['id'] });
+    const existing = rows.map((row) => row.id);
+    if (existing.length === 0) return new Set();
+    const hidden = await this.visibility().hiddenAmong(existing);
+    return new Set(existing.filter((id) => !hidden.has(id)));
+  }
 
   async findById(id: string, options?: { liveOnly?: boolean }): Promise<AssetRecord | null> {
     const asset = await this.emFactory().findOne(Asset, {

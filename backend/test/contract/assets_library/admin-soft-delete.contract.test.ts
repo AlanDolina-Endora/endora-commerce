@@ -1,6 +1,9 @@
 import { Asset } from '../../helpers/package-entities.js';
 import { overrideAssetSetting } from '../../helpers/crm-attachment-upload.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { removeCrmAssets, seedCrmAdmin, seedCrmAsset } from '../../helpers/seed-crm.js';
+import { TEST_ADMIN_ID } from '../../helpers/test-actors.js';
 
 import {
   setupBackendServer,
@@ -107,6 +110,11 @@ describe('admin soft-delete + reference protection (T056)', () => {
     });
     expect(del.statusCode).toBe(409);
     expect(del.json()).toMatchObject({ error: { code: 'ASSET_REFERENCED' } });
+    // A full-permission reader's answer is today's: one detail per reference,
+    // `path` the reference kind and `issue` its label.
+    const details = (del.json() as { error: { details: Array<{ path: string; issue: string }> } }).error.details;
+    expect(details).toHaveLength(1);
+    expect(details[0]).toEqual({ path: 'product_gallery', issue: expect.any(String) });
 
     // Cleanup: detach + delete.
     await conn.execute(
@@ -152,6 +160,52 @@ describe('admin soft-delete + reference protection (T056)', () => {
     } finally {
       await restoreSeven();
       await h.em().removeAndFlush(await h.em().findOneOrFail(Asset, { id: a.id }));
+    }
+  });
+
+  // specs/166-asset-reference-visibility/ T041 (R-8, invariant I-1): the
+  // refusal still counts every reference, but its count and `details` are
+  // the references the caller may see — at least one, never a hidden record.
+  it('names only the references a restricted reader may see in the 409, and at least one', async () => {
+    const reader = await seedCrmAdmin(h.em(), 'sd166', ['assets.read', 'assets.write', 'tasks:read']);
+    const conn = h.em().getConnection();
+    const { id } = await seedCrmAsset(h.em(), { filename: `sd166-${randomUUID().slice(0, 8)}.pdf` });
+    const task = randomUUID();
+    const products = (await conn.execute(
+      `select id::text as id from products where deleted_at is null limit 1`,
+    )) as Array<{ id: string }>;
+    expect(products.length, 'the us1-catalog seed must hold a product').toBeGreaterThan(0);
+    try {
+      await conn.execute(
+        `insert into "tasks" ("id", "number", "title", "created_by_admin_user_id", "is_private") values (?, ?, 'sd166', ?, true)`,
+        [task, `T-SD-${task.slice(0, 8)}`, TEST_ADMIN_ID],
+      );
+      await conn.execute(
+        `insert into "task_attachments" ("task_id", "asset_id", "added_by_admin_user_id") values (?, ?, ?)`,
+        [task, id, TEST_ADMIN_ID],
+      );
+      await conn.execute(
+        `insert into gallery_items (id, product_id, asset_id, position, created_at, updated_at)
+         values (gen_random_uuid(), ?, ?, 0, now(), now())`,
+        [products[0]!.id, id],
+      );
+      const refusal = async (cookies: Record<string, string>) => {
+        const response = await h.app.inject({ method: 'DELETE', url: `/api/v1/admin/assets/${id}`, cookies });
+        expect(response.statusCode, response.body).toBe(409);
+        const body = response.json() as { error: { code: string; details: Array<{ path: string; issue: string }> } };
+        expect(body.error.code).toBe('ASSET_REFERENCED');
+        return body.error.details;
+      };
+      const full = await refusal(adminCookie);
+      expect(full.map((d) => d.path).sort()).toEqual(['product_gallery', 'task_attachment']);
+      const restricted = await refusal(reader.cookies);
+      expect(restricted.length).toBeGreaterThanOrEqual(1);
+      expect(restricted).toEqual(full.filter((d) => d.path === 'product_gallery'));
+    } finally {
+      await conn.execute(`delete from gallery_items where asset_id = ?`, [id]);
+      await conn.execute(`delete from "tasks" where "id" = ?`, [task]);
+      await removeCrmAssets(h.em(), [id]);
+      reader.undo();
     }
   });
 });

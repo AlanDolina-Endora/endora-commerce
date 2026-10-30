@@ -804,6 +804,12 @@ library refuses, and names the opportunity by its number. Remove the attachment
 first. This holds while the CRM module is switched off, too — the attachments
 are still there, and so is the protection.
 
+**The media library shows an attachment only to those who may read its
+opportunity**: a file used only by opportunities outside somebody's
+Organization reach is hidden from them in the library, as it is from anybody
+without `crm:read`, and the refusal above names the opportunity only to those
+who may see it.
+
 Anybody who may read an opportunity may download its attachments; no
 permission of the media library is needed. Each attachment in the list carries
 a download link that is valid for a few minutes — read the list again for a

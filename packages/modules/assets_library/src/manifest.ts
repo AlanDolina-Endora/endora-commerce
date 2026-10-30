@@ -143,7 +143,13 @@ export const manifest = defineModuleManifest({
   // name who replaced the kept previous version (feature 156,
   // `specs/156-asset-stable-url/` research R-14). The read is one display
   // name; when nobody is found the detail answers `replacedBy: null`.
-  dependencies: ['auth', 'admin_users'],
+  //
+  // `admin_roles` publishes `permissionService`, whose `listPermissions` tells
+  // a holder of the platform wildcard `*` — who sees every asset — from a
+  // reader whose files follow the records that use them
+  // (`specs/166-asset-reference-visibility/` research R-3). `admin_roles` is
+  // non-deactivatable, so the edge owes no degrade classification.
+  dependencies: ['auth', 'admin_users', 'admin_roles'],
   settings,
   /**
    * The module's landing action under ⌘K (Constitution XVI) — "Assets library",

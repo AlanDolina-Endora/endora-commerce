@@ -38,6 +38,7 @@ import {
 import { Product } from '../entities/product.entity.js';
 import { AttachmentType } from '../entities/attachment-type.entity.js';
 import { ProductAttachment } from '../entities/product-attachment.entity.js';
+import { requireLinkableAsset } from './linkable-asset.js';
 
 const ASSET_KINDS_ATTACHMENT = new Set(['pdf', 'certificate', 'other']);
 
@@ -241,10 +242,8 @@ export class AttachmentService {
     const em = this.emFactory();
     await this.#assertProductExists(em, productId);
 
-    const asset = await this.#requireAssets().findById(req.assetId);
-    if (!asset) {
-      throw new HttpError(404, ERROR_CODES.NOT_FOUND, `Asset ${req.assetId} not found.`);
-    }
+    // A hidden file answers as a missing one (feature 166, FR-006).
+    const asset = await requireLinkableAsset(this.#requireAssets(), req.assetId);
     if (!ASSET_KINDS_ATTACHMENT.has(asset.kind)) {
       throw new HttpError(
         400,

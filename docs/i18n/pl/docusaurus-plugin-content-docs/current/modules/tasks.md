@@ -245,7 +245,10 @@ SVG, XML i JavaScript są odrzucane. Każdy załącznik pokazuje nazwę, rozmiar
 kto go dołączył i kiedy; może go pobrać każdy, kto widzi zadanie, a odłączyć —
 ktoś, kto może je zmieniać. Plik zostaje w bibliotece multimediów, a biblioteka
 odmawia usunięcia pliku używanego przez zadanie — także gdy moduł Zadania jest
-wyłączony.
+wyłączony. W bibliotece multimediów plik używany tylko przez zadania, których
+ktoś nie może zobaczyć — prywatne, szkice albo należące do rekordu przed nim
+ukrytego — jest ukryty także przed nim, a kto nie widzi zadania, nie dołączy
+jego pliku gdzie indziej.
 
 **Komentarze.** Każdy, kto widzi zadanie, może je komentować tym samym
 edytorem i z tymi samymi odwołaniami co w opisie. Komentarze są wymienione od

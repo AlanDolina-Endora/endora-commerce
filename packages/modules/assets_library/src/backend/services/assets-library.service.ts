@@ -18,6 +18,8 @@ import {
   type AssetPermalinkReleaseReason,
 } from '../entities/asset-permalink-release.entity.js';
 import { HttpError } from '@endora-commerce/platform/http';
+import { assetNotFound, type AssetVisibility } from './asset-visibility.js';
+import { assetIdsAmong, idNotAmong } from './asset-id-sets.js';
 import type { AdapterRegistry } from './storage/adapter-registry.js';
 import type { AssetReferenceRegistry } from './reference-registry.js';
 import { UploadPipeline, type UploadInput, type UploadPolicy } from './upload-pipeline.js';
@@ -48,6 +50,14 @@ export interface AssetsLibraryServiceDeps {
   emFactory: () => EntityManager;
   adapters: AdapterRegistry;
   referenceRegistry: AssetReferenceRegistry;
+  /**
+   * Which assets the ambient caller may see (`specs/166-asset-reference-visibility/`
+   * R-5, R-9, R-11): the list leaves hidden assets out, move-many skips them
+   * and a permalink conflict does not name them. An unrestricted caller (the
+   * system, the platform wildcard) is answered without a read. Every detail
+   * names only the references the caller may see (FR-007, R-8).
+   */
+  visibility: Pick<AssetVisibility, 'exclusionFor' | 'hiddenAmong' | 'visibleReferences'>;
   /** Upload-policy provider — reads `assets.allowed_file_types` + max-size. */
   loadUploadPolicy: () => Promise<UploadPolicy>;
   /** Live retention setting; omitted by standalone consumers to keep the 30-day default. */
@@ -155,7 +165,7 @@ export class AssetsLibraryService {
         objectId: assetId,
         run: async ({ em }) => {
           const a = await em.findOne(Asset, { id: assetId }, { lockMode: LockMode.PESSIMISTIC_WRITE });
-          if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+          if (!a) throw assetNotFound(assetId);
           refuseSoftDeleted(a);
           const old = a.permalink ?? null;
           if (old === permalink) {
@@ -207,7 +217,7 @@ export class AssetsLibraryService {
           409,
           ERROR_CODES.ASSET_PERMALINK_TAKEN,
           `The permalink "${permalink}" is already used by another asset.`,
-          { permalink, assetId: holders[0]?.id ?? null },
+          { permalink, assetId: await this.#nameableHolder(holders[0]?.id ?? null) },
         );
       }
       throw err;
@@ -224,7 +234,7 @@ export class AssetsLibraryService {
       objectId: assetId,
       run: async ({ em }) => {
         const a = await em.findOne(Asset, { id: assetId }, { lockMode: LockMode.PESSIMISTIC_WRITE });
-        if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+        if (!a) throw assetNotFound(assetId);
         refuseSoftDeleted(a);
         const old = a.permalink ?? null;
         if (old === null) return { result: a, before: null, after: null, skipAudit: true };
@@ -249,9 +259,20 @@ export class AssetsLibraryService {
         409,
         ERROR_CODES.ASSET_PERMALINK_TAKEN,
         `The permalink "${permalink}" is already used by another asset.`,
-        { permalink, assetId: holder.id },
+        { permalink, assetId: await this.#nameableHolder(holder.id) },
       );
     }
+  }
+
+  /**
+   * The asset holding a permalink, as the conflict may name it: `null` when the
+   * caller may not see it (`specs/166-asset-reference-visibility/` R-11). The
+   * name lives in one shared namespace, so *taken* cannot be hidden without
+   * letting two assets share it — *by which asset* can.
+   */
+  async #nameableHolder(holderId: string | null): Promise<string | null> {
+    if (holderId === null) return null;
+    return (await this.deps.visibility.hiddenAmong([holderId])).has(holderId) ? null : holderId;
   }
 
   /** Records a name that stopped being held, naming its last holder (research R-22). */
@@ -310,7 +331,7 @@ export class AssetsLibraryService {
   async resolveEmbedUrl(assetId: string): Promise<string> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     const resolved = await this.resolveUrl(assetId);
     return versionedAssetUrl(resolved.url, a.contentVersion, a.storageBackend);
   }
@@ -321,7 +342,7 @@ export class AssetsLibraryService {
   ): Promise<{ url: string; expiresAt: Date | null }> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     const adapter = await this.deps.adapters.getForBackend(
       a.storageBackend as 'local' | 's3' | 'gcs' | 'legacy',
     );
@@ -335,7 +356,7 @@ export class AssetsLibraryService {
   async getAsset(assetId: string): Promise<AssetDetail> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     return this.detail(a);
   }
 
@@ -359,6 +380,17 @@ export class AssetsLibraryService {
       });
     }
     if (!query.includeDeleted) clauses.push({ deletedAt: null });
+
+    // Assets the caller may not see are left out in SQL, before paging
+    // (`specs/166-asset-reference-visibility/` R-5), so every page is full and
+    // the cursor never lands on a hidden row. The candidates are scoped by this
+    // list's own clauses first: only rows this list could return are evaluated.
+    // An unrestricted caller gets an empty set without a read.
+    // Both sets travel as one uuid-array parameter each (T049).
+    const hidden = await this.deps.visibility.exclusionFor((candidates) =>
+      assetIdsAmong(em.fork(), clauses.length > 0 ? { $and: clauses } : {}, candidates),
+    );
+    if (hidden.length > 0) clauses.push(idNotAmong(hidden));
 
     const where: Record<string, unknown> = clauses.length > 0 ? { $and: clauses } : {};
 
@@ -413,7 +445,7 @@ export class AssetsLibraryService {
         { id: assetId },
         locking ? { lockMode: LockMode.PESSIMISTIC_WRITE } : {},
       );
-      if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+      if (!a) throw assetNotFound(assetId);
 
       if (patch.filename !== undefined) a.filename = patch.filename;
       if (patch.label !== undefined) a.label = patch.label;
@@ -469,7 +501,7 @@ export class AssetsLibraryService {
   async softDelete(assetId: string): Promise<{ deletedAt: Date; purgeAfterAt: Date }> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     const retentionDays = this.deps.loadRetentionDays ? await this.deps.loadRetentionDays() : 30;
     const purgeAfter = (deletedAt: Date) =>
       new Date(deletedAt.getTime() + retentionDays * 24 * 60 * 60 * 1000);
@@ -479,14 +511,19 @@ export class AssetsLibraryService {
       // the stored `purgeAfterAt` keeps the first value as a rollback snapshot.
       return { deletedAt: a.deletedAt, purgeAfterAt: purgeAfter(a.deletedAt) };
     }
-    // Reference protection (FR-030).
+    // Reference protection (FR-030): every reference counts, whoever asks and
+    // whatever they may see (`specs/166-asset-reference-visibility/` FR-008).
+    // The refusal names only the references the caller may see (R-8); the
+    // asset is visible to them (the by-id guard ran), so by invariant I-1 at
+    // least one is named — a hidden record is neither named nor counted.
     const refs = await this.deps.referenceRegistry.findReferences(assetId);
     if (refs.length > 0) {
+      const visible = await this.deps.visibility.visibleReferences(assetId);
       throw new HttpError(
         409,
         ERROR_CODES.ASSET_REFERENCED,
-        `Asset is in use by ${refs.length} record(s); detach those first.`,
-        refs.slice(0, 20).map((r) => ({
+        `Asset is in use by ${visible.length} record(s); detach those first.`,
+        visible.slice(0, 20).map((r) => ({
           path: r.kind,
           issue: r.label,
         })),
@@ -504,7 +541,7 @@ export class AssetsLibraryService {
   async restore(assetId: string): Promise<AssetDetail> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     a.deletedAt = null;
     a.purgeAfterAt = null;
     a.pendingCleanup = false;
@@ -516,16 +553,23 @@ export class AssetsLibraryService {
   async move(assetId: string, folderId: string | null): Promise<AssetDetail> {
     const em = this.deps.emFactory();
     const a = await em.findOne(Asset, { id: assetId });
-    if (!a) throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${assetId} not found.`);
+    if (!a) throw assetNotFound(assetId);
     a.folderId = folderId;
     this.#audit(em, 'asset.move', a.id, null, { folderId });
     await em.flush();
     return this.detail(a);
   }
 
+  /**
+   * Move what exists and the caller may see. An id the caller may not see is
+   * skipped exactly as a missing one is — not moved, not counted, not in the
+   * audit row (`specs/166-asset-reference-visibility/` R-9).
+   */
   async moveMany(assetIds: string[], folderId: string | null): Promise<{ movedCount: number }> {
     const em = this.deps.emFactory();
-    const assets = await em.find(Asset, { id: { $in: assetIds } });
+    const found = await em.find(Asset, { id: { $in: assetIds } });
+    const hidden = await this.deps.visibility.hiddenAmong(found.map((a) => a.id));
+    const assets = found.filter((a) => !hidden.has(a.id));
     for (const a of assets) a.folderId = folderId;
     if (assets.length > 0) {
       this.#audit(em, 'asset.move_many', folderId ?? 'root', null, {
@@ -584,7 +628,12 @@ export class AssetsLibraryService {
 
   private async detail(a: Asset): Promise<AssetDetail> {
     const summary = await this.summary(a);
-    const references = await this.deps.referenceRegistry.findReferences(a.id);
+    // The caller's "used by" list, never the registry's full one: a record the
+    // caller may not see is neither named nor counted, and `assetId` stays in
+    // the library (`specs/166-asset-reference-visibility/` FR-007, R-8). Every
+    // route that answers a detail — read, edit, move, replace, restore,
+    // permalink — answers through here.
+    const references = await this.deps.visibility.visibleReferences(a.id);
     // Read once: it dates the previous version and is named by the replace
     // confirmation. Whole days, at least one, as the contract declares.
     const retentionDays = this.deps.loadRetentionDays ? await this.deps.loadRetentionDays() : 30;

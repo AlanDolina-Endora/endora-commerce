@@ -4,10 +4,11 @@ import type {
   AssetReadPort,
   AssetsLibraryPort,
   ObjectStoragePort,
+  PermissionReadPort,
 } from '@endora-commerce/contracts';
 import type { AuditPort } from '@endora-commerce/platform/kernel';
 import type { CommandBus } from '@endora-commerce/platform/commands';
-import { lazyPort, resolvePublicApiBaseUrl } from '@endora-commerce/platform/kernel';
+import { effectiveState, lazyPort, resolvePublicApiBaseUrl } from '@endora-commerce/platform/kernel';
 import type { ModuleContext } from '@endora-commerce/platform/kernel';
 import type { RequireAdminFactory } from '@endora-commerce/platform/kernel';
 import { assetsLibraryModule } from './plugin.js';
@@ -92,6 +93,13 @@ export function registerModule(ctx: ModuleContext): void {
           // seen; the manifest declares the edge.
           adminUserReadPort: lazyPort<AdminUserReadPort>(ctx, 'adminUserReadPort'),
           log: ctx.log,
+          // Which assets a reader may see (`specs/166-asset-reference-visibility/`
+          // research R-3, R-4): presence is read per evaluation, so an owner
+          // switched off and on again is answered without a restart, and the
+          // permission read is `admin_roles`' port, resolved per call — the
+          // manifest declares the edge, and `admin_roles` cannot be switched off.
+          isModulePresent: (moduleId) => effectiveState.isPresent(moduleId),
+          permissions: () => lazyPort<PermissionReadPort>(ctx, 'permissionService'),
         }),
       )
       .singleton(),
@@ -198,6 +206,7 @@ export function registerModule(ctx: ModuleContext): void {
           new AssetReadService(
             emFactory,
             () => assetsLibrary.handle.adapters,
+            () => assetsLibrary.handle.visibility,
             () => assetsLibrary.handle.loadRetentionDays(),
           ),
       )

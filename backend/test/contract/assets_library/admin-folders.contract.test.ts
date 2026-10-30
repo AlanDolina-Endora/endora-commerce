@@ -1,6 +1,9 @@
 import { Asset, AssetFolder } from '../../helpers/package-entities.js';
 import { overrideAssetSetting } from '../../helpers/crm-attachment-upload.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { removeCrmAssets, seedCrmAdmin, seedCrmAsset } from '../../helpers/seed-crm.js';
+import { TEST_ADMIN_ID } from '../../helpers/test-actors.js';
 
 import {
   setupBackendServer,
@@ -295,6 +298,91 @@ describe('admin folder CRUD (T053)', () => {
     } finally {
       await restore();
       await h.em().nativeDelete(Asset, { id: { $in: [direct.id, nested.id] } });
+    }
+  });
+
+  // specs/166-asset-reference-visibility/ T042 (R-10): the permalink count
+  // follows the reader, a folder with a visible file is still not empty for
+  // them, and the folder tree, which carries no asset data, is the same for
+  // everyone.
+  it('counts only the files a restricted reader may see; the tree is unchanged', async () => {
+    // Reads the library only: a Task's file is hidden from this reader.
+    const reader = await seedCrmAdmin(h.em(), 'fold166', ['assets.read', 'assets.write']);
+    const stamp = randomUUID().slice(0, 8);
+    const conn = h.em().getConnection();
+    const task = randomUUID();
+    const assetIds: string[] = [];
+    try {
+      const created = await h.app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/assets/folders',
+        cookies: adminCookie,
+        payload: { parentId: null, name: `fold166-${stamp}` },
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const folderId = (created.json() as { data: { id: string } }).data.id;
+      await conn.execute(
+        `insert into "tasks" ("id", "number", "title", "created_by_admin_user_id") values (?, ?, 'fold166', ?)`,
+        [task, `T-F166-${stamp}`, TEST_ADMIN_ID],
+      );
+      for (const [name, used] of [
+        ['visible', false],
+        ['hidden', true],
+      ] as const) {
+        const { id } = await seedCrmAsset(h.em(), { filename: `fold166-${stamp}-${name}.pdf` });
+        assetIds.push(id);
+        await conn.execute(`update "assets" set "folder_id" = ?, "permalink" = ? where "id" = ?`, [
+          folderId,
+          `fold166-${stamp}/${name}.pdf`,
+          id,
+        ]);
+        if (used) {
+          await conn.execute(
+            `insert into "task_attachments" ("task_id", "asset_id", "added_by_admin_user_id") values (?, ?, ?)`,
+            [task, id, TEST_ADMIN_ID],
+          );
+        }
+      }
+
+      const count = async (cookies: Record<string, string>) => {
+        const r = await h.app.inject({
+          method: 'GET',
+          url: `/api/v1/admin/assets/folders/${folderId}/permalink-count`,
+          cookies,
+        });
+        expect(r.statusCode, r.body).toBe(200);
+        return (r.json() as { data: { permalinkedAssets: number } }).data.permalinkedAssets;
+      };
+      expect(await count(adminCookie)).toBe(2);
+      expect(await count(reader.cookies)).toBe(1);
+
+      const refuse = async (cookies: Record<string, string>) => {
+        const r = await h.app.inject({
+          method: 'DELETE',
+          url: `/api/v1/admin/assets/folders/${folderId}`,
+          cookies,
+          payload: { ifNonEmpty: 'cancel' },
+        });
+        expect(r.statusCode, r.body).toBe(409);
+        const body = r.json() as { error: { code: string; message: string } };
+        expect(body.error.code).toBe('ASSET_FOLDER_NOT_EMPTY');
+        return body.error.message;
+      };
+      // The wire sentence is translated and carries no count: the reader gets
+      // the administrator's word for word. The visible-only count of the
+      // untranslated fallback is measured in `folders.service.test.ts`.
+      expect(await refuse(reader.cookies)).toBe(await refuse(adminCookie));
+
+      const tree = async (cookies: Record<string, string>) => {
+        const r = await h.app.inject({ method: 'GET', url: '/api/v1/admin/assets/folders', cookies });
+        expect(r.statusCode, r.body).toBe(200);
+        return r.json() as unknown;
+      };
+      expect(await tree(reader.cookies)).toEqual(await tree(adminCookie));
+    } finally {
+      await conn.execute(`delete from "tasks" where "id" = ?`, [task]);
+      await removeCrmAssets(h.em(), assetIds);
+      reader.undo();
     }
   });
 });

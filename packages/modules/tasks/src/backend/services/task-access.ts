@@ -67,7 +67,10 @@ export const TASK_ACCESS_READERS: Readonly<Record<string, string>> = {
   'services/task-asset-references.ts':
     'The asset library asks whether **anything** still uses a file before deleting it — platform-wide on ' +
     'purpose, by whoever deletes it, who need not see the Task — and is answered with the Task\'s number, never ' +
-    'its title (research R-7; Projects\' `project-asset-references.ts`).',
+    'its title (research R-7; Projects\' `project-asset-references.ts`). Its reader restriction ' +
+    '(`specs/166-asset-reference-visibility/` FR-002) adds the attached files of the Tasks the caller may **not** ' +
+    'see — the NULL-safe complement of `TaskVisibility.condition`, `(…) is not true` — and every attached file, ' +
+    'read while Tasks is off; which Tasks the caller sees is `TaskAccess.visibleIds`.',
   'services/hierarchy-service.ts':
     'A parent change reads the proposed parent\'s chain of ancestors and the moved Task\'s sub-tree over every ' +
     'Task, whoever may see it — a hidden descendant still closes a cycle (FR-027, R-15) — starting from the two ' +

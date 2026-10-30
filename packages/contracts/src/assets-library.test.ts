@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
+  type AssetReadPort,
+  type AssetReference,
+  type AssetReferenceDescriptor,
+  type AssetReferenceHit,
+  type AssetReferenceReaderRestriction,
   ASSET_PERMALINK_MAX_LENGTH,
   assetPreviousVersionSchema,
   isAssetIdShaped,
@@ -113,5 +118,77 @@ describe('assetPreviousVersionSchema', () => {
     const partial: Record<string, unknown> = { ...complete };
     delete partial[key];
     expect(assetPreviousVersionSchema.safeParse(partial).success).toBe(false);
+  });
+});
+
+// `specs/166-asset-reference-visibility/contracts/ports.md` §1 — the
+// descriptor's additive reader restriction. Type-level: a failure is a
+// type-check error, not a red assertion.
+describe('AssetReferenceDescriptor (feature 166)', () => {
+  const reference: AssetReference = { kind: 'task_attachment', entityId: UUID_LOWER, label: 'Task T-1' };
+
+  it('still accepts a descriptor that returns plain references (compatibility)', () => {
+    const plain = {
+      ownerModuleId: 'overlay',
+      async findReferences(_assetIds: string[]): Promise<AssetReference[]> {
+        return [reference];
+      },
+    };
+    expectTypeOf(plain).toExtend<AssetReferenceDescriptor>();
+  });
+
+  it('accepts hits tagged with the asset they point at', () => {
+    const tagged: AssetReferenceDescriptor = {
+      ownerModuleId: 'catalog',
+      async findReferences(assetIds: string[]): Promise<AssetReferenceHit[]> {
+        return assetIds.map((assetId) => ({ ...reference, assetId }));
+      },
+    };
+    expectTypeOf<AssetReferenceHit>().toExtend<AssetReference>();
+    expectTypeOf<AssetReferenceHit['assetId']>().toEqualTypeOf<string | undefined>();
+    expect(tagged.readerRestriction).toBeUndefined();
+  });
+
+  it('declares the restriction as an optional, readonly data property with three methods', () => {
+    expectTypeOf<AssetReferenceDescriptor['readerRestriction']>().toEqualTypeOf<
+      AssetReferenceReaderRestriction | undefined
+    >();
+    expectTypeOf<AssetReferenceReaderRestriction['visibleEntityIds']>().toEqualTypeOf<
+      (entityIds: readonly string[]) => Promise<ReadonlySet<string>>
+    >();
+    expectTypeOf<AssetReferenceReaderRestriction['assetIdsWithHiddenReferences']>().toEqualTypeOf<
+      () => Promise<readonly string[]>
+    >();
+    expectTypeOf<AssetReferenceReaderRestriction['allReferencedAssetIds']>().toEqualTypeOf<
+      () => Promise<readonly string[]>
+    >();
+    const restricted: AssetReferenceDescriptor = {
+      ownerModuleId: 'tasks',
+      async findReferences() {
+        return [];
+      },
+      readerRestriction: {
+        async visibleEntityIds() {
+          return new Set<string>();
+        },
+        async assetIdsWithHiddenReferences() {
+          return [];
+        },
+        async allReferencedAssetIds() {
+          return [];
+        },
+      },
+    };
+    // @ts-expect-error -- `readerRestriction` is readonly.
+    restricted.readerRestriction = undefined;
+  });
+});
+
+describe('AssetReadPort.visibleToCaller (feature 166)', () => {
+  it('is a required method answering a set of the visible ids', () => {
+    expectTypeOf<AssetReadPort['visibleToCaller']>().toEqualTypeOf<
+      (assetIds: readonly string[]) => Promise<ReadonlySet<string>>
+    >();
+    expectTypeOf<undefined>().not.toExtend<AssetReadPort['visibleToCaller']>();
   });
 });

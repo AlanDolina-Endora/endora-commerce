@@ -224,7 +224,10 @@ JavaScript files are refused. Each attachment shows its name, size, who
 attached it and when, and can be downloaded by anybody who may see the task and
 removed by somebody who may change it. The file stays in the media library, and
 the library refuses to delete a file a task uses — also while Tasks is
-switched off.
+switched off. In the media library, a file used only by tasks somebody may not
+see — private, draft, or of a record hidden from them — is hidden from them too,
+and a file of a task cannot be attached elsewhere by somebody who may not see
+that task.
 
 **Comments.** Everybody who may see a task can comment on it, with the
 description's editor and references. Comments are listed oldest first, with

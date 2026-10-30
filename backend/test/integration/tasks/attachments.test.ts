@@ -159,7 +159,7 @@ describe('tasks — attachments (US1)', () => {
     const attached = await upload(task.id, { filename: 'kept.png', mime: 'image/png', value: TINY_PNG });
     expect(registry().owners()).toContain('tasks');
     expect(await registry().findReferences(attached.assetId)).toEqual([
-      { kind: 'task_attachment', entityId: task.id, label: `Task ${task.number}` },
+      { kind: 'task_attachment', entityId: task.id, label: `Task ${task.number}`, assetId: attached.assetId },
     ]);
     const refused = await h.app.inject({ method: 'DELETE', url: `/api/v1/admin/assets/${attached.assetId}`, cookies: admin });
     expect(refused.statusCode, refused.body).toBe(409);
@@ -201,5 +201,90 @@ describe('tasks — attachments (US1)', () => {
     const refused = await uploadRaw(privateId, { filename: 'not-stored.png', mime: 'image/png', value: TINY_PNG }, stranger);
     expect(refused.statusCode, refused.body).toBe(404);
     expect(await h.em().count(Asset, { filename: 'not-stored.png' }, { filters: false })).toBe(before);
+  });
+
+  /**
+   * FR-006 (`specs/166-asset-reference-visibility/` research R-13, F-19): a file
+   * the library hides from the caller is not there to attach. Here it is held
+   * by **another** module's record — a members-only Project the caller is not a
+   * Member of — so Tasks' own holder check cannot see it; and one of the two is
+   * **public**, so the refusal must come before the private-file one to give
+   * the missing-file sentence.
+   */
+  describe('attaching a file the library hides from the caller (feature 166, FR-006)', () => {
+    const hiddenProject = randomUUID();
+    let reader: Person;
+
+    beforeAll(async () => {
+      reader = await seedCrmAdmin(h.em(), 'task-att-fr6', ['tasks:read', 'tasks:write', 'projects:read', 'assets.read']);
+      const stageId = randomUUID();
+      const connection = h.orm.em.getConnection();
+      await connection.transactional(async (trx) => {
+        await connection.execute(
+          `insert into "projects" ("id", "number", "title", "visibility", "created_by_admin_user_id")
+           values (?, ?, 'Members only', 'members_and_listed', ?)`,
+          [hiddenProject, `PRJ-F6${hiddenProject.slice(0, 8)}`.toUpperCase(), TEST_ADMIN_ID],
+          'run',
+          trx,
+        );
+        await connection.execute(
+          `insert into "project_stages" ("id", "project_id", "name", "color", "position") values (?, ?, 'Design', '#3b82f6', 1)`,
+          [stageId, hiddenProject],
+          'run',
+          trx,
+        );
+        await connection.execute(`update "projects" set "current_stage_id" = ? where "id" = ?`, [stageId, hiddenProject], 'run', trx);
+      });
+    });
+
+    afterAll(async () => {
+      reader?.undo();
+      await h.em().getConnection().execute(`delete from "projects" where "id" = ?`, [hiddenProject]);
+    });
+
+    it.each(['private', 'public'] as const)(
+      'refuses a %s file held only by a Project the caller may not see — the missing-file 422',
+      async (visibility) => {
+        const own = await call('POST', '', { title: `Own ${visibility}` }, reader.cookies);
+        expect(own.statusCode, own.body).toBe(201);
+        const ownTask = TaskDetailResponseSchema.parse(own.json()).data;
+        created.push(ownTask.id);
+        const file = await seedCrmAsset(h.em(), { visibility });
+        assets.push(file.id);
+        await h
+          .em()
+          .getConnection()
+          .execute(`insert into "project_attachments" ("project_id", "asset_id", "added_by_admin_user_id") values (?, ?, ?)`, [
+            hiddenProject,
+            file.id,
+            TEST_ADMIN_ID,
+          ]);
+
+        const hidden = await call('POST', `/${ownTask.id}/attachments`, { assetId: file.id }, reader.cookies);
+        const missing = await call('POST', `/${ownTask.id}/attachments`, { assetId: randomUUID() }, reader.cookies);
+        expect(missing.statusCode, missing.body).toBe(422);
+        expect(hidden.statusCode, hidden.body).toBe(422);
+        const shape = (body: string) => {
+          const { requestId: _requestId, ...rest } = (JSON.parse(body) as { error: Record<string, unknown> }).error;
+          return rest;
+        };
+        expect(shape(hidden.body)).toEqual(shape(missing.body));
+        expect(shape(hidden.body)).toMatchObject({
+          code: ERROR_CODES.VALIDATION_FAILED,
+          message: 'The file does not exist in the media library.',
+        });
+        expect(await list(ownTask.id, reader)).toEqual([]);
+
+        // The control: the Platform administrator sees the Project, so the file is there to attach
+        // — and is then refused for what it is (a public file), not for being missing.
+        const forAdmin = await call('POST', `/${ownTask.id}/attachments`, { assetId: file.id });
+        if (visibility === 'private') {
+          expect(forAdmin.statusCode, forAdmin.body).toBe(201);
+        } else {
+          expect(forAdmin.statusCode, forAdmin.body).toBe(422);
+          expect(forAdmin.json().error.message).not.toBe('The file does not exist in the media library.');
+        }
+      },
+    );
   });
 });

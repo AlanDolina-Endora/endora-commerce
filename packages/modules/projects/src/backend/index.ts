@@ -635,10 +635,17 @@ export function registerModule(ctx: ModuleContext): void {
    * on would let an operator delete a file that comes back as a broken
    * attachment when Projects is switched on again (Constitution XVII).
    */
+  //
+  // The descriptor is also **reader-restricted** (`specs/166-asset-reference-visibility/`
+  // FR-002): the library shows a file only to a reader who may see a record
+  // using it, and asks this module which Projects the caller may see. It asks
+  // only while Projects is present — the library decides that, not this hook —
+  // and `ProjectAccess` is resolved per call through a getter, never here.
   ctx.onBoot(() => {
     registerProjectAssetReferences(
       lazyPort<AssetReferenceRegistryPort>(ctx, 'assetReferenceRegistry'),
       ctx.cradle<ProjectsCradle>().emFactory,
+      { access: () => ctx.cradle<ProjectsCradle>().projectsAccess },
     );
   });
 

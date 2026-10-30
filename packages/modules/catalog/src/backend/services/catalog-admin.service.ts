@@ -110,6 +110,7 @@ import {
   type AttributeOptionCommandTarget,
   type AttributeOptionResult,
 } from '../commands/attribute-commands.js';
+import { requireLinkableAsset, type LinkableAssetReader } from './linkable-asset.js';
 
 // Feature 061 — the API-form mapping helpers moved next to the R7 map; the
 // re-exports keep the long-standing import site (routes, tests) stable.
@@ -237,7 +238,21 @@ export class CatalogAdminService {
      * and the API-key upsert, which never do, are never gated (A-6).
      */
     private readonly completenessGate?: ScopeCompletenessGate,
+    /**
+     * Feature 166 (FR-006) — `assets_library`'s read port, asked before a
+     * download file is linked. Optional so fixtures without the library keep
+     * constructing the service; a create that names a file without it fails
+     * closed ({@link CatalogAdminService.#requireAssets}).
+     */
+    private readonly assets?: LinkableAssetReader,
   ) {}
+
+  #requireAssets(): LinkableAssetReader {
+    if (!this.assets) {
+      throw new Error('CatalogAdminService: the asset read port is not wired — a download file cannot be linked.');
+    }
+    return this.assets;
+  }
 
   /** The gate's mode for an operator's write, read once per request; `undefined` where no gate is composed. */
   async completenessMode(): Promise<ScopeCompletenessGateMode | undefined> {
@@ -354,6 +369,9 @@ export class CatalogAdminService {
     // Feature 155 (FR-001, D5) — the range and the type rule hold for every
     // caller, not only for the ones a route schema stands in front of.
     assertOrderMinimumAllowed(req.type, req.minOrderQuantity);
+    // Feature 166 (FR-006) — a download file the caller may not see answers
+    // as a missing one, and is never linked.
+    if (req.downloadAssetId) await requireLinkableAsset(this.#requireAssets(), req.downloadAssetId);
 
     // The id is allocated up front so the Command can name its audit target
     // before the row exists (same shape as `duplicateProduct`).

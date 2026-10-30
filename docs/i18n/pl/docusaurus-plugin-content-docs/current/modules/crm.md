@@ -834,6 +834,12 @@ Biblioteka odmawia i wskazuje szansę po jej numerze. Najpierw trzeba usunąć
 załącznik. Dotyczy to także czasu, gdy moduł CRM jest wyłączony — załączniki
 nadal istnieją, a ochrona razem z nimi.
 
+**Biblioteka mediów pokazuje załącznik tylko tym, którzy mogą czytać jego
+szansę**: plik używany wyłącznie przez szanse organizacji spoza zasięgu
+czyjegoś dostępu jest przed nim ukryty w bibliotece, tak jak przed każdym bez
+`crm:read`, a opisana wyżej odmowa wskazuje szansę tylko tym, którzy mogą ją
+zobaczyć.
+
 Każdy, kto może czytać szansę, może pobrać jej załączniki; żadne uprawnienie
 biblioteki mediów nie jest potrzebne. Każdy załącznik na liście ma odnośnik do
 pobrania ważny przez kilka minut — aby dostać świeży, wystarczy ponownie

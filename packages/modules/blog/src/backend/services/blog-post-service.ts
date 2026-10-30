@@ -13,6 +13,7 @@ import {
   type PutBlogPostContentRequest,
 } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
+import { assertLinkableAsset, type LinkableAssetReader } from './linkable-asset.js';
 import { assertSlugAvailable } from './blog-slug-collision.js';
 import type { BlogCacheService } from './blog-cache.js';
 
@@ -68,6 +69,8 @@ export class BlogPostService {
     private readonly emFactory: () => EntityManager,
     private readonly cache?: BlogCacheService,
     private readonly dictionaryValidator?: DictionaryValidator,
+    /** Feature 166 (FR-006) — `assets_library`'s read port, asked before a main image is linked. */
+    private readonly assets?: LinkableAssetReader,
   ) {}
 
   // ────────────────────────────────────────────────────────────────────
@@ -149,6 +152,8 @@ export class BlogPostService {
     const em = this.emFactory();
     const id = randomUUID();
     const now = new Date();
+    // Feature 166 (FR-006) — a main image the caller may not see answers as a missing one.
+    if (input.mainImageAssetId) await assertLinkableAsset(this.assets, input.mainImageAssetId);
 
     return em.transactional(async (tx) => {
       // Slug-collision guard runs first so we don't pollute the post row
@@ -243,6 +248,8 @@ export class BlogPostService {
         throw new HttpError(404, ERROR_CODES.BLOG_POST_NOT_FOUND, 'Blog post not found.');
       }
       this.assertVersion(existing.version, input.version);
+      // Feature 166 (FR-006) — a main image the caller may not see answers as a missing one.
+      if (input.mainImageAssetId) await assertLinkableAsset(this.assets, input.mainImageAssetId);
 
       const slugChange = input.slug !== undefined && input.slug !== existing.slug;
       const channelChange = input.salesChannelIds !== undefined;

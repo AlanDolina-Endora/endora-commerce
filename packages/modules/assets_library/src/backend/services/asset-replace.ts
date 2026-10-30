@@ -12,6 +12,7 @@ import { LockMode } from '@mikro-orm/core';
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { ERROR_CODES } from '@endora-commerce/contracts';
 import { HttpError } from '@endora-commerce/platform/http';
+import { assetNotFound } from './asset-visibility.js';
 import type { Command } from '@endora-commerce/platform/commands';
 
 import { Asset, hasPreviousVersion, type AssetKind } from '../entities/asset.entity.js';
@@ -179,7 +180,7 @@ export async function replaceAssetFile(
 ): Promise<Asset> {
   const current = await deps.emFactory().findOne(Asset, { id: input.assetId });
   if (!current) {
-    throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${input.assetId} not found.`);
+    throw assetNotFound(input.assetId);
   }
   if (current.deletedAt) {
     throw new HttpError(410, ERROR_CODES.ASSET_GONE, 'Restore the asset before replacing its file.');
@@ -238,7 +239,7 @@ export async function replaceAssetFile(
           { lockMode: LockMode.PESSIMISTIC_WRITE },
         );
         if (!row) {
-          throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${current.id} not found.`);
+          throw assetNotFound(current.id);
         }
         if (row.deletedAt) {
           throw new HttpError(410, ERROR_CODES.ASSET_GONE, 'Restore the asset before replacing its file.');
@@ -407,7 +408,7 @@ export async function restorePreviousVersion(
 ): Promise<Asset> {
   const current = await deps.emFactory().findOne(Asset, { id: input.assetId });
   if (!current) {
-    throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${input.assetId} not found.`);
+    throw assetNotFound(input.assetId);
   }
   if (current.deletedAt) {
     throw new HttpError(410, ERROR_CODES.ASSET_GONE, 'Restore the asset before restoring its file.');
@@ -446,7 +447,7 @@ export async function restorePreviousVersion(
           { lockMode: LockMode.PESSIMISTIC_WRITE },
         );
         if (!row) {
-          throw new HttpError(404, ERROR_CODES.ASSET_NOT_FOUND, `Asset ${current.id} not found.`);
+          throw assetNotFound(current.id);
         }
         if (row.deletedAt) {
           throw new HttpError(410, ERROR_CODES.ASSET_GONE, 'Restore the asset before restoring its file.');
