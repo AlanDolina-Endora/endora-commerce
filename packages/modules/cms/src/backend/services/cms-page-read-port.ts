@@ -1,6 +1,12 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type { CmsPageReadPort, CmsPageRecord } from '@endora-commerce/contracts';
+import type {
+  CmsPageReadPort,
+  CmsPageRecord,
+  CmsPageStorefrontLink,
+  CmsPageStorefrontLinkScope,
+} from '@endora-commerce/contracts';
 import { CmsPage } from '../entities/cms-page.entity.js';
+import { loadChannelPageNodes, pageStorefrontLinks } from './page-paths.js';
 
 /**
  * The page read model `cms` publishes (feature 075, Phase P).
@@ -38,6 +44,35 @@ export class CmsPageReadService implements CmsPageReadPort {
       { orderBy: { path: 'asc' } },
     );
     return pages.map(toCmsPageRecord);
+  }
+
+  /**
+   * Feature 168 — the channel's page tree and the pages' names, two reads
+   * however many links a menu holds.
+   */
+  async findStorefrontLinks(
+    ids: readonly string[],
+    scope: CmsPageStorefrontLinkScope,
+  ): Promise<CmsPageStorefrontLink[]> {
+    if (ids.length === 0) return [];
+    const em = this.emFactory();
+    const [nodes, pages] = await Promise.all([
+      loadChannelPageNodes(em, [scope.salesChannelId]),
+      em.find(CmsPage, { id: { $in: [...ids] } }),
+    ]);
+    return pageStorefrontLinks(
+      nodes,
+      pages.map((page) => ({
+        id: page.id,
+        name: page.name,
+        slug: page.slug,
+        description: page.description ?? null,
+        languages: page.languages,
+        translations: page.translations,
+      })),
+      ids,
+      scope,
+    );
   }
 }
 

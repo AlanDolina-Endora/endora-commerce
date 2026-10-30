@@ -27,7 +27,7 @@ import {
  *   - blog:            `blog:v1:*`            (BlogCacheService)
  *   - cms:             `cms:v1:*`             (CmsCache)
  *   - cms-brand:       no key (storefront tag `cms:brand` only)
- *   - megamenu:        `megamenu:v1:*`        (MegamenuCache)
+ *   - megamenu:        `megamenu:v2:*`        (MegamenuCache)
  *   - dictionaries:    `dictionary:*`         (DictionaryCache)
  *   - carts:           `b2b:cart:recompute:*` (CartRecomputeCache)
  *
@@ -99,7 +99,7 @@ export const CACHE_NAMESPACES: readonly CacheNamespace[] = [
     key: 'megamenu',
     label: 'Mega menu',
     description: 'Resolved storefront mega-menu trees.',
-    patterns: ['megamenu:v1:*'],
+    patterns: ['megamenu:v2:*'],
     storefrontTags: [MEGAMENU_STOREFRONT_CACHE_TAG],
   },
   {

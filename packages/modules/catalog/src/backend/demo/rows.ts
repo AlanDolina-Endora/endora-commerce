@@ -50,26 +50,32 @@ export const DEMO_ROOT_CATEGORY = {
   name: { 'en-US': 'Catalog', 'pl-PL': 'Katalog' },
 } as const;
 
-export const DEMO_SECTION_CATEGORIES: readonly { slug: string; nameEn: string }[] = [
-  { slug: 'fasteners', nameEn: 'Fasteners' },
-  { slug: 'tools', nameEn: 'Tools' },
-  { slug: 'electronics', nameEn: 'Electronics' },
-  { slug: 'safety', nameEn: 'Safety equipment' },
+/**
+ * `namePl` since feature 168: the demo's navigation expands this tree live, so
+ * a category's own names are what a Polish storefront shows — they used to be
+ * typed a second time as the demo menu's labels.
+ */
+export const DEMO_SECTION_CATEGORIES: readonly { slug: string; nameEn: string; namePl: string }[] = [
+  { slug: 'fasteners', nameEn: 'Fasteners', namePl: 'Łączniki' },
+  { slug: 'tools', nameEn: 'Tools', namePl: 'Narzędzia' },
+  { slug: 'electronics', nameEn: 'Electronics', namePl: 'Elektronika' },
+  { slug: 'safety', nameEn: 'Safety equipment', namePl: 'BHP' },
 ];
 
 export const DEMO_LEAF_CATEGORIES: readonly {
   parentSlug: string;
   slug: string;
   nameEn: string;
+  namePl: string;
 }[] = [
-  { parentSlug: 'fasteners', slug: 'screws', nameEn: 'Screws' },
-  { parentSlug: 'fasteners', slug: 'bolts', nameEn: 'Bolts' },
-  { parentSlug: 'tools', slug: 'wrenches', nameEn: 'Wrenches' },
-  { parentSlug: 'tools', slug: 'drills', nameEn: 'Drills' },
-  { parentSlug: 'electronics', slug: 'cables', nameEn: 'Cables' },
-  { parentSlug: 'electronics', slug: 'sensors', nameEn: 'Sensors' },
-  { parentSlug: 'safety', slug: 'gloves', nameEn: 'Gloves' },
-  { parentSlug: 'safety', slug: 'helmets', nameEn: 'Helmets' },
+  { parentSlug: 'fasteners', slug: 'screws', nameEn: 'Screws', namePl: 'Wkręty' },
+  { parentSlug: 'fasteners', slug: 'bolts', nameEn: 'Bolts', namePl: 'Śruby' },
+  { parentSlug: 'tools', slug: 'wrenches', nameEn: 'Wrenches', namePl: 'Klucze' },
+  { parentSlug: 'tools', slug: 'drills', nameEn: 'Drills', namePl: 'Wiertła' },
+  { parentSlug: 'electronics', slug: 'cables', nameEn: 'Cables', namePl: 'Kable' },
+  { parentSlug: 'electronics', slug: 'sensors', nameEn: 'Sensors', namePl: 'Czujniki' },
+  { parentSlug: 'safety', slug: 'gloves', nameEn: 'Gloves', namePl: 'Rękawice' },
+  { parentSlug: 'safety', slug: 'helmets', nameEn: 'Helmets', namePl: 'Kaski' },
 ];
 
 /** Every category slug the demo owns, deepest first — the order `reset` needs. */

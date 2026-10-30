@@ -1033,6 +1033,32 @@ export interface CmsPageReadPort {
   findByIds(ids: readonly string[]): Promise<CmsPageRecord[]>;
   /** Published pages only, ordered by path — the platform-wide enumeration. */
   listPublished(): Promise<CmsPageRecord[]>;
+  /**
+   * A storefront link to each of these pages that the channel serves, in one
+   * language: its localised name and its path in that language's page tree
+   * (`specs/168-megamenu-navigation-bar/` plan R-8). The megamenu's page links
+   * read this, so a link follows the page's slug per language (feature 163 R24)
+   * and its parent's path (R19D). Pages the channel does not serve are absent.
+   */
+  findStorefrontLinks(ids: readonly string[], scope: CmsPageStorefrontLinkScope): Promise<CmsPageStorefrontLink[]>;
+}
+
+/** Where a {@link CmsPageReadPort.findStorefrontLinks} link is served. */
+export interface CmsPageStorefrontLinkScope {
+  salesChannelId: string;
+  language: string;
+}
+
+/** A page as a link: what the navigation shows and where it leads. */
+export interface CmsPageStorefrontLink {
+  id: string;
+  name: string;
+  /**
+   * The page's logical path in the language, with no language prefix: the
+   * storefront puts the current language's prefix on it, as on every menu link
+   * (feature 167), so a menu cached per channel and language holds no URL facts.
+   */
+  url: string;
 }
 
 /**

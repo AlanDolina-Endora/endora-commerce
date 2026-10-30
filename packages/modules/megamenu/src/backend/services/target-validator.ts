@@ -87,7 +87,7 @@ export async function validateTarget(
       // No `liveOnly` and no `isActive` test: the roots' `select 1 from
       // categories where id = ?` accepted a deactivated or soft-deleted
       // category, and an admin pointing a menu item at one is not making an
-      // error the storefront cannot answer — `resolveCategoryUrl` drops the
+      // error the storefront cannot answer — `localizedCategoryLink` drops the
       // item at render time.
       const ok = (await ports.categories.findById(item.target.categoryId)) !== null;
       if (!ok) {
@@ -148,9 +148,49 @@ export async function validateTarget(
       }
       return;
     }
+    case 'category-tree': {
+      // A whole-catalogue tree names nothing to check. A rooted one names a
+      // category that must exist; an inactive root is the operator's to make,
+      // and expands to nothing until it is active again.
+      const rootCategoryId = item.target.rootCategoryId;
+      if (rootCategoryId !== null && (await ports.categories.findById(rootCategoryId)) === null) {
+        throw new HttpError(
+          400,
+          ERROR_CODES.MEGAMENU_TARGET_OUT_OF_SCOPE,
+          `Category ${rootCategoryId} the category tree is rooted at does not exist.`,
+        );
+      }
+      return;
+    }
     case 'external-link':
     case 'button':
+    case 'group':
       // No cross-module check beyond the icon already covered above.
       return;
+  }
+}
+
+/**
+ * Feature 168 (FR-017) — every customer group an audience names exists when the
+ * tree is saved. One read for the whole tree. A group deleted afterwards is not
+ * this check's: the item narrows to the groups that remain (FR-020).
+ */
+export async function validateAudience(
+  items: readonly MegamenuItem[],
+  ports: Pick<MegamenuCrossModulePorts, 'customerGroups'>,
+): Promise<void> {
+  const named = new Set<string>();
+  for (const item of items) {
+    if (item.audience?.kind === 'customer_groups') for (const id of item.audience.customerGroupIds) named.add(id);
+  }
+  if (named.size === 0) return;
+  const found = new Set((await ports.customerGroups.findByIds([...named])).map((group) => group.id));
+  const missing = [...named].filter((id) => !found.has(id));
+  if (missing.length > 0) {
+    throw new HttpError(
+      400,
+      ERROR_CODES.MEGAMENU_TARGET_OUT_OF_SCOPE,
+      `Customer group ${missing.join(', ')} does not exist.`,
+    );
   }
 }

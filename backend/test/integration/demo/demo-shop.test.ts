@@ -296,7 +296,8 @@ const SEED_DELTA: Readonly<Record<string, number>> = {
   // ── the composition's wiring, step by step ─────────────────────────────
   // 1 — the megamenu over the category tree
   megamenus: 1,
-  megamenu_items: 12,
+  // Feature 168: a catalogue tab over one live category tree, and a button tab.
+  megamenu_items: 3,
   megamenu_bindings: 4,
   // 2 — the product↔category and channel↔product bridges
   product_categories: 203,
@@ -718,24 +719,29 @@ describe('T226 — `endora demo seed` builds this shop', () => {
       ]);
     });
 
-    it('mirrors the category tree in the megamenu, at both levels', async () => {
-      const rows = await query<{ parent_slug: string | null; target_slug: string | null }>(
+    it('opens the navigation bar with a catalogue tab over the live category tree (feature 168)', async () => {
+      const rows = await query<{
+        kind: string;
+        presentation: string | null;
+        alignment: string | null;
+        parent_kind: string | null;
+        root_slug: string | null;
+        depth: number | null;
+        url: string | null;
+      }>(
         shop,
-        `select parent_c.slug as parent_slug, c.slug as target_slug
+        `select i.kind, i.presentation, i.alignment, p.kind as parent_kind, c.slug as root_slug,
+                (i.target->>'depth')::int as depth, i.target->>'url' as url
            from megamenu_items i
-           left join categories c on c.id = (i.target->>'categoryId')::uuid
            left join megamenu_items p on p.id = i.parent_id
-           left join categories parent_c on parent_c.id = (p.target->>'categoryId')::uuid
-          order by parent_c.slug nulls first, i.position, c.slug`,
+           left join categories c on c.id = (i.target->>'rootCategoryId')::uuid
+          order by i.parent_id nulls first, i.position`,
       );
-      // Every item points at a category that exists, and every child's parent
-      // is a top-level section — the shape a menu built from stale ids breaks.
-      expect(rows.every((row) => row.target_slug !== null)).toBe(true);
-      const sections = rows.filter((row) => row.parent_slug === null).map((r) => r.target_slug);
-      expect(sections.length).toBeGreaterThan(1);
-      for (const row of rows.filter((r) => r.parent_slug !== null)) {
-        expect(sections).toContain(row.parent_slug);
-      }
+      expect(rows).toEqual([
+        { kind: 'group', presentation: 'catalog', alignment: 'start', parent_kind: null, root_slug: null, depth: null, url: null },
+        { kind: 'button', presentation: 'link', alignment: 'end', parent_kind: null, root_slug: null, depth: null, url: '/quick-order' },
+        { kind: 'category-tree', presentation: null, alignment: null, parent_kind: 'group', root_slug: 'catalog', depth: 2, url: null },
+      ]);
     });
 
     it('gives three Projects to the demo organisation and keeps one internal, each standing in a Stage of its own', async () => {

@@ -8,6 +8,7 @@ import {
   duplicatePath,
   languageSlug,
   loadChannelPageNodes,
+  pageStorefrontLinks,
   type ChannelPageNode,
 } from './page-paths.js';
 
@@ -195,5 +196,46 @@ describe('loadChannelPageNodes', () => {
       }),
     ]);
     expect(calls).toEqual([[A]]);
+  });
+});
+
+/**
+ * `specs/168-megamenu-navigation-bar/` plan R-8 — a menu's link to a page, in
+ * the served language: the page's localised name and its address in that
+ * language's tree of the channel.
+ */
+describe('pageStorefrontLinks', () => {
+  const named = (id: string, name: string, translations: Record<string, { name?: string; slug?: string }> = {}) => ({
+    id,
+    name,
+    description: null,
+    languages: ['pl-PL', 'en-US'],
+    translations,
+  });
+
+  it('answers the localised name and the path in the language of each page of the channel', () => {
+    const nodes = [
+      node('services', 'uslugi', { languages: ['pl-PL', 'en-US'], slugs: { 'en-US': 'services' } }),
+      node('audit', 'audyt', { parent: 'services', nested: true, languages: ['pl-PL', 'en-US'] }),
+    ];
+    const pages = [named('services', 'Usługi', { 'en-US': { name: 'Services', slug: 'services' } }), named('audit', 'Audyt')];
+    expect(
+      pageStorefrontLinks(nodes, pages, ['services', 'audit'], { salesChannelId: A, language: 'en-US' }),
+    ).toEqual([
+      // The logical path: the storefront puts the language prefix on it, as on
+      // every other menu link (feature 167).
+      { id: 'services', name: 'Services', url: '/services' },
+      { id: 'audit', name: 'Audyt', url: '/services/audyt' },
+    ]);
+    expect(
+      pageStorefrontLinks(nodes, pages, ['audit'], { salesChannelId: A, language: 'pl-PL' }),
+    ).toEqual([{ id: 'audit', name: 'Audyt', url: '/uslugi/audyt' }]);
+  });
+
+  it('leaves out a page that is not in the channel', () => {
+    const nodes = [node('elsewhere', 'gdzie-indziej', { channel: B })];
+    expect(
+      pageStorefrontLinks(nodes, [named('elsewhere', 'Gdzie indziej')], ['elsewhere'], { salesChannelId: A, language: 'pl-PL' }),
+    ).toEqual([]);
   });
 });

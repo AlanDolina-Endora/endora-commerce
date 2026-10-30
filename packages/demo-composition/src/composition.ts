@@ -129,6 +129,9 @@ interface MegamenuItemRow {
   kind: string;
   labels: Record<string, string>;
   target: Record<string, unknown>;
+  /** Feature 168 — set on a tab, absent below it. */
+  presentation?: string | null;
+  alignment?: string | null;
 }
 interface MegamenuBindingRow {
   id: Opt<string>;
@@ -288,6 +291,8 @@ const DEMO_RETAIL_CHANNEL_CODE = 'pl_retail';
 const PLATFORM_FALLBACK_CHANNEL_CODE = 'default';
 const DEMO_VIP_CHANNEL_CODE = 'pl_b2b_vip';
 const DEMO_MENU_NAME = 'Main navigation';
+/** `catalog`'s demo root — the category the demo menu's tree expands from. */
+const DEMO_ROOT_CATEGORY_SLUG = 'catalog';
 
 /**
  * Which demo administrator holds which role (feature 113, T222).
@@ -488,21 +493,6 @@ const MENU_SECTIONS: readonly { readonly slug: string; readonly leaves: readonly
   { slug: 'safety', leaves: ['gloves', 'helmets'] },
 ];
 
-const MENU_LABELS: Readonly<Record<string, Record<string, string>>> = {
-  fasteners: { 'pl-PL': 'Łączniki', 'en-US': 'Fasteners' },
-  tools: { 'pl-PL': 'Narzędzia', 'en-US': 'Tools' },
-  electronics: { 'pl-PL': 'Elektronika', 'en-US': 'Electronics' },
-  safety: { 'pl-PL': 'BHP', 'en-US': 'Safety equipment' },
-  screws: { 'pl-PL': 'Wkręty', 'en-US': 'Screws' },
-  bolts: { 'pl-PL': 'Śruby', 'en-US': 'Bolts' },
-  wrenches: { 'pl-PL': 'Klucze', 'en-US': 'Wrenches' },
-  drills: { 'pl-PL': 'Wiertła', 'en-US': 'Drills' },
-  cables: { 'pl-PL': 'Kable', 'en-US': 'Cables' },
-  sensors: { 'pl-PL': 'Czujniki', 'en-US': 'Sensors' },
-  gloves: { 'pl-PL': 'Rękawice', 'en-US': 'Gloves' },
-  helmets: { 'pl-PL': 'Kaski', 'en-US': 'Helmets' },
-};
-
 const MENU_LANGUAGES: readonly string[] = ['pl-PL', 'en-US'];
 
 /**
@@ -608,13 +598,6 @@ async function categoriesBySlug(em: EntityManager): Promise<Map<string, Category
   const wanted = MENU_SECTIONS.flatMap((section) => [section.slug, ...section.leaves]);
   const found = await em.find(Category, { slug: { $in: wanted } });
   return new Map(found.map((category) => [category.slug, category]));
-}
-
-function labelFor(slug: string, category: CategoryRow): Record<string, string> {
-  const declared = MENU_LABELS[slug];
-  if (declared) return declared;
-  const english = category.name['en-US'];
-  return { 'en-US': english === undefined ? slug : english };
 }
 
 /**
@@ -807,68 +790,64 @@ const STEPS: readonly CompositionStep[] = [
   },
   {
     // ── 1. the megamenu over the category tree ────────────────────────────
-    // A predefined navigation mirroring the seeded tree, so the storefront
-    // <Megamenu> renders real, clickable links out of the box: top level is
-    // the sections, children are their leaves, bound active for every
+    // A predefined navigation bar (feature 168): a *Wszystkie kategorie* tab
+    // opening the catalogue panel over one live category tree — the seeded
+    // tree's sections and their leaves, read from the catalogue on every
+    // resolution, so a category added later appears without a menu edit — and
+    // a Quick Order button at the end of the bar. Bound active for every
     // (channel, language) pair so the resolver always finds a menu whichever
     // scope the storefront asks for.
     name: 'megamenu over the category tree',
     modules: ['megamenu', 'catalog'],
     async apply(em) {
       const { Megamenu, MegamenuItem, MegamenuBinding } = await megamenuRows();
+      const { Category } = await catalogRows();
       // Idempotent by the name this step creates the menu under, on contract
       // §2.4's terms — a composition step is as re-runnable as a module body or
       // it is the one thing that stops a second `endora demo seed` (SC-007).
       const held = await em.findOne(Megamenu, { name: DEMO_MENU_NAME });
       if (held !== null) return;
-      const categories = await categoriesBySlug(em);
+      const root = await em.findOne(Category, { slug: DEMO_ROOT_CATEGORY_SLUG });
       const menu = em.create(Megamenu, {
         name: DEMO_MENU_NAME,
-        description: 'Predefined dev megamenu — mirrors the seeded category tree.',
+        description: 'Predefined dev megamenu — a catalogue tab over the seeded category tree.',
       });
       await em.persistAndFlush(menu);
 
-      const topItems: MegamenuItemRow[] = [];
-      for (const [index, section] of MENU_SECTIONS.entries()) {
-        const category = categories.get(section.slug);
-        if (category === undefined) continue;
-        topItems.push(
-          em.create(MegamenuItem, {
-            megamenuId: menu.id,
-            parentId: null,
-            position: index,
-            kind: 'category-link',
-            labels: labelFor(section.slug, category),
-            target: { categoryId: category.id },
-          }),
-        );
-      }
-      await em.persistAndFlush(topItems);
-
-      const childItems: MegamenuItemRow[] = [];
-      let topIndex = 0;
-      for (const section of MENU_SECTIONS) {
-        if (categories.get(section.slug) === undefined) continue;
-        const parentItem = topItems[topIndex]!;
-        topIndex += 1;
-        let position = 0;
-        for (const leafSlug of section.leaves) {
-          const leaf = categories.get(leafSlug);
-          if (leaf === undefined) continue;
-          childItems.push(
-            em.create(MegamenuItem, {
-              megamenuId: menu.id,
-              parentId: parentItem.id,
-              position,
-              kind: 'category-link',
-              labels: labelFor(leafSlug, leaf),
-              target: { categoryId: leaf.id },
-            }),
-          );
-          position += 1;
-        }
-      }
-      await em.persistAndFlush(childItems);
+      const catalogTab = em.create(MegamenuItem, {
+        megamenuId: menu.id,
+        parentId: null,
+        position: 0,
+        kind: 'group',
+        labels: { 'pl-PL': 'Wszystkie kategorie', 'en-US': 'All categories' },
+        target: {},
+        presentation: 'catalog',
+        alignment: 'start',
+      });
+      const quickOrder = em.create(MegamenuItem, {
+        megamenuId: menu.id,
+        parentId: null,
+        position: 1,
+        kind: 'button',
+        labels: { 'pl-PL': 'Szybkie zamówienie', 'en-US': 'Quick Order' },
+        target: { url: '/quick-order', variant: 'primary' },
+        presentation: 'link',
+        alignment: 'end',
+      });
+      await em.persistAndFlush([catalogTab, quickOrder]);
+      await em.persistAndFlush(
+        em.create(MegamenuItem, {
+          megamenuId: menu.id,
+          parentId: catalogTab.id,
+          position: 0,
+          kind: 'category-tree',
+          // No label: the tree's categories carry their own names (FR-015).
+          labels: {},
+          // The seeded root's sections and their leaves; the whole catalogue
+          // when the root is gone, so the tab never opens empty.
+          target: { rootCategoryId: root?.id ?? null, depth: 2 },
+        }),
+      );
 
       const channels = await em.find(SalesChannel, {});
       for (const channel of channels) {

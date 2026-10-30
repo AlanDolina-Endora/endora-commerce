@@ -170,7 +170,7 @@ describe('CacheAdminService', () => {
     const redis = fakeRedis([
       'blog:v1:a',
       'cms:v1:b',
-      'megamenu:v1:c',
+      'megamenu:v2:c',
       'dictionary:registry:v1:x',
     ]);
     const svc = new CacheAdminService(redis);

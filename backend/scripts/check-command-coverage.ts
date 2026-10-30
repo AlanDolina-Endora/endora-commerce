@@ -96,6 +96,8 @@ export const MIGRATED_MODULES: readonly string[] = [
   'admin_feedback',
   'tasks',
   'projects',
+  // Feature 168 (plan R-7): every write of the module runs a Command.
+  'megamenu',
 ];
 
 /**

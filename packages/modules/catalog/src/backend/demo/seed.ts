@@ -103,7 +103,7 @@ export async function seedDemo(
     if (!row) {
       row = em.create(Category, {
         parentCategoryId: root.id,
-        name: { 'en-US': section.nameEn },
+        name: { 'en-US': section.nameEn, 'pl-PL': section.namePl },
         slug: section.slug,
       });
       em.persist(row);
@@ -118,7 +118,7 @@ export async function seedDemo(
     if (!row) {
       row = em.create(Category, {
         parentCategoryId: sections.get(leaf.parentSlug)!.id,
-        name: { 'en-US': leaf.nameEn },
+        name: { 'en-US': leaf.nameEn, 'pl-PL': leaf.namePl },
         slug: leaf.slug,
       });
       em.persist(row);
