@@ -127,7 +127,7 @@ right after the existence read and answers a hidden id exactly as a missing one.
 `cms` page bodies and share images, `catalog` category content and `blog` content store asset
 ids with no existence read and no foreign key, so a missing id is accepted today; refusing a
 hidden one alone would tell it from a missing one, and refusing both changes what a content save
-accepts — an owner decision, proposed as a follow-up issue. `document_templates` (template Image blocks),
+accepts. That is #544; owner ruling 2026-10-30 is option (a), refuse every newly added id the caller cannot see, missing included, in a later feature. `document_templates` (template Image blocks),
 `invoices` (logo), `settings` (`shop.logo_asset_id`), `pwa` (icon, upload only), `sales_channels`
 (logo) and `returns` (customer attachments) register no reference descriptor, so they cannot
 make a hidden file visible in the library; the render paths among them are part of the same
