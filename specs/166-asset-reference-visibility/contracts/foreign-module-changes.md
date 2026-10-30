@@ -104,3 +104,31 @@ renders.
 | --- | --- |
 | `.changeset/166-*.md` (new, six files) | One per meaning, per `plan.md` *Other gates*: `contracts`, `mod-assets-library`, `mod-tasks`, `mod-projects`, `mod-crm` minor; `mod-catalog`, `mod-cms`, `mod-blog`, `mod-megamenu` patch in one file. |
 | `.changeset/assets-library-folder-delete-references.md` (#537's, unreleased) | Its last sentence said each asset is asked separately, so a large folder issues more queries; T013 replaced that fallback with the batched attribution, and both changesets release together, so the sentence would have described code that does not ship. |
+
+## J. Review T055, finding F-2 — linking a hidden file to an unrestricted record
+
+FR-006 (amended) covers every record, not only the three restricted owners': a path that takes
+an existing asset id from an administrator and links it asks `assetReadPort.visibleToCaller`
+right after the existence read and answers a hidden id exactly as a missing one.
+
+| File | Change | Why |
+| --- | --- | --- |
+| `packages/modules/catalog/src/backend/services/linkable-asset.ts` (new) | `findLinkableAsset` / `requireLinkableAsset`: `findById`, then `visibleToCaller([asset.id])`; one 404 `NOT_FOUND` for missing and hidden. | FR-006 |
+| `packages/modules/catalog/src/backend/services/{gallery,attachment}.service.ts` | `create` / `createAttachment` link through `requireLinkableAsset`. | FR-006 |
+| `packages/modules/catalog/src/backend/services/catalog-admin.service.ts`, `category-admin.service.ts` | An optional trailing `assets` reader; `createProduct`'s `downloadAssetId` and `update`'s new `mainImageAssetId` go through `requireLinkableAsset` (a missing id used to reach the foreign key and answer 500). The product `PATCH` does not write `downloadAssetId`, so it is not a linking path. | FR-006 |
+| `packages/modules/catalog/src/backend/{plugin,index}.ts` | Pass the asset read port to both services. | — |
+| `packages/modules/blog/src/backend/services/linkable-asset.ts` (new), `blog-post-service.ts`, `blog-category-service.ts`, `src/backend/index.ts` | `create` and `patch` check a `mainImageAssetId` (a missing id used to answer 500 from the foreign key); the services take the asset read port. | FR-006 |
+| `packages/modules/megamenu/src/backend/services/target-validator.ts`, `cross-module-ports.ts` | The icon and the asset target are read through `findLinkableAsset`, so a hidden file gets the missing file's `MEGAMENU_ASSET_KIND_MISMATCH`; the port slice widens to `visibleToCaller`. | FR-006 |
+| `backend/test/unit/megamenu/target-validator.test.ts` | Stubs gain `visibleToCaller`; a hidden icon and asset target answer as missing ones. | III |
+| `backend/test/integration/assets_library/foreign-attach-visibility.test.ts` (new) | Each catalog and blog linking path: a hidden id answers as a random uuid and links nothing. | III |
+| `.changeset/166-link-hidden-asset-refused.md` (new) | `mod-catalog`, `mod-blog`, `mod-megamenu` patch. | `release-intent.md` |
+
+**Audited, not changed** (T055): `tasks`, `projects`, `crm` already check (T030–T032).
+`cms` page bodies and share images, `catalog` category content and `blog` content store asset
+ids with no existence read and no foreign key, so a missing id is accepted today; refusing a
+hidden one alone would tell it from a missing one, and refusing both changes what a content save
+accepts — an owner decision, proposed as a follow-up issue. `document_templates` (template Image blocks),
+`invoices` (logo), `settings` (`shop.logo_asset_id`), `pwa` (icon, upload only), `sales_channels`
+(logo) and `returns` (customer attachments) register no reference descriptor, so they cannot
+make a hidden file visible in the library; the render paths among them are part of the same
+follow-up. `orders` reads an invoice's own generated PDF.

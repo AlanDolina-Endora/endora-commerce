@@ -1065,6 +1065,10 @@ export function registerModule(ctx: ModuleContext): void {
             // finding, in the same shape).
             lazyPort<CustomFieldDefinitionApplyApi>(ctx, 'customFieldDefinitionService'),
             copyWarehouseThresholds,
+            // No completeness gate on the published port (it is the admin routes' alone).
+            undefined,
+            // Feature 166 (FR-006) — a download file the caller may not see is not linked.
+            lazyPort<AssetReadPort>(ctx, 'assetReadPort'),
           ),
       )
       .singleton(),
@@ -1080,6 +1084,10 @@ export function registerModule(ctx: ModuleContext): void {
             lazyPort<SalesChannelMembershipPort>(ctx, 'salesChannelMembershipPort'),
             commandBus,
             lazyPort<CatalogCradle['customFieldValueService']>(ctx, 'customFieldValueService'),
+            // No event bus: the Command Bus dispatches the category's event.
+            undefined,
+            // Feature 166 (FR-006) — a main image the caller may not see is not linked.
+            lazyPort<AssetReadPort>(ctx, 'assetReadPort'),
           ),
       )
       .singleton(),

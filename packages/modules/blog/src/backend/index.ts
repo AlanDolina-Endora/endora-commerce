@@ -3,6 +3,7 @@ import type { Redis } from 'ioredis';
 import type {
   AdminRolePort,
   AssetReferenceRegistryPort,
+  AssetReadPort,
   AssetsLibraryPort,
   DictionaryValidator,
   SystemRoleCodePort,
@@ -142,6 +143,8 @@ export function registerModule(ctx: ModuleContext): void {
             emFactory,
             blogCacheService,
             lazyPort<DictionaryValidator>(ctx, 'dictionaryValidator'),
+            // Feature 166 (FR-006) — a main image the caller may not see is not linked.
+            lazyPort<AssetReadPort>(ctx, 'assetReadPort'),
           ),
       )
       .singleton(),
@@ -153,6 +156,8 @@ export function registerModule(ctx: ModuleContext): void {
             emFactory,
             blogCacheService,
             lazyPort<DictionaryValidator>(ctx, 'dictionaryValidator'),
+            // Feature 166 (FR-006) — a main image the caller may not see is not linked.
+            lazyPort<AssetReadPort>(ctx, 'assetReadPort'),
           ),
       )
       .singleton(),

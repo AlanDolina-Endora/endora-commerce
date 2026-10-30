@@ -165,7 +165,7 @@ When the module owning restricted records is switched off, its files neither bec
   - change of visibility;
   - creating or removing a public link;
   - delete and restore.
-- **FR-006**: Attaching an existing library asset to a record (Task, Project, Opportunity) is refused as for a non-existent asset when the reader may not see the asset.
+- **FR-006**: Attaching an existing library asset to any record — a Task, Project or Opportunity, and equally a record of a module without reader restrictions, such as a product, a category, a blog entry or a menu item — is refused as for a non-existent asset when the reader may not see the asset, and creates no reference. *(Amendment from review T055: the rule was written for the three restricted owners only; linking a hidden asset to an unrestricted record would make it visible to every reader through FR-001 b.)*
 - **FR-007**: An asset's "used by" list contains only the references whose record the reader may see. Hidden references are neither named nor counted.
 
 **Deletion protection**

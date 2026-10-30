@@ -38,6 +38,7 @@ import {
   writeGalleryHiddenChannels,
 } from './gallery-scopes.js';
 import { assertProductChannelMembers } from './attachment-packaging-scopes.js';
+import { requireLinkableAsset } from './linkable-asset.js';
 import { Product } from '../entities/product.entity.js';
 import { GalleryItem } from '../entities/gallery-item.entity.js';
 import { GalleryItemLabel } from '../entities/gallery-item-label.entity.js';
@@ -317,10 +318,8 @@ export class GalleryService {
     const em0 = this.emFactory();
     await this.#assertProductExists(em0, productId);
 
-    const asset = await this.#requireAssets().findById(req.assetId);
-    if (!asset) {
-      throw new HttpError(404, ERROR_CODES.NOT_FOUND, `Asset ${req.assetId} not found.`);
-    }
+    // A hidden file answers as a missing one (feature 166, FR-006).
+    const asset = await requireLinkableAsset(this.#requireAssets(), req.assetId);
     if (!ASSET_KINDS_GALLERY.has(asset.kind)) {
       throw new HttpError(
         400,

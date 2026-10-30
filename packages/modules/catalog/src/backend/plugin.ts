@@ -387,6 +387,7 @@ export function catalogModule(options: CatalogModuleOptions) {
       options.customFieldsPort,
       options.copyWarehouseThresholds,
       completenessGate,
+      options.assets,
     );
     // Feature 163 — scoped values per channel and channel × language. Needs the
     // membership accessor for FR-014 and the C4 warning, like the overrides.
@@ -483,6 +484,7 @@ export function catalogModule(options: CatalogModuleOptions) {
       options.commandBus,
       options.customFieldValues,
       options.eventBus as CategoryEventBus,
+      options.assets,
     );
 
     // Feature 068 — the storefront serves the category tree from a fetch cache
